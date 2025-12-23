@@ -35,7 +35,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import SystemStatus from "./SystemStatus";
 
 interface HistoryItem {
 	id: string;
@@ -129,8 +128,8 @@ export default function RandomGenerator() {
 	};
 
 	return (
-		<div className="flex flex-col items-center justify-center min-h-[80vh] w-full max-w-2xl mx-auto p-4 gap-8">
-			<div className="text-center space-y-2 mb-4 w-full">
+		<div className="flex flex-col w-full max-w-6xl mx-auto p-4 gap-6">
+			<div className="text-center space-y-2">
 				<h1 className="text-4xl md:text-5xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 drop-shadow-sm">
 					랜덤 숫자 생성기
 				</h1>
@@ -139,7 +138,9 @@ export default function RandomGenerator() {
 				</p>
 			</div>
 
-			<div className="flex flex-col gap-6 w-full">
+			<div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+				{/* Left Column - Controls & Results */}
+				<div className="lg:col-span-2 flex flex-col gap-6">
 				{/* Controls Card */}
 				<Card className="w-full border-border/50 shadow-xl bg-white/50 dark:bg-black/40 backdrop-blur-md">
 					<CardHeader>
@@ -297,61 +298,58 @@ export default function RandomGenerator() {
 						)}
 					</CardContent>
 				</Card>
+				</div>
 
-				{/* History Card */}
-				<Card className="w-full border-border/50 shadow-xl bg-white/50 dark:bg-black/40 backdrop-blur-md">
-					<CardHeader>
-						<div className="flex items-center justify-between">
-							<CardTitle className="flex items-center gap-2">
-								<History className="w-5 h-5 text-indigo-500" />
-								기록
-							</CardTitle>
-							{history.length > 0 && (
-								<Button
-									variant="ghost"
-									size="sm"
-									onClick={clearHistory}
-									className="text-destructive hover:text-destructive"
-								>
-									<Trash2 className="h-4 w-4 mr-2" />
-									지우기
-								</Button>
-							)}
-						</div>
-						<CardDescription>
-							최근 생성된 50개의 숫자 기록입니다.
-						</CardDescription>
-					</CardHeader>
-					<CardContent>
-						<div className="h-full">
+				{/* Right Column - History */}
+				<div className="lg:col-span-1 flex">
+					<Card className="w-full border-border/50 shadow-xl bg-white/50 dark:bg-black/40 backdrop-blur-md flex flex-col">
+						<CardHeader className="pb-3 shrink-0">
+							<div className="flex items-center justify-between">
+								<CardTitle className="flex items-center gap-2 text-base">
+									<History className="w-4 h-4 text-indigo-500" />
+									기록
+								</CardTitle>
+								{history.length > 0 && (
+									<Button
+										variant="ghost"
+										size="sm"
+										onClick={clearHistory}
+										className="text-destructive hover:text-destructive h-7 px-2"
+									>
+										<Trash2 className="h-3.5 w-3.5" />
+									</Button>
+								)}
+							</div>
+						</CardHeader>
+						<CardContent className="pt-0 flex-1 overflow-hidden">
 							{history.length === 0 ? (
-								<div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
-									<History className="h-10 w-10 mb-2 opacity-20" />
-									<p>기록이 없습니다.</p>
+								<div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+									<History className="h-8 w-8 mb-2 opacity-20" />
+									<p className="text-sm">기록이 없습니다.</p>
 								</div>
 							) : (
-								<ScrollArea className="h-[300px]">
-									<div className="space-y-4 pr-4">
+								<ScrollArea className="h-full">
+									<div className="space-y-3 pr-3">
 										{history.map((item) => (
 											<div
 												key={item.id}
-												className="bg-muted/50 p-4 rounded-lg space-y-2"
+												className="bg-muted/50 p-3 rounded-lg space-y-1.5"
 											>
 												<div className="flex justify-between items-center text-xs text-muted-foreground">
-													<div className="flex items-center gap-2">
+													<div className="flex items-center gap-1.5">
 														<span>
-															{new Date(item.timestamp).toLocaleString()}
+															{new Date(item.timestamp).toLocaleTimeString()}
 														</span>
 														{item.source && (
-															<span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/50">
+															<span className="flex items-center gap-0.5 px-1 py-0.5 rounded bg-background/50">
 																{item.source === "quantum" && (
-																	<Atom className="w-3 h-3 text-purple-500" />
+																	<Atom className="w-2.5 h-2.5 text-purple-500" />
 																)}
 																{item.source === "atmospheric" && (
-																	<Cloud className="w-3 h-3 text-blue-500" />
+																	<Cloud className="w-2.5 h-2.5 text-blue-500" />
 																)}
 																{item.source === "csprng" && (
-																	<Shield className="w-3 h-3 text-green-500" />
+																	<Shield className="w-2.5 h-2.5 text-green-500" />
 																)}
 															</span>
 														)}
@@ -359,15 +357,15 @@ export default function RandomGenerator() {
 													<Button
 														variant="ghost"
 														size="icon"
-														className="h-6 w-6"
+														className="h-5 w-5"
 														onClick={() =>
 															copyToClipboard(item.numbers.join(", "))
 														}
 													>
-														<Copy className="h-3 w-3" />
+														<Copy className="h-2.5 w-2.5" />
 													</Button>
 												</div>
-												<div className="font-mono font-medium break-all">
+												<div className="font-mono text-sm font-medium break-all">
 													{item.numbers.join(", ")}
 												</div>
 											</div>
@@ -375,12 +373,9 @@ export default function RandomGenerator() {
 									</div>
 								</ScrollArea>
 							)}
-						</div>
-					</CardContent>
-				</Card>
-
-				{/* System Status Card */}
-				<SystemStatus />
+						</CardContent>
+					</Card>
+				</div>
 			</div>
 		</div>
 	);
