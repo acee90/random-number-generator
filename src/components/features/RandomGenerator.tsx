@@ -43,7 +43,7 @@ interface HistoryItem {
 	source?: RandomSource;
 }
 
-interface Settings {
+interface GeneratorSettings {
 	min: number;
 	max: number;
 	count: number;
@@ -51,7 +51,7 @@ interface Settings {
 	sortResult: boolean;
 }
 
-const DEFAULT_SETTINGS: Settings = {
+const DEFAULT_SETTINGS: GeneratorSettings = {
 	min: 1,
 	max: 10000,
 	count: 1,
@@ -63,8 +63,12 @@ export default function RandomGenerator() {
 	const [min, setMin] = useState<number>(DEFAULT_SETTINGS.min);
 	const [max, setMax] = useState<number>(DEFAULT_SETTINGS.max);
 	const [count, setCount] = useState<number>(DEFAULT_SETTINGS.count);
-	const [allowDuplicates, setAllowDuplicates] = useState<boolean>(DEFAULT_SETTINGS.allowDuplicates);
-	const [sortResult, setSortResult] = useState<boolean>(DEFAULT_SETTINGS.sortResult);
+	const [allowDuplicates, setAllowDuplicates] = useState<boolean>(
+		DEFAULT_SETTINGS.allowDuplicates,
+	);
+	const [sortResult, setSortResult] = useState<boolean>(
+		DEFAULT_SETTINGS.sortResult,
+	);
 	const [result, setResult] = useState<number[]>([]);
 	const [source, setSource] = useState<RandomSource | null>(null);
 	const [isGenerating, setIsGenerating] = useState<boolean>(false);
@@ -77,11 +81,13 @@ export default function RandomGenerator() {
 		const savedSettings = Cookies.get("rng_settings");
 		if (savedSettings) {
 			try {
-				const settings: Settings = JSON.parse(savedSettings);
+				const settings: GeneratorSettings = JSON.parse(savedSettings);
 				setMin(settings.min ?? DEFAULT_SETTINGS.min);
 				setMax(settings.max ?? DEFAULT_SETTINGS.max);
 				setCount(settings.count ?? DEFAULT_SETTINGS.count);
-				setAllowDuplicates(settings.allowDuplicates ?? DEFAULT_SETTINGS.allowDuplicates);
+				setAllowDuplicates(
+					settings.allowDuplicates ?? DEFAULT_SETTINGS.allowDuplicates,
+				);
 				setSortResult(settings.sortResult ?? DEFAULT_SETTINGS.sortResult);
 			} catch (e) {
 				console.error("Failed to parse settings", e);
@@ -100,7 +106,13 @@ export default function RandomGenerator() {
 
 	// Save settings when changed
 	useEffect(() => {
-		const settings: Settings = { min, max, count, allowDuplicates, sortResult };
+		const settings: GeneratorSettings = {
+			min,
+			max,
+			count,
+			allowDuplicates,
+			sortResult,
+		};
 		Cookies.set("rng_settings", JSON.stringify(settings), { expires: 365 });
 	}, [min, max, count, allowDuplicates, sortResult]);
 
