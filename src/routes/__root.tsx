@@ -17,12 +17,12 @@ export const Route = createRootRoute({
 				content: "width=device-width, initial-scale=1",
 			},
 			{
-				title: "난수 생성기 - 양자/대기 노이즈 기반 진정한 난수",
+				title: "랜덤 숫자 생성기 - 양자/대기 노이즈 기반 리얼 랜덤",
 			},
 			{
 				name: "description",
 				content:
-					"양자 난수 생성기(QRNG), 대기 노이즈, 암호학적으로 안전한 난수를 생성합니다. ANU Quantum RNG와 Random.org를 활용한 고품질 난수 생성 서비스.",
+					"양자 랜덤 숫자 생성기(QRNG), 대기 노이즈, 암호학적으로 안전한 랜덤 숫자를 생성합니다. ANU Quantum RNG와 Random.org를 활용한 고품질 난수 생성 서비스.",
 			},
 			{
 				name: "keywords",
@@ -44,7 +44,7 @@ export const Route = createRootRoute({
 			},
 			{
 				property: "og:title",
-				content: "난수 생성기 - 양자/대기 노이즈 기반 진정한 난수",
+				content: "랜덤 숫자 생성기 - 양자/대기 노이즈 기반 리얼 랜덤",
 			},
 			{
 				property: "og:description",

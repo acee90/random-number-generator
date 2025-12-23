@@ -35,6 +35,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import SystemStatus from "./SystemStatus";
 
 interface HistoryItem {
 	id: string;
@@ -91,8 +92,8 @@ export default function RandomGenerator() {
 		}
 
 		try {
-			const genResult = await generateRandomNumbers(min, max, count, {
-				unique: !allowDuplicates,
+			const genResult = await generateRandomNumbers({
+				data: { min, max, count, unique: !allowDuplicates },
 			});
 
 			let numbers = genResult.numbers;
@@ -377,6 +378,9 @@ export default function RandomGenerator() {
 						</div>
 					</CardContent>
 				</Card>
+
+				{/* System Status Card */}
+				<SystemStatus />
 			</div>
 		</div>
 	);
