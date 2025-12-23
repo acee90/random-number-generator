@@ -1,5 +1,5 @@
 import { TanStackDevtools } from "@tanstack/react-devtools";
-import { createRootRoute, Outlet, Scripts } from "@tanstack/react-router";
+import { createRootRoute, Scripts } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 
 import RootLayout from "@/components/layout/RootLayout";
@@ -34,10 +34,7 @@ export const Route = createRootRoute({
 function RootDocument({ children }: { children: React.ReactNode }) {
 	return (
 		<html lang="en">
-			<RootLayout>
-				<Outlet />
-			</RootLayout>
-
+			<RootLayout>{children}</RootLayout>
 			<TanStackDevtools
 				config={{
 					position: "bottom-right",

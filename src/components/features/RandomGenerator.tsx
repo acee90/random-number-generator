@@ -7,7 +7,6 @@ import {
 	Copy,
 	Dices,
 	History,
-	Key,
 	ListOrdered,
 	RefreshCw,
 	Settings,
@@ -17,11 +16,8 @@ import {
 } from "lucide-react";
 import {
 	type RandomSource,
-	type SeedStatus,
 	generateRandomNumbers,
 	getSourceDisplayName,
-	initializeRandomService,
-	randomService,
 } from "@/services/randomService";
 import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -58,25 +54,10 @@ export default function RandomGenerator() {
 	const [isGenerating, setIsGenerating] = useState<boolean>(false);
 	const [copied, setCopied] = useState<boolean>(false);
 	const [history, setHistory] = useState<HistoryItem[]>([]);
-	const [seedStatus, setSeedStatus] = useState<SeedStatus>({
-		hasSeed: false,
-		source: null,
-		isLoading: false,
-	});
 	const id = useId();
 
-	// Initialize random service on mount
+	// Load history on mount
 	useEffect(() => {
-		// Set up status change callback
-		randomService.setStatusChangeCallback(setSeedStatus);
-
-		// Get initial status
-		setSeedStatus(randomService.getStatus());
-
-		// Initialize (fetch seed from server)
-		initializeRandomService();
-
-		// Load history
 		const savedHistory = Cookies.get("rng_history");
 		if (savedHistory) {
 			try {
@@ -255,42 +236,6 @@ export default function RandomGenerator() {
 						</Button>
 					</CardFooter>
 				</Card>
-
-				{/* Seed Status */}
-				<div className="flex items-center justify-center gap-4 py-2 px-4 rounded-lg bg-muted/30 text-xs text-muted-foreground">
-					<div className="flex items-center gap-2">
-						<Key className="w-3.5 h-3.5" />
-						<span>시드 상태</span>
-					</div>
-					<div className="flex items-center gap-2">
-						{seedStatus.isLoading ? (
-							<>
-								<RefreshCw className="w-3 h-3 animate-spin text-amber-500" />
-								<span>시드 로딩 중...</span>
-							</>
-						) : seedStatus.hasSeed ? (
-							<>
-								{seedStatus.source === "quantum" && (
-									<Atom className="w-3 h-3 text-purple-500" />
-								)}
-								{seedStatus.source === "atmospheric" && (
-									<Cloud className="w-3 h-3 text-blue-500" />
-								)}
-								{seedStatus.source === "csprng" && (
-									<Shield className="w-3 h-3 text-green-500" />
-								)}
-								<span>
-									{seedStatus.source === "quantum" && "양자 시드 활성"}
-									{seedStatus.source === "atmospheric" &&
-										"대기 노이즈 시드 활성"}
-									{seedStatus.source === "csprng" && "로컬 시드 활성"}
-								</span>
-							</>
-						) : (
-							<span className="text-amber-500">시드 없음</span>
-						)}
-					</div>
-				</div>
 
 				{/* Results Card */}
 				<Card className="w-full border-border/50 shadow-xl bg-gradient-to-br from-indigo-50/50 to-purple-50/50 dark:from-indigo-950/20 dark:to-purple-950/20 backdrop-blur-md flex flex-col min-h-[200px]">

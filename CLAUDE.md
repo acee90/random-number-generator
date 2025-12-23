@@ -25,10 +25,12 @@ This is a TanStack Start application with Cloudflare Workers deployment. It's a 
 
 ### Random Number Generation Flow
 
-The `RandomGenerator` component (`src/components/features/RandomGenerator.tsx`) uses `randomService` (`src/services/randomService.ts`) which:
-1. Fetches a seed from `/api/seed` on initialization
-2. Uses a SHA-256 hash chain PRNG seeded with quantum/atmospheric/CSPRNG entropy
-3. Persists seed state to localStorage (expires after 24 hours)
+The `RandomGenerator` component uses `generateRandomNumbers()` from `src/services/randomService.ts` which fetches random numbers directly with priority fallback:
+1. **Priority 1**: ANU Quantum RNG (`qrng.anu.edu.au`)
+2. **Priority 2**: Random.org Atmospheric Noise
+3. **Priority 3**: Web Crypto API (CSPRNG) - local fallback
+
+Each generation attempt tries sources in order until one succeeds. The source used is displayed in the result UI.
 
 ### Path Aliases
 
