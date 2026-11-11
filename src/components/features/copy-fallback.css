@@ -1,0 +1,47 @@
+.copy-fallback {
+	width: 100%;
+	min-width: 0;
+}
+
+.copy-fallback-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.copy-fallback-heading strong {
+	font-weight: 650;
+}
+
+.copy-fallback-heading .text-button {
+	min-height: 44px;
+	padding: 0;
+	flex-shrink: 0;
+}
+
+.copy-fallback p {
+	margin: 0;
+}
+
+.copy-fallback label {
+	display: block;
+	font-weight: 600;
+	margin: 12px 0 8px;
+}
+
+.copy-fallback textarea {
+	display: block;
+	width: 100%;
+	min-width: 0;
+	padding: 12px 14px;
+	border: 1px solid #8b967d;
+	border-radius: 8px;
+	background: #fff;
+	color: var(--ink);
+	font: inherit;
+	font-size: 16px;
+	line-height: 1.7;
+	resize: vertical;
+	margin-bottom: 12px;
+}

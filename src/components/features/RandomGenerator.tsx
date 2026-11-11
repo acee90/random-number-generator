@@ -20,6 +20,7 @@ import {
 	Wind,
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import CopyFallback from "@/components/features/CopyFallback";
 import DrawDownload from "@/components/features/DrawDownload";
 import DrawingAnimation from "@/components/features/DrawingAnimation";
 import LotteryGuide from "@/components/features/LotteryGuide";
@@ -63,6 +64,12 @@ type Settings = {
 	sortResult: boolean;
 };
 type NumberField = "min" | "max" | "count";
+type CopyFailure = {
+	attempt: number;
+	copyId: string;
+	drawId: string;
+	text: string;
+};
 const defaults: Settings = {
 	min: "1",
 	max: "10000",
@@ -262,6 +269,8 @@ export default function RandomGenerator() {
 	const minInputRef = useRef<HTMLInputElement>(null);
 	const maxInputRef = useRef<HTMLInputElement>(null);
 	const countInputRef = useRef<HTMLInputElement>(null);
+	const copyAttemptRef = useRef(0);
+	const copyTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const [mode, setMode] = useState<Mode>("number");
 	const [settings, setSettings] = useState<Settings>(defaults);
 	const [lottoGameCount, setLottoGameCount] = useState(1);
@@ -284,6 +293,7 @@ export default function RandomGenerator() {
 	const [numberErrorFields, setNumberErrorFields] = useState<NumberField[]>([]);
 	const [storageNotice, setStorageNotice] = useState("");
 	const [copied, setCopied] = useState("");
+	const [copyFailure, setCopyFailure] = useState<CopyFailure | null>(null);
 	const [appliedExample, setAppliedExample] = useState("");
 	const current = modes.find((item) => item.id === mode) ?? modes[0];
 	const gameCount = mode === "pension" ? pensionGameCount : lottoGameCount;
@@ -463,29 +473,76 @@ export default function RandomGenerator() {
 		else if (first === "max") maxInputRef.current?.focus();
 		else if (first === "count") countInputRef.current?.focus();
 	}, [numberErrorFields]);
-	async function copyText(text: string, copyId: string) {
+	function clearCopyFeedback() {
+		copyAttemptRef.current++;
+		copyTriggerRef.current = null;
+		setCopied("");
+		setCopyFailure(null);
+	}
+	function dismissCopyFallback() {
+		const trigger = copyTriggerRef.current;
+		clearCopyFeedback();
+		if (trigger?.isConnected) trigger.focus();
+	}
+	async function copyText(
+		text: string,
+		copyId: string,
+		drawId: string,
+		trigger?: HTMLButtonElement,
+	) {
+		const attempt = ++copyAttemptRef.current;
+		if (trigger) copyTriggerRef.current = trigger;
+		setCopied("");
+		setCopyFailure(null);
 		try {
 			await navigator.clipboard.writeText(text);
+			if (attempt !== copyAttemptRef.current) return;
 			setCopied(copyId);
+			if (!trigger && copyTriggerRef.current?.isConnected)
+				copyTriggerRef.current.focus();
 		} catch {
-			setNumberErrorFields([]);
-			setError("복사하지 못했습니다. 화면의 숫자를 선택해 직접 복사해 주세요.");
+			if (attempt === copyAttemptRef.current)
+				setCopyFailure({ attempt, copyId, drawId, text });
 		}
 	}
-	async function copy(value: Draw) {
+	async function copy(value: Draw, trigger: HTMLButtonElement) {
 		await copyText(
 			value.rows.map((row) => rowText(row, value.kind)).join("\n"),
 			value.id,
+			value.id,
+			trigger,
 		);
 	}
-	function copyTicket(value: Draw, row: Row, index: number) {
+	function copyTicket(
+		value: Draw,
+		row: Row,
+		index: number,
+		trigger: HTMLButtonElement,
+	) {
 		return copyText(
 			value.kind === "pension" ? row.numbers.join("") : row.numbers.join(", "),
 			`${value.id}-row-${index}`,
+			value.id,
+			trigger,
+		);
+	}
+	function renderCopyFallback(drawId: string) {
+		if (copyFailure?.drawId !== drawId) return null;
+		const failure = copyFailure;
+		return (
+			<CopyFallback
+				key={failure.attempt}
+				text={failure.text}
+				onClose={dismissCopyFallback}
+				onRetry={() =>
+					void copyText(failure.text, failure.copyId, failure.drawId)
+				}
+			/>
 		);
 	}
 
 	async function generate() {
+		clearCopyFeedback();
 		setError("");
 		setNumberErrorFields([]);
 		if (mode === "lotto" && lottoConstraintError) {
@@ -619,6 +676,7 @@ export default function RandomGenerator() {
 	}
 	function changeMode(next: Mode) {
 		if (busy) return;
+		clearCopyFeedback();
 		setMode(next);
 		setError("");
 		setNumberErrorFields([]);
@@ -1066,10 +1124,12 @@ export default function RandomGenerator() {
 													className={`number-item ${copied === `${draw.id}-number-${index}` ? "is-copied" : ""}`}
 													aria-label={`${index + 1}번째 숫자 ${number} 복사`}
 													title="이 숫자 복사"
-													onClick={() =>
+													onClick={(event) =>
 														void copyText(
 															String(number),
 															`${draw.id}-number-${index}`,
+															draw.id,
+															event.currentTarget,
 														)
 													}
 												>
@@ -1131,7 +1191,14 @@ export default function RandomGenerator() {
 												<button
 													type="button"
 													className="ticket-copy"
-													onClick={() => void copyTicket(draw, row, index)}
+													onClick={(event) =>
+														void copyTicket(
+															draw,
+															row,
+															index,
+															event.currentTarget,
+														)
+													}
 													aria-label={`${String.fromCharCode(65 + index)}게임 ${mode === "pension" ? "여섯 자리 " : ""}번호 복사`}
 												>
 													{copied === `${draw.id}-row-${index}` ? (
@@ -1157,7 +1224,7 @@ export default function RandomGenerator() {
 										<button
 											type="button"
 											className="result-copy"
-											onClick={() => void copy(draw)}
+											onClick={(event) => void copy(draw, event.currentTarget)}
 										>
 											{copied === draw.id ? (
 												<Check size={16} />
@@ -1193,6 +1260,7 @@ export default function RandomGenerator() {
 											생성
 										</span>
 									</div>
+									{renderCopyFallback(draw.id)}
 								</div>
 							) : (
 								<div className="empty-result">
@@ -1291,6 +1359,7 @@ export default function RandomGenerator() {
 								type="button"
 								className="text-button"
 								onClick={() => {
+									clearCopyFeedback();
 									setHistory(removed);
 									setRemoved(null);
 								}}
@@ -1304,6 +1373,7 @@ export default function RandomGenerator() {
 								className="text-button clear-history"
 								disabled={!recent.length}
 								onClick={() => {
+									clearCopyFeedback();
 									setRemoved(history);
 									setHistory((prev) =>
 										prev.filter(
@@ -1357,7 +1427,14 @@ export default function RandomGenerator() {
 														type="button"
 														className="history-row-copy"
 														aria-label={`이전 ${String.fromCharCode(65 + index)}게임 ${item.kind === "pension" ? "여섯 자리 " : ""}번호 복사`}
-														onClick={() => void copyTicket(item, row, index)}
+														onClick={(event) =>
+															void copyTicket(
+																item,
+																row,
+																index,
+																event.currentTarget,
+															)
+														}
 													>
 														{copied === `${item.id}-row-${index}` ? (
 															<Check size={16} />
@@ -1378,7 +1455,7 @@ export default function RandomGenerator() {
 										className="icon-button"
 										type="button"
 										aria-label={`${new Date(item.timestamp).toLocaleTimeString("ko-KR")} 생성 결과 전체 복사`}
-										onClick={() => void copy(item)}
+										onClick={(event) => void copy(item, event.currentTarget)}
 									>
 										{copied === item.id ? (
 											<Check size={17} />
@@ -1386,6 +1463,7 @@ export default function RandomGenerator() {
 											<Copy size={17} />
 										)}
 									</button>
+									{renderCopyFallback(item.id)}
 								</article>
 							))}
 						</div>

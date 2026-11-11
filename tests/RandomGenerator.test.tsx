@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import {
+	act,
 	cleanup,
 	fireEvent,
 	render,
@@ -734,5 +735,275 @@ describe("latest result restoration", () => {
 		).toEqual([saved]);
 		expect(generateRandomNumbers).not.toHaveBeenCalled();
 		expect(generateLotteryNumbers).not.toHaveBeenCalled();
+	});
+});
+
+describe("manual copy fallback", () => {
+	const writeText = vi.fn<(text: string) => Promise<void>>();
+	let originalClipboard: PropertyDescriptor | undefined;
+
+	beforeEach(() => {
+		originalClipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+		writeText.mockReset().mockRejectedValue(new Error("Clipboard unavailable"));
+		Object.defineProperty(navigator, "clipboard", {
+			configurable: true,
+			value: { writeText },
+		});
+	});
+
+	afterEach(() => {
+		if (originalClipboard)
+			Object.defineProperty(navigator, "clipboard", originalClipboard);
+		else Reflect.deleteProperty(navigator, "clipboard");
+	});
+
+	const cases = [
+		{ kind: "number", location: "current", action: "item", expected: "-12" },
+		{
+			kind: "number",
+			location: "current",
+			action: "whole",
+			expected: "-12, 0",
+		},
+		{
+			kind: "lotto",
+			location: "current",
+			action: "row",
+			expected: "7, 8, 21, 30, 35, 45",
+		},
+		{
+			kind: "lotto",
+			location: "current",
+			action: "whole",
+			expected: "7, 8, 21, 30, 35, 45\n7, 10, 21, 31, 33, 41",
+		},
+		{ kind: "pension", location: "current", action: "row", expected: "000014" },
+		{
+			kind: "pension",
+			location: "current",
+			action: "whole",
+			expected: "3조 000014\n5조 001205",
+		},
+		{
+			kind: "number",
+			location: "history",
+			action: "whole",
+			expected: "-12, 0",
+		},
+		{
+			kind: "lotto",
+			location: "history",
+			action: "row",
+			expected: "7, 8, 21, 30, 35, 45",
+		},
+		{ kind: "pension", location: "history", action: "row", expected: "000014" },
+		{
+			kind: "pension",
+			location: "history",
+			action: "whole",
+			expected: "3조 000014\n5조 001205",
+		},
+	] as const;
+
+	function seedCopyResults(
+		kind: "number" | "lotto" | "pension",
+		location: "current" | "history",
+	) {
+		const rows =
+			kind === "number"
+				? [{ numbers: [-12, 0] }]
+				: kind === "lotto"
+					? [
+							{ numbers: [7, 8, 21, 30, 35, 45] },
+							{ numbers: [7, 10, 21, 31, 33, 41] },
+						]
+					: [
+							{ group: 3, numbers: [0, 0, 0, 0, 1, 4] },
+							{ group: 5, numbers: [0, 0, 1, 2, 0, 5] },
+						];
+		const target = {
+			id: location === "current" ? "same-prefix" : "same-prefix-row-0",
+			kind,
+			rows,
+			source: "csprng",
+			timestamp: savedResultTime,
+		};
+		const latest = {
+			...target,
+			id: "same-prefix",
+			timestamp: savedResultTime + 1_000,
+		};
+		localStorage.setItem(
+			"randomlab.history",
+			JSON.stringify(location === "current" ? [target] : [latest, target]),
+		);
+		render(<RandomGenerator />);
+		if (kind !== "number")
+			openTool(kind === "lotto" ? "로또 6/45" : "연금복권 720+");
+		const owner =
+			location === "current"
+				? currentResult()
+				: screen
+						.getByRole("region", { name: "이전 추첨 기록" })
+						.querySelector<HTMLElement>(".history-item");
+		if (!owner) throw new Error("Copy source is missing");
+		return owner;
+	}
+
+	async function selectedFallback(expected: string) {
+		const field = await screen.findByRole("textbox", { name: "복사할 결과" });
+		if (!(field instanceof HTMLTextAreaElement))
+			throw new Error("Copy field is not a textarea");
+		expect(field.value).toBe(expected);
+		expect(field.readOnly).toBe(true);
+		expect(document.activeElement).toBe(field);
+		expect(field.selectionStart).toBe(0);
+		expect(field.selectionEnd).toBe(expected.length);
+		return field;
+	}
+
+	function inputErrors() {
+		const form = document.querySelector<HTMLElement>("form.controls");
+		if (!form) throw new Error("Conditions form is missing");
+		return within(form);
+	}
+
+	it.each(
+		cases,
+	)("offers the exact $kind $location $action text at its source", async ({
+		kind,
+		location,
+		action,
+		expected,
+	}) => {
+		const owner = seedCopyResults(kind, location);
+		const source = within(owner);
+		const trigger =
+			action === "item"
+				? source.getByRole("button", { name: "1번째 숫자 -12 복사" })
+				: action === "row"
+					? source.getByRole("button", {
+							name: new RegExp(
+								`^${location === "history" ? "이전 " : ""}A게임 ${kind === "pension" ? "여섯 자리 " : ""}번호 복사$`,
+							),
+						})
+					: source.getByRole("button", {
+							name:
+								location === "history"
+									? /생성 결과 전체 복사$/
+									: kind === "number"
+										? "전체 결과 복사"
+										: "전체 번호 복사",
+						});
+		fireEvent.click(trigger);
+		const field = await selectedFallback(expected);
+		expect(owner.contains(field)).toBe(true);
+		if (location === "history")
+			expect(currentResult().contains(field)).toBe(false);
+		expect(writeText).toHaveBeenCalledWith(expected);
+		expect(inputErrors().queryByRole("alert")).toBeNull();
+		expect(document.querySelector("[aria-invalid='true']")).toBeNull();
+	});
+
+	it("dismisses the fallback and returns focus to the source button", async () => {
+		const owner = seedCopyResults("number", "current");
+		const trigger = within(owner).getByRole("button", {
+			name: "1번째 숫자 -12 복사",
+		});
+		fireEvent.click(trigger);
+		await selectedFallback("-12");
+		fireEvent.click(screen.getByRole("button", { name: "복사 도움말 닫기" }));
+		expect(screen.queryByRole("textbox", { name: "복사할 결과" })).toBeNull();
+		expect(document.activeElement).toBe(trigger);
+	});
+
+	it("clears the fallback after a successful retry without changing its raw text", async () => {
+		const owner = seedCopyResults("number", "current");
+		const trigger = within(owner).getByRole("button", {
+			name: "1번째 숫자 -12 복사",
+		});
+		fireEvent.click(trigger);
+		await selectedFallback("-12");
+		writeText.mockResolvedValueOnce(undefined);
+		fireEvent.click(screen.getByRole("button", { name: "다시 복사" }));
+		await waitFor(() =>
+			expect(trigger.classList.contains("is-copied")).toBe(true),
+		);
+		expect(screen.queryByRole("textbox", { name: "복사할 결과" })).toBeNull();
+		expect(writeText).toHaveBeenLastCalledWith("-12");
+		expect(document.activeElement).toBe(trigger);
+	});
+
+	it("clears the previous copied state while a new attempt is pending", async () => {
+		let rejectPending: (error: Error) => void = () => {};
+		const pending = new Promise<void>((_, reject) => {
+			rejectPending = reject;
+		});
+		writeText.mockResolvedValueOnce(undefined).mockReturnValueOnce(pending);
+		const owner = seedCopyResults("number", "current");
+		const first = within(owner).getByRole("button", {
+			name: "1번째 숫자 -12 복사",
+		});
+		fireEvent.click(first);
+		await waitFor(() =>
+			expect(first.classList.contains("is-copied")).toBe(true),
+		);
+		fireEvent.click(
+			within(owner).getByRole("button", { name: "2번째 숫자 0 복사" }),
+		);
+		expect(first.classList.contains("is-copied")).toBe(false);
+		await act(async () => rejectPending(new Error("Clipboard unavailable")));
+		await selectedFallback("0");
+	});
+
+	it("does not revive a late failure after changing tools", async () => {
+		let rejectPending: (error: Error) => void = () => {};
+		writeText.mockReturnValueOnce(
+			new Promise<void>((_, reject) => {
+				rejectPending = reject;
+			}),
+		);
+		const owner = seedCopyResults("number", "current");
+		fireEvent.click(
+			within(owner).getByRole("button", { name: "1번째 숫자 -12 복사" }),
+		);
+		openTool("로또 6/45");
+		await act(async () => rejectPending(new Error("Clipboard unavailable")));
+		fireEvent.click(
+			within(screen.getByRole("navigation", { name: "생성 도구" })).getByRole(
+				"button",
+				{ name: /랜덤 숫자/ },
+			),
+		);
+		expect(screen.queryByRole("textbox", { name: "복사할 결과" })).toBeNull();
+		expect(inputErrors().queryByRole("alert")).toBeNull();
+	});
+
+	it("clears the fallback when a new result is generated", async () => {
+		const owner = seedCopyResults("number", "current");
+		fireEvent.click(
+			within(owner).getByRole("button", { name: "1번째 숫자 -12 복사" }),
+		);
+		await selectedFallback("-12");
+		vi.mocked(generateRandomNumbers).mockResolvedValueOnce({
+			numbers: [88],
+			source: "csprng",
+		});
+		submitNumbers();
+		await screen.findByRole("button", { name: "1번째 숫자 88 복사" });
+		expect(screen.queryByRole("textbox", { name: "복사할 결과" })).toBeNull();
+	});
+
+	it("keeps a genuine input error separate from a copy failure", async () => {
+		const owner = seedCopyResults("number", "current");
+		fireEvent.change(numberInput("max"), { target: { value: "0" } });
+		submitNumbers();
+		const originalError = inputErrors().getByRole("alert").textContent;
+		fireEvent.click(
+			within(owner).getByRole("button", { name: "1번째 숫자 -12 복사" }),
+		);
+		await selectedFallback("-12");
+		expect(inputErrors().getByRole("alert").textContent).toBe(originalError);
+		expect(numberInput("max").getAttribute("aria-invalid")).toBe("true");
 	});
 });
