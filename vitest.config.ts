@@ -4,6 +4,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
 	resolve: {
 		alias: {
+			"@": fileURLToPath(new URL("./src", import.meta.url)),
 			"cloudflare:workers": fileURLToPath(
 				new URL("./tests/cloudflare.mock.ts", import.meta.url),
 			),
@@ -11,6 +12,6 @@ export default defineConfig({
 	},
 	test: {
 		environment: "node",
-		include: ["tests/**/*.test.ts"],
+		include: ["tests/**/*.test.{ts,tsx}"],
 	},
 });

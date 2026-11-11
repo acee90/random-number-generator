@@ -255,7 +255,8 @@ export default function RandomGenerator() {
 	const formRef = useRef<HTMLFormElement>(null);
 	const [mode, setMode] = useState<Mode>("number");
 	const [settings, setSettings] = useState<Settings>(defaults);
-	const [gameCount, setGameCount] = useState(1);
+	const [lottoGameCount, setLottoGameCount] = useState(1);
+	const [pensionGameCount, setPensionGameCount] = useState(1);
 	const [group, setGroup] = useState("random");
 	const [lottoMode, setLottoMode] = useState<LottoMode>("random");
 	const [fixedNumbers, setFixedNumbers] = useState<number[]>([]);
@@ -272,6 +273,7 @@ export default function RandomGenerator() {
 	const [copied, setCopied] = useState("");
 	const [appliedExample, setAppliedExample] = useState("");
 	const current = modes.find((item) => item.id === mode) ?? modes[0];
+	const gameCount = mode === "pension" ? pensionGameCount : lottoGameCount;
 	const draw = draws[mode];
 	const recent = history.filter(
 		(item) => item.kind === mode && item.id !== draw?.id,
@@ -520,7 +522,6 @@ export default function RandomGenerator() {
 	}
 	function changeMode(next: Mode) {
 		if (busy) return;
-		if (next === "pension" && group === "all") setGameCount(5);
 		setMode(next);
 		setError("");
 		setAppliedExample("");
@@ -529,10 +530,14 @@ export default function RandomGenerator() {
 		setSettings(next);
 		setAppliedExample("");
 	}
+	function updateGameCount(value: number) {
+		if (mode === "pension") setPensionGameCount(value);
+		else setLottoGameCount(value);
+	}
 	function applyExample(example: Example) {
 		if (busy) return;
 		if (example.settings) setSettings(example.settings);
-		if (example.games) setGameCount(example.games);
+		if (example.games) updateGameCount(example.games);
 		if (example.group) setGroup(example.group);
 		setError("");
 		setAppliedExample(example.title);
@@ -752,7 +757,7 @@ export default function RandomGenerator() {
 														aria-pressed={gameCount === value}
 														className={gameCount === value ? "selected" : ""}
 														onClick={() => {
-															setGameCount(value);
+															updateGameCount(value);
 															setError("");
 															setAppliedExample("");
 														}}
@@ -781,7 +786,8 @@ export default function RandomGenerator() {
 														value={group}
 														onChange={(event) => {
 															setGroup(event.target.value);
-															if (event.target.value === "all") setGameCount(5);
+															if (event.target.value === "all")
+																setPensionGameCount(5);
 															setAppliedExample("");
 														}}
 													>
