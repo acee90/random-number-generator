@@ -1823,7 +1823,8 @@ html {
 	.result-panel .lotto-ball {
 		width: clamp(28px, 7.8vw, 40px);
 		height: clamp(28px, 7.8vw, 40px);
-		font-size: 18px;
+		font-size: 20px;
+		font-weight: 700;
 	}
 	.result-panel .lotto-balls {
 		gap: 5px;
@@ -1864,7 +1865,7 @@ html {
 	.result-panel .lotto-ball {
 		width: 32px;
 		height: 32px;
-		font-size: 17px;
+		font-size: 20px;
 	}
 	.result-panel .digit {
 		width: 27px;
