@@ -12,7 +12,10 @@ import Cookies from "js-cookie";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import RandomGenerator from "../src/components/features/RandomGenerator";
 import { lotterySettingsKey } from "../src/lib/lotterySettings";
-import { generateLotteryNumbers } from "../src/services/randomService";
+import {
+	generateLotteryNumbers,
+	generateRandomNumbers,
+} from "../src/services/randomService";
 
 vi.mock("../src/services/randomService", () => ({
 	generateLotteryNumbers: vi.fn(async ({ data }) => ({
@@ -29,6 +32,7 @@ vi.mock("../src/services/randomService", () => ({
 beforeEach(() => {
 	localStorage.clear();
 	vi.mocked(generateLotteryNumbers).mockClear();
+	vi.mocked(generateRandomNumbers).mockClear();
 	vi.stubGlobal(
 		"matchMedia",
 		vi.fn(() => ({ matches: false })),
@@ -316,5 +320,187 @@ describe("lottery settings persistence", () => {
 		openTool("로또 6/45");
 		fireEvent.click(gameButton(3));
 		expect(write.mock.calls.map(([key]) => key)).toEqual([lotterySettingsKey]);
+	});
+});
+
+type NumberField = "min" | "max" | "count";
+
+function numberInput(field: NumberField) {
+	return screen.getByRole("spinbutton", {
+		name: { min: "최소값", max: "최대값", count: "생성 개수" }[field],
+	});
+}
+
+function submitNumbers() {
+	fireEvent.click(screen.getByRole("button", { name: "숫자 생성하기" }));
+}
+
+describe("integer condition validation", () => {
+	it.each([
+		{
+			label: "blank minimum",
+			min: "",
+			max: "100",
+			count: "1",
+			fields: ["min"],
+		},
+		{ label: "blank maximum", min: "1", max: "", count: "1", fields: ["max"] },
+		{
+			label: "both bounds blank",
+			min: "",
+			max: "",
+			count: "1",
+			fields: ["min", "max"],
+		},
+		{
+			label: "fractional minimum",
+			min: "1.5",
+			max: "100",
+			count: "1",
+			fields: ["min"],
+		},
+		{
+			label: "fractional maximum",
+			min: "1",
+			max: "100.5",
+			count: "1",
+			fields: ["max"],
+		},
+		{
+			label: "unsafe minimum",
+			min: "-9007199254740992",
+			max: "100",
+			count: "1",
+			fields: ["min"],
+		},
+		{
+			label: "unsafe maximum",
+			min: "1",
+			max: "9007199254740992",
+			count: "1",
+			fields: ["max"],
+		},
+		{
+			label: "unsafe range",
+			min: "-9007199254740991",
+			max: "9007199254740991",
+			count: "1",
+			fields: ["min", "max"],
+		},
+		{
+			label: "maximum below minimum",
+			min: "10",
+			max: "1",
+			count: "1",
+			fields: ["max"],
+		},
+		{
+			label: "zero count",
+			min: "1",
+			max: "100",
+			count: "0",
+			fields: ["count"],
+		},
+		{
+			label: "excessive count",
+			min: "1",
+			max: "1000",
+			count: "101",
+			fields: ["count"],
+		},
+		{
+			label: "fractional count",
+			min: "1",
+			max: "100",
+			count: "1.5",
+			fields: ["count"],
+		},
+		{
+			label: "insufficient unique numbers",
+			min: "1",
+			max: "2",
+			count: "3",
+			fields: ["count"],
+		},
+	] as const)("links $label to its correction field without requesting entropy", ({
+		min,
+		max,
+		count,
+		fields,
+	}) => {
+		render(<RandomGenerator />);
+		fireEvent.change(numberInput("min"), { target: { value: min } });
+		fireEvent.change(numberInput("max"), { target: { value: max } });
+		fireEvent.change(numberInput("count"), { target: { value: count } });
+		expect(screen.queryByRole("alert")).toBeNull();
+		submitNumbers();
+		const message = screen.getByRole("alert");
+		for (const field of ["min", "max", "count"] as const) {
+			const invalid = (fields as readonly NumberField[]).includes(field);
+			expect(numberInput(field).getAttribute("aria-invalid")).toBe(
+				invalid ? "true" : null,
+			);
+			expect(numberInput(field).getAttribute("aria-describedby")).toBe(
+				invalid ? message.id : null,
+			);
+		}
+		expect(document.activeElement).toBe(numberInput(fields[0]));
+		expect(generateRandomNumbers).not.toHaveBeenCalled();
+	});
+
+	it("clears a stale error and field annotations when the conditions are edited", () => {
+		render(<RandomGenerator />);
+		fireEvent.change(numberInput("min"), { target: { value: "10" } });
+		fireEvent.change(numberInput("max"), { target: { value: "1" } });
+		submitNumbers();
+		expect(document.activeElement).toBe(numberInput("max"));
+		fireEvent.change(numberInput("max"), { target: { value: "100" } });
+		expect(screen.queryByRole("alert")).toBeNull();
+		expect(numberInput("max").getAttribute("aria-invalid")).toBeNull();
+		expect(numberInput("max").getAttribute("aria-describedby")).toBeNull();
+		expect(generateRandomNumbers).not.toHaveBeenCalled();
+	});
+
+	it("clears field errors when an example is applied", () => {
+		render(<RandomGenerator />);
+		fireEvent.change(numberInput("min"), { target: { value: "" } });
+		submitNumbers();
+		fireEvent.click(screen.getByRole("button", { name: /^발표자 1명 선정/ }));
+		expect(screen.queryByRole("alert")).toBeNull();
+		expect(numberInput("min").getAttribute("aria-invalid")).toBeNull();
+		expect(numberInput("min").getAttribute("aria-describedby")).toBeNull();
+	});
+
+	it("clears the count error when duplicates are allowed and submits the valid condition", async () => {
+		vi.mocked(generateRandomNumbers).mockResolvedValueOnce({
+			numbers: [1, 1, 2],
+			source: "csprng",
+		});
+		render(<RandomGenerator />);
+		fireEvent.change(numberInput("max"), { target: { value: "2" } });
+		fireEvent.change(numberInput("count"), { target: { value: "3" } });
+		submitNumbers();
+		expect(document.activeElement).toBe(numberInput("count"));
+		fireEvent.click(screen.getByRole("switch", { name: /^중복 허용/ }));
+		expect(screen.queryByRole("alert")).toBeNull();
+		expect(numberInput("count").getAttribute("aria-invalid")).toBeNull();
+		submitNumbers();
+		await waitFor(() =>
+			expect(generateRandomNumbers).toHaveBeenCalledWith({
+				data: { min: 1, max: 2, count: 3, unique: false },
+			}),
+		);
+		await screen.findByRole("button", { name: "전체 결과 복사" });
+	});
+
+	it("does not leave an old integer field marked after switching tools", () => {
+		render(<RandomGenerator />);
+		fireEvent.change(numberInput("max"), { target: { value: "0" } });
+		submitNumbers();
+		openTool("로또 6/45");
+		fireEvent.click(screen.getByRole("button", { name: /랜덤 숫자/ }));
+		expect(screen.queryByRole("alert")).toBeNull();
+		expect(numberInput("max").getAttribute("aria-invalid")).toBeNull();
+		expect(numberInput("max").getAttribute("aria-describedby")).toBeNull();
 	});
 });

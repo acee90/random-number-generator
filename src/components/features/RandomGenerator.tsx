@@ -61,6 +61,7 @@ type Settings = {
 	allowDuplicates: boolean;
 	sortResult: boolean;
 };
+type NumberField = "min" | "max" | "count";
 const defaults: Settings = {
 	min: "1",
 	max: "10000",
@@ -257,6 +258,9 @@ export default function RandomGenerator() {
 	const resultRef = useRef<HTMLDivElement>(null);
 	const lottoConstraintRef = useRef<HTMLOutputElement>(null);
 	const formRef = useRef<HTMLFormElement>(null);
+	const minInputRef = useRef<HTMLInputElement>(null);
+	const maxInputRef = useRef<HTMLInputElement>(null);
+	const countInputRef = useRef<HTMLInputElement>(null);
 	const [mode, setMode] = useState<Mode>("number");
 	const [settings, setSettings] = useState<Settings>(defaults);
 	const [lottoGameCount, setLottoGameCount] = useState(1);
@@ -273,6 +277,7 @@ export default function RandomGenerator() {
 	const [historyLoaded, setHistoryLoaded] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState("");
+	const [numberErrorFields, setNumberErrorFields] = useState<NumberField[]>([]);
 	const [storageNotice, setStorageNotice] = useState("");
 	const [copied, setCopied] = useState("");
 	const [appliedExample, setAppliedExample] = useState("");
@@ -435,11 +440,18 @@ export default function RandomGenerator() {
 		const timer = setTimeout(() => setCopied(""), 2000);
 		return () => clearTimeout(timer);
 	}, [copied]);
+	useEffect(() => {
+		const first = numberErrorFields[0];
+		if (first === "min") minInputRef.current?.focus();
+		else if (first === "max") maxInputRef.current?.focus();
+		else if (first === "count") countInputRef.current?.focus();
+	}, [numberErrorFields]);
 	async function copyText(text: string, copyId: string) {
 		try {
 			await navigator.clipboard.writeText(text);
 			setCopied(copyId);
 		} catch {
+			setNumberErrorFields([]);
 			setError("복사하지 못했습니다. 화면의 숫자를 선택해 직접 복사해 주세요.");
 		}
 	}
@@ -458,6 +470,7 @@ export default function RandomGenerator() {
 
 	async function generate() {
 		setError("");
+		setNumberErrorFields([]);
 		if (mode === "lotto" && lottoConstraintError) {
 			lottoConstraintRef.current?.focus();
 			return;
@@ -473,16 +486,26 @@ export default function RandomGenerator() {
 		if (mode === "number") {
 			const min = Number(settings.min);
 			const max = Number(settings.max);
-			if (
-				!settings.min.trim() ||
-				!settings.max.trim() ||
-				!Number.isSafeInteger(min) ||
-				!Number.isSafeInteger(max) ||
-				!Number.isSafeInteger(max - min + 1) ||
-				min > max
-			) {
-				setError(
-					"최소값과 최대값에 정수를 입력해 주세요. 최대값은 최소값 이상이어야 합니다.",
+			const invalidBounds: NumberField[] = [];
+			if (!settings.min.trim() || !Number.isSafeInteger(min))
+				invalidBounds.push("min");
+			if (!settings.max.trim() || !Number.isSafeInteger(max))
+				invalidBounds.push("max");
+			if (invalidBounds.length) {
+				showNumberError(
+					"최소값과 최대값은 안전한 범위의 정수여야 합니다.",
+					invalidBounds,
+				);
+				return;
+			}
+			if (min > max) {
+				showNumberError("최대값은 최소값 이상이어야 합니다.", ["max"]);
+				return;
+			}
+			if (!Number.isSafeInteger(max - min + 1)) {
+				showNumberError(
+					"숫자 범위가 너무 큽니다. 최소값 또는 최대값을 조정해 주세요.",
+					["min", "max"],
 				);
 				return;
 			}
@@ -491,12 +514,15 @@ export default function RandomGenerator() {
 				settings.count < 1 ||
 				settings.count > 100
 			) {
-				setError("생성 개수는 1개부터 100개까지 선택해 주세요.");
+				showNumberError("생성 개수는 1개부터 100개까지 선택해 주세요.", [
+					"count",
+				]);
 				return;
 			}
 			if (!settings.allowDuplicates && settings.count > max - min + 1) {
-				setError(
+				showNumberError(
 					"중복 없이 뽑을 숫자가 부족합니다. 범위를 넓히거나 개수를 줄여 주세요.",
+					["count"],
 				);
 				return;
 			}
@@ -578,11 +604,20 @@ export default function RandomGenerator() {
 		if (busy) return;
 		setMode(next);
 		setError("");
+		setNumberErrorFields([]);
 		setAppliedExample("");
 	}
 	function updateSettings(next: Settings) {
 		setSettings(next);
+		if (numberErrorFields.length) {
+			setError("");
+			setNumberErrorFields([]);
+		}
 		setAppliedExample("");
+	}
+	function showNumberError(message: string, fields: NumberField[]) {
+		setError(message);
+		setNumberErrorFields(fields);
 	}
 	function updateGameCount(value: number) {
 		if (mode === "pension") setPensionGameCount(value);
@@ -594,6 +629,7 @@ export default function RandomGenerator() {
 		if (example.games) updateGameCount(example.games);
 		if (example.group) setGroup(example.group);
 		setError("");
+		setNumberErrorFields([]);
 		setAppliedExample(example.title);
 		formRef.current?.scrollIntoView({
 			behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -686,7 +722,16 @@ export default function RandomGenerator() {
 										<label htmlFor={`${id}-min`}>
 											최소값
 											<input
+												ref={minInputRef}
 												id={`${id}-min`}
+												aria-invalid={
+													numberErrorFields.includes("min") || undefined
+												}
+												aria-describedby={
+													numberErrorFields.includes("min")
+														? `${id}-error`
+														: undefined
+												}
 												type="number"
 												step="1"
 												value={settings.min}
@@ -702,7 +747,16 @@ export default function RandomGenerator() {
 										<label htmlFor={`${id}-max`}>
 											최대값
 											<input
+												ref={maxInputRef}
 												id={`${id}-max`}
+												aria-invalid={
+													numberErrorFields.includes("max") || undefined
+												}
+												aria-describedby={
+													numberErrorFields.includes("max")
+														? `${id}-error`
+														: undefined
+												}
 												type="number"
 												step="1"
 												value={settings.max}
@@ -720,7 +774,16 @@ export default function RandomGenerator() {
 											<label htmlFor={`${id}-count`}>생성 개수</label>
 											<div className="count-input">
 												<input
+													ref={countInputRef}
 													id={`${id}-count`}
+													aria-invalid={
+														numberErrorFields.includes("count") || undefined
+													}
+													aria-describedby={
+														numberErrorFields.includes("count")
+															? `${id}-error`
+															: undefined
+													}
 													type="number"
 													min="1"
 													max="100"
@@ -905,7 +968,7 @@ export default function RandomGenerator() {
 							{mode === "lotto" ? lottoConstraintError : ""}
 						</output>
 						{error && (
-							<p className="inline-error" role="alert">
+							<p id={`${id}-error`} className="inline-error" role="alert">
 								{error}
 							</p>
 						)}
