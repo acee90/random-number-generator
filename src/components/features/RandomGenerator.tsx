@@ -622,6 +622,12 @@ export default function RandomGenerator() {
 		setError("");
 		setNumberErrorFields([]);
 		setAppliedExample("");
+		formRef.current?.scrollIntoView({
+			behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+				? "auto"
+				: "smooth",
+			block: "start",
+		});
 	}
 	function updateSettings(next: Settings) {
 		setSettings(next);
