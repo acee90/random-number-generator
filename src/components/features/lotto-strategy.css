@@ -1,0 +1,485 @@
+.lotto-strategy-controls {
+	container-type: inline-size;
+	width: 100%;
+	min-width: 0;
+	margin-top: 25px;
+}
+
+.lotto-mode-fieldset,
+.lotto-fixed-fieldset {
+	min-width: 0;
+	padding: 0;
+	margin: 0;
+	border: 0;
+}
+
+.lotto-mode-fieldset > legend,
+.lotto-fixed-fieldset > legend {
+	padding: 0;
+	margin-bottom: 14px;
+	font-size: 16px;
+	font-weight: 650;
+	color: var(--ink, #272b24);
+}
+
+.lotto-mode-options {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 14px;
+}
+
+.lotto-mode-card {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	min-width: 0;
+	padding: 19px;
+	border: 1px solid #a4b590;
+	border-radius: 10px;
+	background: #fff;
+	cursor: pointer;
+}
+
+.lotto-mode-card.is-selected {
+	border-color: #69873c;
+	background: #f0f7df;
+	box-shadow: 0 0 0 1px #69873c;
+}
+
+.lotto-mode-card[data-disabled="true"] {
+	opacity: 0.65;
+	cursor: not-allowed;
+}
+
+.lotto-mode-card:focus-within {
+	outline: 3px solid #527427;
+	outline-offset: 3px;
+}
+
+.lotto-mode-title {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	font-size: 17px;
+	line-height: 1.5;
+	color: var(--ink, #272b24);
+}
+
+.lotto-mode-title input {
+	width: 18px;
+	height: 18px;
+	flex-shrink: 0;
+	margin: 0;
+	accent-color: #607c32;
+}
+
+.lotto-mode-title svg {
+	flex-shrink: 0;
+	color: #526f34;
+}
+
+.lotto-mode-title strong {
+	font-weight: 650;
+}
+
+.lotto-mode-description {
+	font-size: 13px;
+	line-height: 1.85;
+	color: #5b6e4d;
+}
+
+.lotto-strategy-summary {
+	margin: 18px 0 0;
+	padding: 14px 17px;
+	border: 1px solid #d3debf;
+	border-radius: 8px;
+	background: #f6f9ef;
+	font-size: 14px;
+	line-height: 1.85;
+	color: #50693b;
+}
+
+.lotto-strategy-summary strong {
+	font-weight: 650;
+}
+
+.lotto-fixed-fieldset {
+	margin-top: 25px;
+	padding: 22px;
+	border: 1px solid #d2ddc3;
+	border-radius: 11px;
+	background: #fafcf7;
+}
+
+.lotto-fixed-fieldset > legend {
+	margin-bottom: 0;
+	padding: 0 7px;
+	margin-inline-start: -7px;
+}
+
+.lotto-fixed-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 9px 15px;
+}
+
+.lotto-fixed-heading p {
+	margin: 0;
+	font-size: 14px;
+	line-height: 1.8;
+	color: #536d3e;
+}
+
+.lotto-fixed-clear {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	min-height: 40px;
+	padding: 7px 10px;
+	border: 1px solid #b4c69e;
+	border-radius: 7px;
+	background: #fff;
+	font-size: 12px;
+	font-weight: 550;
+	color: #4c6b30;
+}
+
+.lotto-fixed-clear:disabled {
+	opacity: 0.55;
+}
+
+.lotto-fixed-selection {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 10px 15px;
+	min-height: 52px;
+	margin: 10px 0 15px;
+}
+
+.lotto-fixed-count {
+	font-size: 13px;
+	font-weight: 650;
+	font-variant-numeric: tabular-nums;
+	color: #48672e;
+}
+
+.lotto-fixed-empty {
+	font-size: 13px;
+	color: #657754;
+}
+
+.lotto-selected-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 7px;
+}
+
+.lotto-selected-chip {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 7px;
+	min-height: 36px;
+	padding: 6px 10px;
+	border: 1px solid #b3c77d;
+	border-radius: 7px;
+	background: #e6f4b9;
+	font-size: 14px;
+	font-weight: 650;
+	font-variant-numeric: tabular-nums;
+	color: #344b21;
+}
+
+.lotto-number-grid {
+	display: grid;
+	grid-template-columns: repeat(9, minmax(0, 1fr));
+	gap: 8px;
+	width: 100%;
+	max-width: 760px;
+}
+
+.lotto-number-choice {
+	display: grid;
+	place-items: center;
+	min-width: 0;
+	min-height: 48px;
+	padding: 9px 4px;
+	border: 1px solid #8b9b79;
+	border-radius: 8px;
+	background: #fff;
+	font-size: 18px;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	color: #304426;
+}
+
+.lotto-number-choice.is-selected {
+	border-color: #4e682c;
+	background: var(--lime, #d6f266);
+	box-shadow: inset 0 0 0 1px #4e682c;
+	font-weight: 750;
+	color: #25391a;
+}
+
+.lotto-number-choice:disabled:not(.is-selected) {
+	opacity: 0.4;
+	background: #edf0e6;
+}
+
+.lotto-selection-limit {
+	margin: 12px 0 0;
+	font-size: 12px;
+	line-height: 1.8;
+	color: #5e734a;
+}
+
+.lotto-spread-remainder {
+	display: flex;
+	align-items: flex-start;
+	gap: 11px;
+	margin-top: 21px;
+	padding-top: 19px;
+	border-top: 1px solid #dce5d1;
+	cursor: pointer;
+}
+
+.lotto-spread-remainder > input {
+	width: 19px;
+	height: 19px;
+	flex-shrink: 0;
+	margin: 3px 0 0;
+	accent-color: #607c32;
+}
+
+.lotto-spread-remainder > span {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.lotto-spread-remainder strong {
+	font-size: 14px;
+	font-weight: 600;
+	line-height: 1.8;
+	color: #334b25;
+}
+
+.lotto-spread-remainder > span > span {
+	font-size: 12px;
+	line-height: 1.8;
+	color: #5d734c;
+}
+
+.lotto-strategy-note {
+	margin: 17px 0 0;
+	font-size: 12px;
+	line-height: 1.9;
+	color: #657754;
+}
+
+.lotto-excluded-details {
+	margin-top: 25px;
+	border: 1px solid #cbb9b1;
+	border-radius: 11px;
+	background: #fdfaf8;
+}
+
+.lotto-excluded-details > summary {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-height: 64px;
+	padding: 17px 22px;
+	border-radius: 11px;
+	list-style: none;
+	cursor: pointer;
+}
+
+.lotto-excluded-details > summary::-webkit-details-marker {
+	display: none;
+}
+
+.lotto-excluded-details > summary:focus-visible {
+	outline: 3px solid #865143;
+	outline-offset: 3px;
+}
+
+.lotto-excluded-title {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	font-size: 16px;
+	font-weight: 650;
+	color: #613f34;
+}
+
+.lotto-excluded-title svg,
+.lotto-excluded-chevron {
+	flex-shrink: 0;
+	color: #865143;
+}
+
+.lotto-excluded-summary-count {
+	margin-inline-start: auto;
+	font-size: 13px;
+	font-variant-numeric: tabular-nums;
+	color: #865143;
+}
+
+.lotto-excluded-details[open] .lotto-excluded-chevron {
+	transform: rotate(180deg);
+}
+
+.lotto-excluded-fieldset {
+	min-width: 0;
+	padding: 0 22px 22px;
+	margin: 0;
+	border: 0;
+}
+
+.lotto-excluded-fieldset .lotto-fixed-heading p,
+.lotto-excluded-fieldset .lotto-selection-limit {
+	color: #795b4f;
+}
+
+.lotto-excluded-count {
+	font-size: 13px;
+	font-weight: 650;
+	line-height: 1.8;
+	font-variant-numeric: tabular-nums;
+	color: #865143;
+}
+
+.lotto-excluded-clear {
+	border-color: #c8a89b;
+	color: #754738;
+}
+
+.lotto-excluded-chip {
+	min-height: 44px;
+	border-color: #c8a89b;
+	background: #f6e3db;
+	color: #754738;
+}
+
+.lotto-number-choice.is-unavailable,
+.lotto-excluded-choice {
+	position: relative;
+}
+
+.lotto-excluded-choice.is-excluded {
+	border-color: #9e5947;
+	background: #f6ded4;
+	box-shadow: inset 0 0 0 1px #9e5947;
+	font-weight: 750;
+	color: #7a3526;
+}
+
+.lotto-unavailable-mark {
+	position: absolute;
+	top: 3px;
+	right: 3px;
+}
+
+@media (hover: hover) {
+	.lotto-mode-card:not([data-disabled="true"]):hover,
+	.lotto-fixed-clear:not(:disabled):hover,
+	.lotto-selected-chip:not(:disabled):hover,
+	.lotto-number-choice:not(:disabled):not(.is-selected):hover {
+		border-color: #69873c;
+		background: #f0f7df;
+	}
+	.lotto-excluded-chip:not(:disabled):hover,
+	.lotto-excluded-clear:not(:disabled):hover,
+	.lotto-excluded-choice:not(:disabled):hover {
+		border-color: #9e5947;
+		background: #f3d7cb;
+	}
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.lotto-mode-card,
+	.lotto-number-choice {
+		transition:
+			background-color 120ms,
+			border-color 120ms;
+	}
+}
+
+@container (max-width: 650px) {
+	.lotto-mode-options {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 10px;
+	}
+	.lotto-mode-card {
+		padding: 16px;
+		gap: 8px;
+	}
+
+	.lotto-fixed-fieldset {
+		padding: 18px;
+	}
+
+	.lotto-excluded-details > summary {
+		padding: 16px 18px;
+	}
+
+	.lotto-excluded-fieldset {
+		padding: 0 18px 18px;
+	}
+
+	.lotto-number-grid {
+		grid-template-columns: repeat(7, minmax(0, 1fr));
+	}
+}
+
+@container (max-width: 400px) {
+	.lotto-fixed-fieldset {
+		padding: 15px;
+	}
+
+	.lotto-excluded-details > summary {
+		flex-wrap: wrap;
+		gap: 8px;
+		padding: 15px;
+	}
+
+	.lotto-excluded-title {
+		font-size: 15px;
+	}
+
+	.lotto-excluded-summary-count {
+		font-size: 12px;
+	}
+
+	.lotto-excluded-fieldset {
+		padding: 0 15px 15px;
+	}
+
+	.lotto-excluded-clear {
+		min-height: 44px;
+	}
+
+	.lotto-number-grid {
+		grid-template-columns: repeat(5, minmax(0, 1fr));
+		gap: 7px;
+	}
+
+	.lotto-number-choice {
+		min-height: 44px;
+		font-size: 17px;
+	}
+}
+
+@media (forced-colors: active) {
+	.lotto-mode-card.is-selected,
+	.lotto-number-choice.is-selected,
+	.lotto-excluded-choice.is-excluded {
+		border: 2px solid Highlight;
+		outline: 1px solid Highlight;
+	}
+}

@@ -1,6 +1,4 @@
-import { TanStackDevtools } from "@tanstack/react-devtools";
 import { createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
-import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 
 import RootLayout from "@/components/layout/RootLayout";
 
@@ -17,7 +15,7 @@ export const Route = createRootRoute({
 				content: "width=device-width, initial-scale=1",
 			},
 			{
-				title: "랜덤 숫자 생성기 - 양자/대기 노이즈 기반 리얼 랜덤",
+				title: "랜덤랩 · 랜덤 숫자, 로또, 연금복권 번호 생성기",
 			},
 			{
 				name: "description",
@@ -35,7 +33,7 @@ export const Route = createRootRoute({
 			},
 			{
 				name: "theme-color",
-				content: "#6366F1",
+				content: "#d6f266",
 			},
 			// Open Graph
 			{
@@ -44,7 +42,7 @@ export const Route = createRootRoute({
 			},
 			{
 				property: "og:title",
-				content: "랜덤 숫자 생성기 - 양자/대기 노이즈 기반 리얼 랜덤",
+				content: "랜덤랩 · 랜덤 숫자, 로또, 연금복권 번호 생성기",
 			},
 			{
 				property: "og:description",
@@ -66,7 +64,7 @@ export const Route = createRootRoute({
 			},
 			{
 				name: "twitter:title",
-				content: "난수 생성기 - 양자/대기 노이즈 기반 진정한 난수",
+				content: "랜덤랩 · 랜덤 숫자, 로또, 연금복권 번호 생성기",
 			},
 			{
 				name: "twitter:description",
@@ -115,17 +113,6 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 			</head>
 			<body>
 				<RootLayout>{children}</RootLayout>
-				<TanStackDevtools
-					config={{
-						position: "bottom-right",
-					}}
-					plugins={[
-						{
-							name: "Tanstack Router",
-							render: <TanStackRouterDevtoolsPanel />,
-						},
-					]}
-				/>
 				<Scripts />
 			</body>
 		</html>

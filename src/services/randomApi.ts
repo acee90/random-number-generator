@@ -1,8 +1,19 @@
 import { env } from "cloudflare:workers";
 import { createServerFn } from "@tanstack/react-start";
-import { consumeFromPool, consumeUniqueFromPool } from "./seedPool";
+import {
+	drawLottery,
+	type LotteryTicket,
+	type RandomSource,
+	validateLotteryRequest,
+	validateRandomRequest,
+} from "./randomCore";
+import {
+	consumeFromPool,
+	consumeUniqueFromPool,
+	createRequestSampler,
+} from "./seedPool";
 
-export type RandomSource = "quantum" | "atmospheric" | "csprng";
+export type { LotteryTicket, LottoStrategy, RandomSource } from "./randomCore";
 
 export interface RandomResult {
 	numbers: number[];
@@ -11,44 +22,38 @@ export interface RandomResult {
 
 /**
  * 난수 생성 API
- * KV 시드 풀 사용 → 풀 비면 외부 API로 리필 → 실패시 CSPRNG
+ * 요청별 새 난수 취득 → 실패시 CSPRNG. 검증 오류는 그대로 반환합니다.
  */
 export const generateRandomNumbers = createServerFn({ method: "POST" })
-	.inputValidator((d: { min: number; max: number; count: number; unique?: boolean }) => d)
+	.inputValidator(validateRandomRequest)
 	.handler(async ({ data }): Promise<RandomResult> => {
 		const { min, max, count, unique } = data;
 
-		// 유효성 검사
-		if (min >= max) {
-			throw new Error("min must be less than max");
+		if (unique) {
+			return consumeUniqueFromPool(min, max, count);
 		}
-		if (count < 1 || count > 100) {
-			throw new Error("count must be between 1 and 100");
-		}
+		return consumeFromPool(min, max, count);
+	});
 
-		try {
-			if (unique) {
-				return await consumeUniqueFromPool(min, max, count);
-			}
-			return await consumeFromPool(min, max, count);
-		} catch (error) {
-			console.error("Pool consumption failed, falling back to CSPRNG:", error);
+export interface LotteryResult {
+	tickets: LotteryTicket[];
+	source: RandomSource;
+}
 
-			// 최종 폴백: CSPRNG
-			const range = max - min + 1;
-			const values = new Uint32Array(count);
-			crypto.getRandomValues(values);
-
-			const numbers = unique
-				? Array.from(
-						new Set(Array.from(values).map((v) => min + (v % range))),
-					).slice(0, count)
-				: Array.from(values).map((v) => min + (v % range));
-
-			return { numbers, source: "csprng" };
-		}
-	},
-);
+export const generateLotteryNumbers = createServerFn({ method: "POST" })
+	.inputValidator(validateLotteryRequest)
+	.handler(async ({ data }): Promise<LotteryResult> => {
+		const samplerCount =
+			data.kind === "lotto" && data.strategy === "spread"
+				? Math.max(
+						data.count,
+						Math.ceil(
+							(data.count * (6 - (data.fixedNumbers?.length ?? 0))) / 4,
+						),
+					)
+				: data.count;
+		return drawLottery(data, createRequestSampler(samplerCount));
+	});
 
 /**
  * 시드 풀 상태 확인 API
@@ -166,8 +171,16 @@ export const getSystemStatus = createServerFn({ method: "GET" }).handler(
 
 		// 외부 API 상태 (간단한 체크)
 		const externalApis = {
-			anu: { url: "https://qrng.anu.edu.au", status: "unknown" as string },
-			randomOrg: { url: "https://www.random.org", status: "unknown" as string },
+			anu: {
+				url: "https://api.quantumnumbers.anu.edu.au",
+				status: "unknown" as string,
+			},
+			randomOrg: {
+				url: env.RANDOM_ORG_API_KEY?.trim()
+					? "https://api.random.org"
+					: "https://www.random.org",
+				status: "unknown" as string,
+			},
 		};
 
 		return {

@@ -13,7 +13,7 @@ npm run deploy   # Build and deploy to Cloudflare Workers
 
 ## Architecture
 
-This is a TanStack Start application with Cloudflare Workers deployment. It's a random number generator that fetches entropy seeds from external sources (quantum/atmospheric noise APIs) and falls back to browser CSPRNG.
+This is a TanStack Start application with Cloudflare Workers deployment. It's a random number generator that fetches entropy seeds from external sources (quantum/atmospheric noise APIs) and falls back to server-side Web Crypto CSPRNG.
 
 ### Key Directories
 
@@ -25,12 +25,12 @@ This is a TanStack Start application with Cloudflare Workers deployment. It's a 
 
 ### Random Number Generation Flow
 
-The `RandomGenerator` component uses `generateRandomNumbers()` from `src/services/randomService.ts` which fetches random numbers directly with priority fallback:
-1. **Priority 1**: ANU Quantum RNG (`qrng.anu.edu.au`)
-2. **Priority 2**: Random.org Atmospheric Noise
+The `RandomGenerator` component offers random integers, Lotto 6/45, and Pension Lottery 720+. `generateRandomNumbers()` and `generateLotteryNumbers()` fetch fresh entropy per request; sources are tried in order:
+1. **Priority 1**: ANU Quantum Numbers (`api.quantumnumbers.anu.edu.au`), authenticated with `ANU_API_KEY` via `x-api-key`; skipped if no key is configured
+2. **Priority 2**: Random.org Atmospheric Noise, using JSON-RPC with `RANDOM_ORG_API_KEY` when configured, otherwise the public HTTP API
 3. **Priority 3**: Web Crypto API (CSPRNG) - local fallback
 
-Each generation attempt tries sources in order until one succeeds. The source used is displayed in the result UI.
+`randomCore.ts` uses rejection sampling and sparse Fisher–Yates to produce unbiased results without duplicates when requested. `SEED_POOL` KV is diagnostic only, never a shared entropy consumption queue. The source used is displayed in the result UI, including mixed sources. Browser settings/history use localStorage with legacy cookie migration. Copy `.env.example` to `.env.local` for local keys; `.dev.vars` takes precedence if present. `RANDOM_ORG_HASHED_API_KEY` is an unused legacy setting.
 
 ### Path Aliases
 

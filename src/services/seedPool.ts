@@ -1,12 +1,18 @@
 import { env } from "cloudflare:workers";
+import {
+	drawNumbers,
+	type EntropyBatch,
+	type EntropySource,
+	RandomSampler,
+	validateRandomRequest,
+} from "./randomCore";
 
 const POOL_KEY = "seed_pool";
 const POOL_SIZE = 1000; // 풀에 저장할 난수 개수
-const REFILL_THRESHOLD = 100; // 이 이하로 떨어지면 리필
 
 export interface SeedPool {
 	seeds: number[];
-	source: "quantum" | "atmospheric" | "csprng";
+	source: EntropySource;
 	createdAt: number;
 }
 
@@ -31,10 +37,16 @@ export async function savePool(pool: SeedPool): Promise<void> {
  * Priority 1: ANU Quantum Random Number Generator
  */
 async function fetchQuantumSeeds(count: number): Promise<number[] | null> {
+	const apiKey = env.ANU_API_KEY?.trim();
+	if (!apiKey) return null;
+
 	try {
 		const response = await fetch(
-			`https://qrng.anu.edu.au/API/jsonI.php?length=${count}&type=uint16&size=2`,
-			{ signal: AbortSignal.timeout(5000) },
+			`https://api.quantumnumbers.anu.edu.au?length=${count}&type=uint16`,
+			{
+				headers: { "x-api-key": apiKey },
+				signal: AbortSignal.timeout(5000),
+			},
 		);
 
 		if (!response.ok) {
@@ -46,14 +58,15 @@ async function fetchQuantumSeeds(count: number): Promise<number[] | null> {
 			data?: number[];
 		};
 
-		if (!data.success || !data.data || data.data.length === 0) {
+		if (!data.success || !isValidSeeds(data.data, count)) {
 			throw new Error("Invalid ANU API response");
 		}
 
 		console.log(`Fetched ${data.data.length} seeds from ANU Quantum`);
 		return data.data;
-	} catch (error) {
-		console.warn("Failed to fetch from ANU Quantum:", error);
+	} catch {
+		// Do not log raw fetch errors: their causes may contain request credentials.
+		console.warn("ANU Quantum request failed; trying the next source.");
 		return null;
 	}
 }
@@ -63,32 +76,69 @@ async function fetchQuantumSeeds(count: number): Promise<number[] | null> {
  */
 async function fetchAtmosphericSeeds(count: number): Promise<number[] | null> {
 	try {
-		// Random.org은 한번에 최대 10000개까지 가능
-		const response = await fetch(
-			`https://www.random.org/integers/?num=${count}&min=0&max=65535&col=1&base=10&format=plain&rnd=new`,
-			{ signal: AbortSignal.timeout(10000) },
-		);
+		const apiKey = env.RANDOM_ORG_API_KEY?.trim();
+		// 키가 있으면 JSON-RPC API, 없으면 기존 공개 HTTP API를 사용합니다.
+		const response = apiKey
+			? await fetch("https://api.random.org/json-rpc/4/invoke", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						jsonrpc: "2.0",
+						method: "generateIntegers",
+						params: {
+							apiKey,
+							n: count,
+							min: 0,
+							max: 65535,
+							replacement: true,
+							base: 10,
+						},
+						id: crypto.randomUUID(),
+					}),
+					signal: AbortSignal.timeout(10000),
+				})
+			: await fetch(
+					`https://www.random.org/integers/?num=${count}&min=0&max=65535&col=1&base=10&format=plain&rnd=new`,
+					{ signal: AbortSignal.timeout(10000) },
+				);
 
 		if (!response.ok) {
 			throw new Error(`Random.org API returned ${response.status}`);
 		}
 
-		const text = await response.text();
-		const seeds = text
-			.trim()
-			.split("\n")
-			.map((v) => Number.parseInt(v.trim(), 10));
+		let seeds: unknown;
+		if (apiKey) {
+			const data = (await response.json()) as {
+				result?: { random?: { data?: number[] } };
+				error?: { code: number };
+			};
+			if (data.error) {
+				throw new Error(`Random.org API error ${data.error.code}`);
+			}
+			seeds = data.result?.random?.data;
+		} else {
+			const text = await response.text();
+			seeds = text.trim().split(/\s+/).map(Number);
+		}
 
-		if (seeds.length < count || seeds.some(Number.isNaN)) {
+		if (!isValidSeeds(seeds, count)) {
 			throw new Error("Invalid Random.org response");
 		}
 
 		console.log(`Fetched ${seeds.length} seeds from Random.org`);
 		return seeds;
-	} catch (error) {
-		console.warn("Failed to fetch from Random.org:", error);
+	} catch {
+		console.warn("Random.org request failed; trying the next source.");
 		return null;
 	}
+}
+
+function isValidSeeds(seeds: unknown, count: number): seeds is number[] {
+	return (
+		Array.isArray(seeds) &&
+		seeds.length === count &&
+		seeds.every((seed) => Number.isInteger(seed) && seed >= 0 && seed <= 65535)
+	);
 }
 
 /**
@@ -101,114 +151,41 @@ function generateCSPRNGSeeds(count: number): number[] {
 	return Array.from(values);
 }
 
-/**
- * 시드 풀 채우기 (우선순위: Quantum → Atmospheric → CSPRNG)
- */
+/** Fetch a fresh batch for one request. Never read shared KV entropy here. */
+export async function fetchEntropy(count: number): Promise<EntropyBatch> {
+	const quantum = await fetchQuantumSeeds(count);
+	if (quantum) return { seeds: quantum, source: "quantum" };
+	const atmospheric = await fetchAtmosphericSeeds(count);
+	if (atmospheric) return { seeds: atmospheric, source: "atmospheric" };
+	return { seeds: generateCSPRNGSeeds(count), source: "csprng" };
+}
+
+/** Legacy manual refill is diagnostic only; these values are never used by draws. */
 export async function refillPool(): Promise<SeedPool> {
-	let seeds: number[] | null = null;
-	let source: SeedPool["source"] = "csprng";
-
-	// Priority 1: ANU Quantum (최대 1024개 제한)
-	const quantumCount = Math.min(POOL_SIZE, 1024);
-	seeds = await fetchQuantumSeeds(quantumCount);
-	if (seeds) {
-		source = "quantum";
-	}
-
-	// Priority 2: Random.org
-	if (!seeds) {
-		seeds = await fetchAtmosphericSeeds(POOL_SIZE);
-		if (seeds) {
-			source = "atmospheric";
-		}
-	}
-
-	// Priority 3: CSPRNG fallback
-	if (!seeds) {
-		seeds = generateCSPRNGSeeds(POOL_SIZE);
-		source = "csprng";
-	}
-
-	const pool: SeedPool = {
-		seeds,
-		source,
-		createdAt: Date.now(),
-	};
-
+	const batch = await fetchEntropy(POOL_SIZE);
+	const pool: SeedPool = { ...batch, createdAt: Date.now() };
 	await savePool(pool);
-	console.log(`Pool refilled with ${seeds.length} seeds from ${source}`);
-
 	return pool;
 }
 
-/**
- * 풀에서 시드 소비하고 난수 생성
- */
-export async function consumeFromPool(
-	min: number,
-	max: number,
-	count: number,
-): Promise<{ numbers: number[]; source: SeedPool["source"] }> {
-	let pool = await getPool();
-
-	// 풀이 없거나 부족하면 리필
-	if (!pool || pool.seeds.length < count) {
-		pool = await refillPool();
-	}
-
-	// 풀에서 시드 꺼내기
-	const usedSeeds = pool.seeds.splice(0, count);
-	const source = pool.source;
-
-	// 남은 풀 저장 (백그라운드 리필 트리거)
-	if (pool.seeds.length < REFILL_THRESHOLD) {
-		// 비동기로 리필 (응답 블로킹 안함)
-		refillPool().catch(console.error);
-	} else {
-		// 남은 풀 저장
-		savePool(pool).catch(console.error);
-	}
-
-	// 시드를 범위 내 숫자로 변환
-	const range = max - min + 1;
-	const numbers = usedSeeds.map((seed) => min + (seed % range));
-
-	return { numbers, source };
+export function createRequestSampler(count: number): RandomSampler {
+	return new RandomSampler(
+		fetchEntropy,
+		Math.min(1024, Math.max(16, count * 4 + 8)),
+	);
 }
 
-/**
- * 중복 없는 난수 생성
- */
+/** Compatibility names: generation now owns fresh entropy rather than a KV queue. */
+export async function consumeFromPool(min: number, max: number, count: number) {
+	const data = validateRandomRequest({ min, max, count, unique: false });
+	return drawNumbers(data, createRequestSampler(count));
+}
+
 export async function consumeUniqueFromPool(
 	min: number,
 	max: number,
 	count: number,
-): Promise<{ numbers: number[]; source: SeedPool["source"] }> {
-	const range = max - min + 1;
-
-	if (count > range) {
-		throw new Error("Cannot generate more unique numbers than range allows");
-	}
-
-	// 중복 제거를 위해 더 많이 가져오기
-	const fetchCount = Math.min(count * 3, range);
-	const result = await consumeFromPool(min, max, fetchCount);
-
-	const uniqueSet = new Set<number>();
-	for (const num of result.numbers) {
-		uniqueSet.add(num);
-		if (uniqueSet.size >= count) break;
-	}
-
-	// 부족하면 CSPRNG로 채우기
-	while (uniqueSet.size < count) {
-		const values = new Uint32Array(1);
-		crypto.getRandomValues(values);
-		uniqueSet.add(min + (values[0] % range));
-	}
-
-	return {
-		numbers: Array.from(uniqueSet).slice(0, count),
-		source: result.source,
-	};
+) {
+	const data = validateRandomRequest({ min, max, count, unique: true });
+	return drawNumbers(data, createRequestSampler(count));
 }

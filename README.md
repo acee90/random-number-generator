@@ -1,4 +1,6 @@
-Welcome to your new TanStack app! 
+# Randomlab
+
+A Korean random-number toolkit with custom integer draws, Lotto 6/45 combinations, and Pension Lottery 720+ numbers. Built with TanStack Start, React, and Cloudflare Workers.
 
 # Getting Started
 
@@ -6,8 +8,35 @@ To run this application:
 
 ```bash
 npm install
-npm run start
 ```
+
+Copy `.env.example` to `.env.local`, then enter your API keys:
+
+```powershell
+Copy-Item .env.example .env.local
+```
+
+- `ANU_API_KEY`: ANU Quantum Numbers key from https://quantumnumbers.anu.edu.au/. Without a key, ANU is skipped.
+- `RANDOM_ORG_API_KEY`: Optional key from https://api.random.org/api-keys. When set, the server uses the JSON-RPC API; otherwise it uses the public HTTP API.
+- `RANDOM_ORG_HASHED_API_KEY`: Optional legacy setting, currently unused for random-number requests.
+
+Start the local app at http://localhost:3000:
+
+```bash
+npm run dev
+```
+
+Keys are read only by the server. `.env.local` is ignored by Git. Use either `.env.local` or `.dev.vars`; `.dev.vars` takes precedence. Restart the development server after changing keys. Every generation request fetches fresh entropy: ANU first, then Random.org, then server Web Crypto if both are unavailable. Rejection sampling removes range-conversion bias, and the result identifies mixed sources when applicable. The legacy KV pool is diagnostic only and is never consumed by draws. No Cloudflare API token is required for local development.
+
+## Features
+
+- Custom integer ranges, 1–100 results, optional duplicates and sorting.
+- Lotto 6/45: 1–5 distinct combinations, with standard random selection, disjoint numbers across games, or 1–5 fixed numbers shared by every game. Excluded numbers apply to every strategy; insufficient candidate pools are rejected before requesting entropy. Results and history retain fixed/excluded numbers and the draw strategy.
+- Pension Lottery 720+: 1–5 distinct tickets, random or fixed group (1–5), with six digits including leading zeroes.
+- Copy results, per-tool history (50 records shared across tools), and undo history deletion. Settings and history stay in browser local storage, with migration from the previous cookie format.
+- Responsive desktop/mobile layout with keyboard support and reduced-motion preferences.
+
+Lottery generation follows the formats documented by [Donghaeng Lottery](https://www.dhlottery.co.kr/). This tool generates number selections; it does not predict winning numbers or purchase tickets.
 
 # Building For Production
 

@@ -1,0 +1,120 @@
+.drawing-animation {
+	container-type: inline-size;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 24px;
+	width: 100%;
+	min-height: 260px;
+	padding: 16px 0;
+	color: var(--ink, #272b24);
+}
+
+.drawing-progress-label {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 13px;
+	font-weight: 650;
+	color: #596b39;
+}
+
+.drawing-reels {
+	--drawing-slot-height: clamp(46px, 14cqw, 88px);
+	display: grid;
+	grid-template-columns: repeat(var(--drawing-slots), minmax(0, 1fr));
+	gap: clamp(5px, 1.8cqw, 12px);
+	width: min(100%, 600px);
+}
+
+.drawing-animation[data-kind="number"] .drawing-reels {
+	width: min(100%, 380px);
+}
+
+.drawing-animation[data-kind="lotto"] .drawing-reels {
+	--drawing-slot-height: clamp(36px, 14cqw, 88px);
+}
+
+.drawing-slot {
+	position: relative;
+	min-width: 0;
+	height: var(--drawing-slot-height);
+	overflow: hidden;
+	border: 1px solid #a9b992;
+	border-radius: 12px;
+	background: #fff;
+	box-shadow: 0 3px 0 #dde6ce;
+	font-size: clamp(34px, 10cqw, 64px);
+	font-weight: 650;
+	font-variant-numeric: tabular-nums;
+	color: #354727;
+}
+
+.drawing-animation[data-kind="lotto"] .drawing-slot {
+	border-radius: 999px;
+	background: var(--lime, #d6f266);
+	border-color: #a9c348;
+	font-size: clamp(24px, 10cqw, 60px);
+}
+
+.drawing-reel {
+	display: none;
+}
+
+.drawing-reel > span,
+.drawing-static-slot {
+	display: grid;
+	place-items: center;
+	height: var(--drawing-slot-height);
+	line-height: 1;
+}
+
+.drawing-status {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 9px;
+	text-align: center;
+}
+
+.drawing-status-title {
+	font-size: 21px;
+	font-weight: 700;
+	letter-spacing: -0.5px;
+}
+
+.drawing-status-description {
+	font-size: 14px;
+	color: #66735a;
+	line-height: 1.7;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.drawing-static-slot {
+		display: none;
+	}
+
+	.drawing-reel {
+		display: block;
+		animation: drawing-reel-roll 1150ms linear infinite;
+		animation-delay: calc(var(--drawing-index) * -170ms);
+	}
+}
+
+@keyframes drawing-reel-roll {
+	from {
+		transform: translateY(0);
+	}
+	to {
+		transform: translateY(calc(var(--drawing-slot-height) * -10));
+	}
+}
+
+@media (forced-colors: active) {
+	.drawing-slot {
+		border-color: CanvasText;
+		color: CanvasText;
+		background: Canvas;
+	}
+}

@@ -1,7 +1,7 @@
 {
-	"name": "난수 생성기 - 양자/대기 노이즈 기반 진정한 난수",
-	"short_name": "난수 생성기",
-	"description": "양자 난수 생성기(QRNG), 대기 노이즈, 암호학적으로 안전한 난수를 생성합니다.",
+	"name": "랜덤랩 · 숫자와 복권 번호 생성기",
+	"short_name": "랜덤랩",
+	"description": "랜덤 숫자, 로또 6/45, 연금복권 720+ 번호를 한곳에서 생성하세요.",
 	"icons": [
 		{
 			"src": "/favicon.svg",
@@ -26,9 +26,12 @@
 	],
 	"start_url": "/",
 	"display": "standalone",
-	"theme_color": "#6366F1",
-	"background_color": "#0a0a0a",
+	"theme_color": "#d6f266",
+	"background_color": "#f7f7f2",
 	"lang": "ko",
 	"orientation": "portrait-primary",
-	"categories": ["utilities", "productivity"]
+	"categories": [
+		"utilities",
+		"productivity"
+	]
 }
