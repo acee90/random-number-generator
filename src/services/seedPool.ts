@@ -118,7 +118,11 @@ async function fetchAtmosphericSeeds(count: number): Promise<number[] | null> {
 			seeds = data.result?.random?.data;
 		} else {
 			const text = await response.text();
-			seeds = text.trim().split(/\s+/).map(Number);
+			const values = text.trim().split(/\s+/);
+			if (!values.every((value) => /^\d+$/.test(value))) {
+				throw new Error("Invalid Random.org response");
+			}
+			seeds = values.map(Number);
 		}
 
 		if (!isValidSeeds(seeds, count)) {

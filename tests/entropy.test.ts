@@ -92,6 +92,43 @@ describe("request-owned entropy", () => {
 		});
 		expect(fetch).toHaveBeenCalledTimes(1);
 	});
+	it("accepts a single zero from public Random.org", async () => {
+		delete env.ANU_API_KEY;
+		delete env.RANDOM_ORG_API_KEY;
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => new Response(" \n0\r\n")),
+		);
+		expect(await fetchEntropy(1)).toEqual({
+			seeds: [0],
+			source: "atmospheric",
+		});
+	});
+	it.each([
+		"",
+		" \n\t ",
+		"0x10",
+		"1e2",
+		"Infinity",
+		"12x",
+		"+1",
+		"-0",
+		"1.0",
+	])("rejects invalid public Random.org text %j before using local entropy", async (text) => {
+		delete env.ANU_API_KEY;
+		delete env.RANDOM_ORG_API_KEY;
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => new Response(text)),
+		);
+		const localEntropy = vi.fn((values: Uint16Array) => values.fill(123));
+		vi.stubGlobal("crypto", { getRandomValues: localEntropy });
+		expect(await fetchEntropy(1)).toEqual({
+			seeds: [123],
+			source: "csprng",
+		});
+		expect(localEntropy).toHaveBeenCalledTimes(1);
+	});
 	it("rejects malformed external values and JSON-RPC errors", async () => {
 		vi.stubGlobal(
 			"fetch",
