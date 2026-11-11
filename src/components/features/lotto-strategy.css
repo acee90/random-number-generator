@@ -194,6 +194,81 @@
 	color: #344b21;
 }
 
+.lotto-number-entry {
+	max-width: 760px;
+	margin-bottom: 15px;
+}
+
+.lotto-number-entry > label {
+	font-size: 14px;
+	font-weight: 650;
+	color: #48672e;
+}
+
+.lotto-entry-controls {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: start;
+	gap: 8px;
+	margin-top: 8px;
+}
+
+.lotto-entry-controls > textarea {
+	width: 100%;
+	min-width: 0;
+	min-height: 44px;
+	padding: 9px 10px;
+	border: 1px solid #8b9b79;
+	border-radius: 8px;
+	background: #fff;
+	font-size: 16px;
+	color: #304426;
+	resize: vertical;
+}
+
+.lotto-entry-controls > textarea[aria-invalid="true"] {
+	border-color: #9e5947;
+}
+
+.lotto-entry-controls > textarea:disabled {
+	opacity: 0.55;
+}
+
+.lotto-entry-add {
+	min-height: 44px;
+	font-size: 14px;
+}
+
+.lotto-entry-help,
+.lotto-entry-error,
+.lotto-entry-status {
+	display: block;
+	margin: 8px 0 0;
+	font-size: 12px;
+	line-height: 1.8;
+	color: #5e734a;
+}
+
+.lotto-entry-error {
+	color: #7a3526;
+}
+
+.lotto-entry-error:empty {
+	display: none;
+}
+
+.lotto-entry-status:empty {
+	margin: 0;
+}
+
+.lotto-excluded-fieldset .lotto-number-entry > label {
+	color: #754738;
+}
+
+.lotto-excluded-fieldset .lotto-entry-help {
+	color: #795b4f;
+}
+
 .lotto-number-grid {
 	display: grid;
 	grid-template-columns: repeat(9, minmax(0, 1fr));
