@@ -20,6 +20,7 @@ import {
 	Wind,
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import DrawDownload from "@/components/features/DrawDownload";
 import DrawingAnimation from "@/components/features/DrawingAnimation";
 import LotteryGuide from "@/components/features/LotteryGuide";
 import LottoStrategyControls, {
@@ -1169,6 +1170,13 @@ export default function RandomGenerator() {
 													? "전체 결과 복사"
 													: "전체 번호 복사"}
 										</button>
+										<DrawDownload
+											draw={draw}
+											sourceLabel={getSourceDisplayName(draw.source)}
+											strategy={
+												mode === "lotto" ? describeLotto(draw) : undefined
+											}
+										/>
 										<span>
 											{restoredCurrent
 												? new Date(draw.timestamp).toLocaleString("ko-KR", {
