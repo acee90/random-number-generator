@@ -1128,3 +1128,270 @@ describe("manual copy fallback", () => {
 		expect(numberInput("max").getAttribute("aria-invalid")).toBe("true");
 	});
 });
+
+describe("saved Lotto settings reuse", () => {
+	const older = {
+		id: "reapply-older",
+		kind: "lotto",
+		source: "quantum",
+		timestamp: savedResultTime,
+		rows: [
+			{ numbers: [3, 11, 18, 20, 24, 45] },
+			{ numbers: [3, 11, 13, 22, 33, 42] },
+		],
+		lottoOptions: {
+			mode: "fixed",
+			fixedNumbers: [11, 3],
+			excludedNumbers: [8, 4],
+			spreadRemainder: false,
+		},
+	};
+	const latest = {
+		id: "reapply-latest",
+		kind: "lotto",
+		source: "csprng",
+		timestamp: savedResultTime + 1_000,
+		rows: [{ numbers: [7, 8, 21, 30, 35, 45] }],
+		lottoOptions: {
+			mode: "spread",
+			fixedNumbers: [],
+			excludedNumbers: [1, 2],
+			spreadRemainder: true,
+		},
+	};
+	const confirmation = /저장된 로또 추첨.*설정을 적용했습니다/;
+
+	function seedSavedLotto() {
+		localStorage.setItem("randomlab.history", JSON.stringify([latest, older]));
+		render(<RandomGenerator />);
+		openTool("로또 6/45");
+		const card = screen
+			.getByRole("region", { name: "이전 추첨 기록" })
+			.querySelector<HTMLElement>(".history-item");
+		if (!card) throw new Error("Historical Lotto card is missing");
+		return card;
+	}
+
+	function reapplyOlder(card: HTMLElement) {
+		fireEvent.click(
+			within(card).getByRole("button", { name: /로또 설정 다시 사용$/ }),
+		);
+	}
+
+	it("applies a historical draw's settings without drawing or replacing the current result", async () => {
+		const card = seedSavedLotto();
+		const before = currentResult().textContent;
+		fireEvent.click(screen.getByRole("radio", { name: /^번호 고정/ }));
+		const bulkInput = screen.getByRole("textbox", {
+			name: "고정 번호 한 번에 추가",
+		});
+		fireEvent.change(bulkInput, { target: { value: "46" } });
+		fireEvent.click(screen.getByRole("button", { name: "고정 번호 추가" }));
+		expect(bulkInput.getAttribute("aria-invalid")).toBe("true");
+		reapplyOlder(card);
+		expect(document.activeElement).toBe(
+			screen.getByRole("heading", { name: "로또 번호 추첨", level: 2 }),
+		);
+		expect(screen.getByText(confirmation)).toBeTruthy();
+		expect(gameButton(2).getAttribute("aria-pressed")).toBe("true");
+		expect(
+			(screen.getByRole("radio", { name: /^번호 고정/ }) as HTMLInputElement)
+				.checked,
+		).toBe(true);
+		const fixed = within(screen.getByRole("group", { name: "고정 번호 선택" }));
+		expect(
+			fixed
+				.getByRole("button", { name: "3 고정 번호" })
+				.getAttribute("aria-pressed"),
+		).toBe("true");
+		expect(
+			fixed
+				.getByRole("button", { name: "11 고정 번호" })
+				.getAttribute("aria-pressed"),
+		).toBe("true");
+		const cleanBulkInput = screen.getByRole("textbox", {
+			name: "고정 번호 한 번에 추가",
+		});
+		if (!(cleanBulkInput instanceof HTMLTextAreaElement))
+			throw new Error("Bulk input is not a textarea");
+		expect(cleanBulkInput.value).toBe("");
+		expect(cleanBulkInput.getAttribute("aria-invalid")).toBe("false");
+		expect(
+			(
+				screen.getByRole("checkbox", {
+					name: /^나머지 번호는 게임 간/,
+				}) as HTMLInputElement
+			).checked,
+		).toBe(false);
+		fireEvent.click(screen.getByText("제외 번호 선택"));
+		const excluded = within(
+			screen.getByRole("group", { name: "추첨에서 제외할 번호" }),
+		);
+		expect(
+			excluded
+				.getByRole("button", { name: "4 제외 번호" })
+				.getAttribute("aria-pressed"),
+		).toBe("true");
+		expect(
+			excluded
+				.getByRole("button", { name: "8 제외 번호" })
+				.getAttribute("aria-pressed"),
+		).toBe("true");
+		expect(currentResult().textContent).toBe(before);
+		expect(generateLotteryNumbers).not.toHaveBeenCalled();
+		expect(generateRandomNumbers).not.toHaveBeenCalled();
+		expect(
+			JSON.parse(localStorage.getItem("randomlab.history") ?? "[]"),
+		).toEqual([latest, older]);
+		vi.mocked(generateLotteryNumbers).mockResolvedValueOnce({
+			tickets: older.rows,
+			source: "csprng",
+		});
+		fireEvent.click(screen.getByRole("button", { name: "번호 뽑기" }));
+		expect(screen.queryByText(confirmation)).toBeNull();
+		await screen.findByRole("button", { name: "B게임 번호 복사" });
+		expect(generateLotteryNumbers).toHaveBeenCalledWith({
+			data: {
+				kind: "lotto",
+				count: 2,
+				strategy: "random",
+				fixedNumbers: [3, 11],
+				excludedNumbers: [4, 8],
+			},
+		});
+		expect(within(currentResult()).getByText("이번 추첨 결과")).toBeTruthy();
+	});
+
+	it("reuses current result metadata without changing pension settings or the result", () => {
+		localStorage.setItem(
+			lotterySettingsKey,
+			JSON.stringify({
+				lottoGameCount: 5,
+				pensionGameCount: 2,
+				group: "3",
+				lottoMode: "fixed",
+				fixedNumbers: [9],
+				excludedNumbers: [6],
+				spreadRemainder: false,
+			}),
+		);
+		seedSavedLotto();
+		const before = currentResult().textContent;
+		vi.stubGlobal(
+			"matchMedia",
+			vi.fn(() => ({ matches: true })),
+		);
+		fireEvent.click(
+			within(currentResult()).getByRole("button", {
+				name: "현재 로또 설정 다시 사용",
+			}),
+		);
+		expect(gameButton(1).getAttribute("aria-pressed")).toBe("true");
+		expect(
+			(screen.getByRole("radio", { name: /^번호 분산/ }) as HTMLInputElement)
+				.checked,
+		).toBe(true);
+		expect(
+			JSON.parse(localStorage.getItem(lotterySettingsKey) ?? "{}"),
+		).toEqual({
+			lottoGameCount: 1,
+			pensionGameCount: 2,
+			group: "3",
+			lottoMode: "spread",
+			fixedNumbers: [],
+			excludedNumbers: [1, 2],
+			spreadRemainder: true,
+		});
+		expect(currentResult().textContent).toBe(before);
+		expect(document.activeElement).toBe(
+			screen.getByRole("heading", { name: "로또 번호 추첨", level: 2 }),
+		);
+		expect(Element.prototype.scrollIntoView).toHaveBeenLastCalledWith({
+			behavior: "auto",
+			block: "start",
+		});
+		expect(generateLotteryNumbers).not.toHaveBeenCalled();
+	});
+
+	it("does not offer guessed settings for legacy results without metadata", () => {
+		localStorage.setItem(
+			"randomlab.history",
+			JSON.stringify([
+				{ ...latest, lottoOptions: undefined },
+				{ ...older, lottoOptions: undefined },
+			]),
+		);
+		render(<RandomGenerator />);
+		openTool("로또 6/45");
+		expect(
+			screen.queryByRole("button", { name: /로또 설정 다시 사용$/ }),
+		).toBeNull();
+		expect(
+			within(currentResult()).getByRole("button", { name: "전체 번호 복사" }),
+		).toBeTruthy();
+	});
+
+	it.each([
+		"mode",
+		"fixed",
+		"excluded",
+		"remainder",
+		"count",
+	] as const)("clears the applied notice when editing %s", (condition) => {
+		const card = seedSavedLotto();
+		reapplyOlder(card);
+		expect(screen.getByText(confirmation)).toBeTruthy();
+		if (condition === "mode")
+			fireEvent.click(screen.getByRole("radio", { name: /^일반 랜덤/ }));
+		else if (condition === "fixed")
+			fireEvent.click(
+				within(screen.getByRole("group", { name: "고정 번호 선택" })).getByRole(
+					"button",
+					{ name: "3 고정 번호" },
+				),
+			);
+		else if (condition === "excluded") {
+			fireEvent.click(screen.getByText("제외 번호 선택"));
+			fireEvent.click(
+				within(
+					screen.getByRole("group", { name: "추첨에서 제외할 번호" }),
+				).getByRole("button", { name: "4 제외 번호" }),
+			);
+		} else if (condition === "remainder")
+			fireEvent.click(
+				screen.getByRole("checkbox", { name: /^나머지 번호는 게임 간/ }),
+			);
+		else fireEvent.click(gameButton(3));
+		expect(screen.queryByText(confirmation)).toBeNull();
+		expect(generateLotteryNumbers).not.toHaveBeenCalled();
+	});
+
+	it("keeps historical reapply actions disabled during a draw", async () => {
+		let complete: (value: {
+			tickets: { numbers: number[] }[];
+			source: "csprng";
+		}) => void = () => {};
+		const pending = new Promise<{
+			tickets: { numbers: number[] }[];
+			source: "csprng";
+		}>((resolve) => {
+			complete = resolve;
+		});
+		vi.mocked(generateLotteryNumbers).mockReturnValueOnce(pending);
+		const card = seedSavedLotto();
+		const reapply = within(card).getByRole("button", {
+			name: /로또 설정 다시 사용$/,
+		});
+		fireEvent.click(screen.getByRole("button", { name: "번호 뽑기" }));
+		expect(reapply.matches(":disabled")).toBe(true);
+		fireEvent.click(reapply);
+		expect(gameButton(1).getAttribute("aria-pressed")).toBe("true");
+		await act(async () =>
+			complete({
+				tickets: [{ numbers: [1, 2, 3, 4, 5, 6] }],
+				source: "csprng",
+			}),
+		);
+		expect(generateLotteryNumbers).toHaveBeenCalledTimes(1);
+	});
+});

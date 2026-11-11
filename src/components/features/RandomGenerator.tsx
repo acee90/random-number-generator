@@ -204,6 +204,7 @@ export default function RandomGenerator() {
 	const resultRef = useRef<HTMLDivElement>(null);
 	const lottoConstraintRef = useRef<HTMLOutputElement>(null);
 	const formRef = useRef<HTMLFormElement>(null);
+	const settingsTitleRef = useRef<HTMLHeadingElement>(null);
 	const minInputRef = useRef<HTMLInputElement>(null);
 	const maxInputRef = useRef<HTMLInputElement>(null);
 	const countInputRef = useRef<HTMLInputElement>(null);
@@ -218,6 +219,7 @@ export default function RandomGenerator() {
 	const [fixedNumbers, setFixedNumbers] = useState<number[]>([]);
 	const [excludedNumbers, setExcludedNumbers] = useState<number[]>([]);
 	const [spreadRemainder, setSpreadRemainder] = useState(true);
+	const [lottoControlsRevision, setLottoControlsRevision] = useState(0);
 	const [draws, setDraws] = useState<Partial<Record<Mode, Draw>>>({});
 	const [restoredDrawIds, setRestoredDrawIds] = useState<
 		Partial<Record<Mode, string>>
@@ -481,6 +483,7 @@ export default function RandomGenerator() {
 
 	async function generate() {
 		clearCopyFeedback();
+		setAppliedExample("");
 		setError("");
 		setNumberErrorFields([]);
 		if (mode === "lotto" && lottoConstraintError) {
@@ -651,6 +654,29 @@ export default function RandomGenerator() {
 			block: "start",
 		});
 	}
+	function applySavedLotto(value: Draw) {
+		if (busy || value.kind !== "lotto" || !value.lottoOptions) return;
+		const options = value.lottoOptions;
+		setLottoGameCount(value.rows.length);
+		setLottoMode(options.mode);
+		setFixedNumbers([...options.fixedNumbers].sort((a, b) => a - b));
+		setExcludedNumbers(
+			[...(options.excludedNumbers ?? [])].sort((a, b) => a - b),
+		);
+		setSpreadRemainder(options.spreadRemainder);
+		setLottoControlsRevision((previous) => previous + 1);
+		setError("");
+		setNumberErrorFields([]);
+		clearCopyFeedback();
+		setAppliedExample("저장된 로또 추첨");
+		settingsTitleRef.current?.focus();
+		formRef.current?.scrollIntoView({
+			behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+				? "auto"
+				: "smooth",
+			block: "start",
+		});
+	}
 	return (
 		<div className="random-lab">
 			<header className="masthead">
@@ -721,7 +747,9 @@ export default function RandomGenerator() {
 							<span>조건 설정</span>
 							<span>01</span>
 						</div>
-						<h2>{current.title}</h2>
+						<h2 ref={settingsTitleRef} tabIndex={-1}>
+							{current.title}
+						</h2>
 						<p className="control-description">{current.description}</p>
 						{appliedExample && (
 							<output className="preset-notice">
@@ -938,15 +966,18 @@ export default function RandomGenerator() {
 									</div>
 									{mode === "lotto" && (
 										<LottoStrategyControls
+											key={lottoControlsRevision}
 											mode={lottoMode}
 											onModeChange={(next) => {
 												setLottoMode(next);
 												setError("");
+												setAppliedExample("");
 											}}
 											fixedNumbers={fixedNumbers}
 											onFixedNumbersChange={(numbers) => {
 												setFixedNumbers(numbers);
 												setError("");
+												setAppliedExample("");
 											}}
 											excludedNumbers={excludedNumbers}
 											onExcludedNumbersChange={(numbers) => {
@@ -955,11 +986,13 @@ export default function RandomGenerator() {
 													prev.filter((number) => !numbers.includes(number)),
 												);
 												setError("");
+												setAppliedExample("");
 											}}
 											spreadRemainder={spreadRemainder}
 											onSpreadRemainderChange={(value) => {
 												setSpreadRemainder(value);
 												setError("");
+												setAppliedExample("");
 											}}
 											gameCount={gameCount}
 											disabled={busy}
@@ -1182,6 +1215,18 @@ export default function RandomGenerator() {
 												mode === "lotto" ? describeLotto(draw) : undefined
 											}
 										/>
+										{mode === "lotto" && draw.lottoOptions && (
+											<button
+												type="button"
+												className="text-button"
+												disabled={busy}
+												aria-label="현재 로또 설정 다시 사용"
+												onClick={() => applySavedLotto(draw)}
+											>
+												설정 다시 사용{" "}
+												<ArrowUpRight size={16} aria-hidden="true" />
+											</button>
+										)}
 										<span>
 											{restoredCurrent
 												? new Date(draw.timestamp).toLocaleString("ko-KR", {
@@ -1350,6 +1395,18 @@ export default function RandomGenerator() {
 										<p className="history-lotto-strategy">
 											{describeLotto(item)}
 										</p>
+									)}
+									{item.kind === "lotto" && item.lottoOptions && (
+										<button
+											type="button"
+											className="text-button"
+											disabled={busy}
+											aria-label={`${new Date(item.timestamp).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })} 로또 설정 다시 사용`}
+											onClick={() => applySavedLotto(item)}
+										>
+											설정 다시 사용{" "}
+											<ArrowUpRight size={16} aria-hidden="true" />
+										</button>
 									)}
 									<div className="history-numbers">
 										{item.rows.map((row, index) => (
