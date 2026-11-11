@@ -26,6 +26,10 @@ import LottoStrategyControls, {
 	type LottoMode,
 } from "@/components/features/LottoStrategyControls";
 import { Switch } from "@/components/ui/switch";
+import {
+	lotterySettingsKey,
+	parseLotterySettings,
+} from "@/lib/lotterySettings";
 import { validateLotteryRequest } from "@/services/randomCore";
 import {
 	generateLotteryNumbers,
@@ -326,6 +330,23 @@ export default function RandomGenerator() {
 			setStorageNotice("저장된 설정을 읽지 못해 기본값으로 시작합니다.");
 		}
 		try {
+			const stored = localStorage.getItem(lotterySettingsKey);
+			if (stored !== null) {
+				const value = parseLotterySettings(JSON.parse(stored));
+				setLottoGameCount(value.lottoGameCount);
+				setPensionGameCount(value.pensionGameCount);
+				setGroup(value.group);
+				setLottoMode(value.lottoMode);
+				setFixedNumbers(value.fixedNumbers);
+				setExcludedNumbers(value.excludedNumbers);
+				setSpreadRemainder(value.spreadRemainder);
+			}
+		} catch {
+			setStorageNotice(
+				"저장된 복권 설정을 읽지 못해 복권 설정은 기본값으로 시작합니다.",
+			);
+		}
+		try {
 			const storedHistory = localStorage.getItem("randomlab.history");
 			if (storedHistory) {
 				const parsed = JSON.parse(storedHistory);
@@ -366,16 +387,49 @@ export default function RandomGenerator() {
 		try {
 			localStorage.setItem("randomlab.settings", JSON.stringify(settings));
 			Cookies.remove("rng_settings");
-			if (historyLoaded) {
-				localStorage.setItem("randomlab.history", JSON.stringify(history));
-				Cookies.remove("rng_history");
-			}
+		} catch {
+			setStorageNotice("이 브라우저에 설정을 저장할 수 없습니다.");
+		}
+	}, [settings, ready]);
+	useEffect(() => {
+		if (!ready) return;
+		try {
+			localStorage.setItem(
+				lotterySettingsKey,
+				JSON.stringify({
+					lottoGameCount,
+					pensionGameCount,
+					group,
+					lottoMode,
+					fixedNumbers,
+					excludedNumbers,
+					spreadRemainder,
+				}),
+			);
+		} catch {
+			setStorageNotice("이 브라우저에 복권 설정을 저장할 수 없습니다.");
+		}
+	}, [
+		lottoGameCount,
+		pensionGameCount,
+		group,
+		lottoMode,
+		fixedNumbers,
+		excludedNumbers,
+		spreadRemainder,
+		ready,
+	]);
+	useEffect(() => {
+		if (!ready || !historyLoaded) return;
+		try {
+			localStorage.setItem("randomlab.history", JSON.stringify(history));
+			Cookies.remove("rng_history");
 		} catch {
 			setStorageNotice(
 				"이 브라우저에 기록을 저장할 수 없습니다. 필요한 결과는 복사해 주세요.",
 			);
 		}
-	}, [settings, history, ready, historyLoaded]);
+	}, [history, ready, historyLoaded]);
 	useEffect(() => {
 		if (!copied) return;
 		const timer = setTimeout(() => setCopied(""), 2000);
