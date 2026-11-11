@@ -736,6 +736,127 @@ describe("latest result restoration", () => {
 		expect(generateRandomNumbers).not.toHaveBeenCalled();
 		expect(generateLotteryNumbers).not.toHaveBeenCalled();
 	});
+	it.each([
+		{
+			name: "multiple integer rows",
+			kind: "number",
+			patch: { rows: [{ numbers: [1] }, { numbers: [2] }] },
+		},
+		{
+			name: "invalid Date timestamp",
+			kind: "number",
+			patch: { timestamp: 1e20 },
+		},
+		{ name: "empty record id", kind: "number", patch: { id: "" } },
+		{
+			name: "invalid Lotto combination",
+			kind: "lotto",
+			patch: { rows: [{ numbers: [1, 1, 1, 1, 1, 46] }] },
+		},
+		{
+			name: "mismatched Lotto exclusions",
+			kind: "lotto",
+			patch: { rows: [{ numbers: [4, 7, 21, 30, 35, 45] }] },
+		},
+		{
+			name: "missing pension group",
+			kind: "pension",
+			patch: { rows: [{ numbers: [0, 0, 0, 1, 2, 3] }] },
+		},
+		{
+			name: "invalid pension digit",
+			kind: "pension",
+			patch: { rows: [{ group: 2, numbers: [0, 0, 0, 1, 2, 45] }] },
+		},
+	] as const)("keeps a valid older result when the newest record has $name", ({
+		kind,
+		patch,
+	}) => {
+		const valid = savedResults.find(
+			(item) => item.kind === kind && item.id.endsWith("-latest"),
+		);
+		if (!valid) throw new Error("Saved fixture is missing");
+		localStorage.setItem(
+			"randomlab.history",
+			JSON.stringify([
+				{
+					...valid,
+					id: "invalid-newer",
+					timestamp: savedResultTime + 10_000,
+					...patch,
+				},
+				valid,
+			]),
+		);
+		render(<RandomGenerator />);
+		if (kind !== "number")
+			openTool(kind === "lotto" ? "로또 6/45" : "연금복권 720+");
+		expect(within(currentResult()).getByText("마지막 추첨 결과")).toBeTruthy();
+		if (kind === "number") {
+			expect(
+				Array.from(currentResult().querySelectorAll(".number-value")).map(
+					(el) => el.textContent,
+				),
+			).toEqual(["42", "99"]);
+		} else if (kind === "lotto") {
+			expect(
+				Array.from(currentResult().querySelectorAll(".lotto-ball")).map(
+					(el) => el.childNodes[0].textContent,
+				),
+			).toEqual(["7", "8", "21", "30", "35", "45"]);
+		} else {
+			expect(
+				currentResult().querySelector(".pension-digits")?.textContent,
+			).toBe("087654");
+			expect(currentResult().querySelector(".pension-group")?.textContent).toBe(
+				"5조",
+			);
+		}
+		expect(
+			JSON.parse(localStorage.getItem("randomlab.history") ?? "[]"),
+		).toEqual([valid]);
+		expect(generateRandomNumbers).not.toHaveBeenCalled();
+		expect(generateLotteryNumbers).not.toHaveBeenCalled();
+	});
+	it("preserves strategy-free Lotto records and all-zero pension tickets", () => {
+		const history = [
+			{
+				id: "old-lotto",
+				kind: "lotto",
+				rows: [{ numbers: [1, 2, 3, 4, 5, 6] }],
+				source: "quantum",
+				timestamp: 1,
+			},
+			{
+				id: "old-pension",
+				kind: "pension",
+				rows: [{ group: 1, numbers: [0, 0, 0, 0, 0, 0] }],
+				source: "atmospheric",
+				timestamp: 2,
+			},
+		];
+		localStorage.setItem("randomlab.history", JSON.stringify(history));
+		render(<RandomGenerator />);
+		openTool("로또 6/45");
+		expect(
+			Array.from(currentResult().querySelectorAll(".lotto-ball")).map(
+				(el) => el.childNodes[0].textContent,
+			),
+		).toEqual(["1", "2", "3", "4", "5", "6"]);
+		expect(currentResult().textContent).toContain("일반 랜덤");
+		openTool("연금복권 720+");
+		expect(currentResult().querySelector(".pension-digits")?.textContent).toBe(
+			"000000",
+		);
+		expect(currentResult().querySelector(".pension-group")?.textContent).toBe(
+			"1조",
+		);
+		expect(
+			JSON.parse(localStorage.getItem("randomlab.history") ?? "[]"),
+		).toEqual(history);
+		expect(generateRandomNumbers).not.toHaveBeenCalled();
+		expect(generateLotteryNumbers).not.toHaveBeenCalled();
+	});
 });
 
 describe("manual copy fallback", () => {

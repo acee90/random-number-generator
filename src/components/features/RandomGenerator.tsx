@@ -28,6 +28,7 @@ import LottoStrategyControls, {
 	type LottoMode,
 } from "@/components/features/LottoStrategyControls";
 import { Switch } from "@/components/ui/switch";
+import { type Draw, isDraw, type Mode, type Row } from "@/lib/drawHistory";
 import {
 	lotterySettingsKey,
 	parseLotterySettings,
@@ -40,22 +41,6 @@ import {
 	type RandomSource,
 } from "@/services/randomService";
 
-type Mode = "number" | "lotto" | "pension";
-type Row = { numbers: number[]; group?: number };
-type LottoOptions = {
-	mode: LottoMode;
-	fixedNumbers: number[];
-	excludedNumbers?: number[];
-	spreadRemainder: boolean;
-};
-type Draw = {
-	id: string;
-	kind: Mode;
-	rows: Row[];
-	source: RandomSource;
-	timestamp: number;
-	lottoOptions?: LottoOptions;
-};
 type Settings = {
 	min: string;
 	max: string;
@@ -202,32 +187,6 @@ function rowText(row: Row, mode: Mode) {
 		? `${row.group}조 ${row.numbers.join("")}`
 		: row.numbers.join(", ");
 }
-function isLottoOptions(value: unknown): value is LottoOptions {
-	if (!value || typeof value !== "object") return false;
-	const options = value as LottoOptions;
-	return (
-		["random", "spread", "fixed"].includes(options.mode) &&
-		Array.isArray(options.fixedNumbers) &&
-		options.fixedNumbers.length <= 5 &&
-		new Set(options.fixedNumbers).size === options.fixedNumbers.length &&
-		options.fixedNumbers.every(
-			(number) => Number.isInteger(number) && number >= 1 && number <= 45,
-		) &&
-		(options.excludedNumbers === undefined ||
-			(Array.isArray(options.excludedNumbers) &&
-				options.excludedNumbers.length <= 39 &&
-				new Set(options.excludedNumbers).size ===
-					options.excludedNumbers.length &&
-				options.excludedNumbers.every(
-					(number) =>
-						Number.isInteger(number) &&
-						number >= 1 &&
-						number <= 45 &&
-						!options.fixedNumbers.includes(number),
-				))) &&
-		typeof options.spreadRemainder === "boolean"
-	);
-}
 function describeLotto(draw: Draw) {
 	const options = draw.lottoOptions;
 	const strategy =
@@ -239,27 +198,6 @@ function describeLotto(draw: Draw) {
 	return options?.excludedNumbers?.length
 		? `${strategy} · 제외: ${options.excludedNumbers.join(", ")}`
 		: strategy;
-}
-function isDraw(value: unknown): value is Draw {
-	if (!value || typeof value !== "object") return false;
-	const draw = value as Draw;
-	return (
-		typeof draw.id === "string" &&
-		["number", "lotto", "pension"].includes(draw.kind) &&
-		Number.isFinite(draw.timestamp) &&
-		(draw.lottoOptions === undefined || isLottoOptions(draw.lottoOptions)) &&
-		["quantum", "atmospheric", "csprng", "mixed"].includes(draw.source) &&
-		Array.isArray(draw.rows) &&
-		draw.rows.length > 0 &&
-		draw.rows.every(
-			(row) =>
-				row !== null &&
-				typeof row === "object" &&
-				Array.isArray(row.numbers) &&
-				row.numbers.length > 0 &&
-				row.numbers.every(Number.isSafeInteger),
-		)
-	);
 }
 export default function RandomGenerator() {
 	const id = useId();
