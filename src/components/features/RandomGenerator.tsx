@@ -271,6 +271,9 @@ export default function RandomGenerator() {
 	const [excludedNumbers, setExcludedNumbers] = useState<number[]>([]);
 	const [spreadRemainder, setSpreadRemainder] = useState(true);
 	const [draws, setDraws] = useState<Partial<Record<Mode, Draw>>>({});
+	const [restoredDrawIds, setRestoredDrawIds] = useState<
+		Partial<Record<Mode, string>>
+	>({});
 	const [history, setHistory] = useState<Draw[]>([]);
 	const [removed, setRemoved] = useState<Draw[] | null>(null);
 	const [ready, setReady] = useState(false);
@@ -284,6 +287,8 @@ export default function RandomGenerator() {
 	const current = modes.find((item) => item.id === mode) ?? modes[0];
 	const gameCount = mode === "pension" ? pensionGameCount : lottoGameCount;
 	const draw = draws[mode];
+	const restoredCurrent =
+		!busy && draw !== undefined && restoredDrawIds[mode] === draw.id;
 	const recent = history.filter(
 		(item) => item.kind === mode && item.id !== draw?.id,
 	);
@@ -353,32 +358,43 @@ export default function RandomGenerator() {
 		}
 		try {
 			const storedHistory = localStorage.getItem("randomlab.history");
+			let loadedHistory: Draw[];
 			if (storedHistory) {
 				const parsed = JSON.parse(storedHistory);
 				if (!Array.isArray(parsed)) throw new Error("Invalid saved history");
-				setHistory(parsed.filter(isDraw).slice(0, 50));
+				loadedHistory = parsed.filter(isDraw).slice(0, 50);
 			} else {
 				const legacy = JSON.parse(Cookies.get("rng_history") ?? "[]");
 				if (!Array.isArray(legacy)) throw new Error("Invalid legacy history");
-				setHistory(
-					legacy
-						.filter(
-							(item) =>
-								item !== null &&
-								typeof item === "object" &&
-								Array.isArray(item.numbers) &&
-								item.numbers.every(Number.isSafeInteger),
-						)
-						.map((item) => ({
-							...item,
-							kind: "number",
-							rows: [{ numbers: item.numbers }],
-							source: item.source ?? "csprng",
-						}))
-						.filter(isDraw)
-						.slice(0, 50),
-				);
+				loadedHistory = legacy
+					.filter(
+						(item) =>
+							item !== null &&
+							typeof item === "object" &&
+							Array.isArray(item.numbers) &&
+							item.numbers.every(Number.isSafeInteger),
+					)
+					.map((item) => ({
+						...item,
+						kind: "number",
+						rows: [{ numbers: item.numbers }],
+						source: item.source ?? "csprng",
+					}))
+					.filter(isDraw)
+					.slice(0, 50);
 			}
+			const latest: Partial<Record<Mode, Draw>> = {};
+			const latestIds: Partial<Record<Mode, string>> = {};
+			for (const item of loadedHistory) {
+				const previous = latest[item.kind];
+				if (!previous || item.timestamp > previous.timestamp) {
+					latest[item.kind] = item;
+					latestIds[item.kind] = item.id;
+				}
+			}
+			setHistory(loadedHistory);
+			setDraws(latest);
+			setRestoredDrawIds(latestIds);
 			setHistoryLoaded(true);
 		} catch {
 			setStorageNotice(
@@ -1009,7 +1025,8 @@ export default function RandomGenerator() {
 					>
 						<div className="result-toolbar">
 							<span>
-								<span className="result-indicator" /> 이번 추첨 결과
+								<span className="result-indicator" />
+								{restoredCurrent ? "마지막 추첨 결과" : "이번 추첨 결과"}
 							</span>
 							<span>
 								{busy
@@ -1153,10 +1170,18 @@ export default function RandomGenerator() {
 													: "전체 번호 복사"}
 										</button>
 										<span>
-											{new Date(draw.timestamp).toLocaleTimeString("ko-KR", {
-												hour: "2-digit",
-												minute: "2-digit",
-											})}{" "}
+											{restoredCurrent
+												? new Date(draw.timestamp).toLocaleString("ko-KR", {
+														year: "numeric",
+														month: "2-digit",
+														day: "2-digit",
+														hour: "2-digit",
+														minute: "2-digit",
+													})
+												: new Date(draw.timestamp).toLocaleTimeString("ko-KR", {
+														hour: "2-digit",
+														minute: "2-digit",
+													})}{" "}
 											생성
 										</span>
 									</div>

@@ -15,6 +15,7 @@ import { lotterySettingsKey } from "../src/lib/lotterySettings";
 import {
 	generateLotteryNumbers,
 	generateRandomNumbers,
+	getSourceDisplayName,
 } from "../src/services/randomService";
 
 vi.mock("../src/services/randomService", () => ({
@@ -26,13 +27,14 @@ vi.mock("../src/services/randomService", () => ({
 		source: "csprng",
 	})),
 	generateRandomNumbers: vi.fn(),
-	getSourceDisplayName: () => "Web Crypto (CSPRNG)",
+	getSourceDisplayName: vi.fn(() => "Web Crypto (CSPRNG)"),
 }));
 
 beforeEach(() => {
 	localStorage.clear();
 	vi.mocked(generateLotteryNumbers).mockClear();
 	vi.mocked(generateRandomNumbers).mockClear();
+	vi.mocked(getSourceDisplayName).mockClear();
 	vi.stubGlobal(
 		"matchMedia",
 		vi.fn(() => ({ matches: false })),
@@ -61,9 +63,12 @@ afterEach(() => {
 
 function openTool(name: "로또 6/45" | "연금복권 720+") {
 	fireEvent.click(
-		screen.getByRole("button", {
-			name: new RegExp(name.replace(/[+]/g, "\\+")),
-		}),
+		within(screen.getByRole("navigation", { name: "생성 도구" })).getByRole(
+			"button",
+			{
+				name: new RegExp(name.replace(/[+]/g, "\\+")),
+			},
+		),
 	);
 }
 
@@ -135,11 +140,25 @@ describe("lottery settings persistence", () => {
 		openTool("로또 6/45");
 		fireEvent.click(gameButton(3));
 		fireEvent.click(screen.getByRole("radio", { name: /^번호 고정/ }));
-		fireEvent.click(screen.getByRole("button", { name: "7 고정 번호" }));
-		fireEvent.click(screen.getByRole("button", { name: "21 고정 번호" }));
+		const fixedSelection = within(
+			screen.getByRole("group", { name: "고정 번호 선택" }),
+		);
+		fireEvent.click(
+			fixedSelection.getByRole("button", { name: "7 고정 번호" }),
+		);
+		fireEvent.click(
+			fixedSelection.getByRole("button", { name: "21 고정 번호" }),
+		);
 		fireEvent.click(screen.getByText("제외 번호 선택"));
-		fireEvent.click(screen.getByRole("button", { name: "3 제외 번호" }));
-		fireEvent.click(screen.getByRole("button", { name: "45 제외 번호" }));
+		const excludedSelection = within(
+			screen.getByRole("group", { name: "추첨에서 제외할 번호" }),
+		);
+		fireEvent.click(
+			excludedSelection.getByRole("button", { name: "3 제외 번호" }),
+		);
+		fireEvent.click(
+			excludedSelection.getByRole("button", { name: "45 제외 번호" }),
+		);
 		fireEvent.click(
 			screen.getByRole("checkbox", { name: /^나머지 번호는 게임 간/ }),
 		);
@@ -158,23 +177,23 @@ describe("lottery settings persistence", () => {
 				.checked,
 		).toBe(true);
 		expect(
-			screen
+			within(screen.getByRole("group", { name: "고정 번호 선택" }))
 				.getByRole("button", { name: "7 고정 번호" })
 				.getAttribute("aria-pressed"),
 		).toBe("true");
 		expect(
-			screen
+			within(screen.getByRole("group", { name: "고정 번호 선택" }))
 				.getByRole("button", { name: "21 고정 번호" })
 				.getAttribute("aria-pressed"),
 		).toBe("true");
 		fireEvent.click(screen.getByText("제외 번호 선택"));
 		expect(
-			screen
+			within(screen.getByRole("group", { name: "추첨에서 제외할 번호" }))
 				.getByRole("button", { name: "3 제외 번호" })
 				.getAttribute("aria-pressed"),
 		).toBe("true");
 		expect(
-			screen
+			within(screen.getByRole("group", { name: "추첨에서 제외할 번호" }))
 				.getByRole("button", { name: "45 제외 번호" })
 				.getAttribute("aria-pressed"),
 		).toBe("true");
@@ -295,6 +314,12 @@ describe("lottery settings persistence", () => {
 		).toMatchObject({ kind: "number", rows: [{ numbers: [12, 15] }] });
 		expect(Cookies.get("rng_settings")).toBeUndefined();
 		expect(Cookies.get("rng_history")).toBeUndefined();
+		expect(
+			screen.getByRole("button", { name: "1번째 숫자 12 복사" }),
+		).toBeTruthy();
+		expect(
+			screen.getByRole("button", { name: "2번째 숫자 15 복사" }),
+		).toBeTruthy();
 		openTool("로또 6/45");
 		expect(gameButton(1).getAttribute("aria-pressed")).toBe("true");
 		openTool("연금복권 720+");
@@ -502,5 +527,212 @@ describe("integer condition validation", () => {
 		expect(screen.queryByRole("alert")).toBeNull();
 		expect(numberInput("max").getAttribute("aria-invalid")).toBeNull();
 		expect(numberInput("max").getAttribute("aria-describedby")).toBeNull();
+	});
+});
+
+const savedResultTime = Date.UTC(2026, 0, 2, 3, 4);
+const savedResults = [
+	{
+		id: "number-older",
+		kind: "number",
+		rows: [{ numbers: [11] }],
+		source: "csprng",
+		timestamp: savedResultTime - 1_000,
+	},
+	{
+		id: "lotto-latest",
+		kind: "lotto",
+		rows: [{ numbers: [7, 8, 21, 30, 35, 45] }],
+		source: "quantum",
+		timestamp: savedResultTime + 1_000,
+		lottoOptions: {
+			mode: "fixed",
+			fixedNumbers: [7, 21],
+			excludedNumbers: [4],
+			spreadRemainder: true,
+		},
+	},
+	{
+		id: "pension-older",
+		kind: "pension",
+		rows: [{ numbers: [1, 2, 3, 4, 5, 6], group: 2 }],
+		source: "csprng",
+		timestamp: savedResultTime - 3_000,
+	},
+	{
+		id: "number-latest",
+		kind: "number",
+		rows: [{ numbers: [42, 99] }],
+		source: "mixed",
+		timestamp: savedResultTime,
+	},
+	{
+		id: "pension-latest",
+		kind: "pension",
+		rows: [{ numbers: [0, 8, 7, 6, 5, 4], group: 5 }],
+		source: "atmospheric",
+		timestamp: savedResultTime + 2_000,
+	},
+	{
+		id: "lotto-older",
+		kind: "lotto",
+		rows: [{ numbers: [1, 2, 3, 4, 5, 6] }],
+		source: "csprng",
+		timestamp: savedResultTime - 2_000,
+	},
+];
+
+function currentResult() {
+	const panel = document.querySelector<HTMLElement>(".result-panel");
+	if (!panel) throw new Error("Result panel is missing");
+	return panel;
+}
+
+function olderResultText() {
+	return screen
+		.getByRole("region", { name: "이전 추첨 기록" })
+		.querySelector(".history-numbers")?.textContent;
+}
+
+describe("latest result restoration", () => {
+	it("restores the newest result for each tool without another draw and keeps older results separate", () => {
+		localStorage.setItem("randomlab.history", JSON.stringify(savedResults));
+		render(<RandomGenerator />);
+		expect(within(currentResult()).getByText("마지막 추첨 결과")).toBeTruthy();
+		expect(
+			Array.from(currentResult().querySelectorAll(".number-value")).map(
+				(el) => el.textContent,
+			),
+		).toEqual(["42", "99"]);
+		expect(olderResultText()).toBe("11");
+		expect(within(currentResult()).getByText(/2026.*01.*02/)).toBeTruthy();
+
+		openTool("로또 6/45");
+		expect(within(currentResult()).getByText("마지막 추첨 결과")).toBeTruthy();
+		expect(
+			Array.from(currentResult().querySelectorAll(".lotto-ball")).map(
+				(el) => el.childNodes[0].textContent,
+			),
+		).toEqual(["7", "8", "21", "30", "35", "45"]);
+		expect(currentResult().textContent).toContain(
+			"번호 고정: 7, 21 · 나머지 번호 분산 · 제외: 4",
+		);
+		expect(olderResultText()).toBe("A1, 2, 3, 4, 5, 6번호 복사");
+		expect(vi.mocked(getSourceDisplayName)).toHaveBeenCalledWith("quantum");
+		expect(within(currentResult()).getByText(/2026.*01.*02/)).toBeTruthy();
+
+		openTool("연금복권 720+");
+		expect(within(currentResult()).getByText("마지막 추첨 결과")).toBeTruthy();
+		expect(currentResult().querySelector(".pension-digits")?.textContent).toBe(
+			"087654",
+		);
+		expect(currentResult().querySelector(".pension-group")?.textContent).toBe(
+			"5조",
+		);
+		expect(olderResultText()).toBe("A2조 123456번호 복사");
+		expect(vi.mocked(getSourceDisplayName)).toHaveBeenCalledWith("atmospheric");
+		expect(within(currentResult()).getByText(/2026.*01.*02/)).toBeTruthy();
+		expect(generateRandomNumbers).not.toHaveBeenCalled();
+		expect(generateLotteryNumbers).not.toHaveBeenCalled();
+		expect(
+			JSON.parse(localStorage.getItem("randomlab.history") ?? "[]"),
+		).toEqual(savedResults);
+	});
+
+	it("replaces the restored label only after a new draw and retains the old result in history", async () => {
+		const saved = savedResults.find((item) => item.id === "number-latest");
+		localStorage.setItem("randomlab.history", JSON.stringify([saved]));
+		vi.mocked(generateRandomNumbers).mockResolvedValueOnce({
+			numbers: [88],
+			source: "csprng",
+		});
+		render(<RandomGenerator />);
+		expect(within(currentResult()).getByText("마지막 추첨 결과")).toBeTruthy();
+		submitNumbers();
+		await screen.findByRole("button", { name: "1번째 숫자 88 복사" });
+		expect(within(currentResult()).getByText("이번 추첨 결과")).toBeTruthy();
+		expect(within(currentResult()).queryByText("마지막 추첨 결과")).toBeNull();
+		expect(olderResultText()).toBe("42, 99");
+		const persisted = JSON.parse(
+			localStorage.getItem("randomlab.history") ?? "[]",
+		);
+		expect(persisted[0]).toMatchObject({
+			rows: [{ numbers: [88] }],
+			source: "csprng",
+		});
+		expect(persisted[0].timestamp).toBeGreaterThan(savedResultTime);
+		expect(persisted[1]).toEqual(saved);
+	});
+
+	it("keeps the restored current result while clearing and undoing older history", () => {
+		const history = savedResults.filter((item) => item.kind === "number");
+		localStorage.setItem("randomlab.history", JSON.stringify(history));
+		render(<RandomGenerator />);
+		fireEvent.click(screen.getByRole("button", { name: "기록 지우기" }));
+		expect(within(currentResult()).getByText("마지막 추첨 결과")).toBeTruthy();
+		expect(
+			within(currentResult()).getByRole("button", {
+				name: "1번째 숫자 42 복사",
+			}),
+		).toBeTruthy();
+		expect(olderResultText()).toBeUndefined();
+		expect(
+			JSON.parse(localStorage.getItem("randomlab.history") ?? "[]"),
+		).toEqual([history.find((item) => item.id === "number-latest")]);
+		fireEvent.click(screen.getByRole("button", { name: "삭제 취소" }));
+		expect(olderResultText()).toBe("11");
+		expect(
+			within(currentResult()).getByRole("button", {
+				name: "1번째 숫자 42 복사",
+			}),
+		).toBeTruthy();
+		expect(
+			JSON.parse(localStorage.getItem("randomlab.history") ?? "[]"),
+		).toEqual(history);
+		expect(generateRandomNumbers).not.toHaveBeenCalled();
+		expect(generateLotteryNumbers).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		"{",
+		JSON.stringify({ invalid: "history" }),
+	])("preserves malformed history without inventing a current result: %s", (stored) => {
+		localStorage.setItem("randomlab.history", stored);
+		render(<RandomGenerator />);
+		expect(within(currentResult()).queryByText("마지막 추첨 결과")).toBeNull();
+		expect(
+			within(currentResult()).getByText("생성한 숫자가 여기에 표시됩니다."),
+		).toBeTruthy();
+		expect(localStorage.getItem("randomlab.history")).toBe(stored);
+		expect(generateRandomNumbers).not.toHaveBeenCalled();
+		expect(generateLotteryNumbers).not.toHaveBeenCalled();
+	});
+
+	it("does not promote a malformed newer record over a valid saved result", () => {
+		const saved = savedResults.find((item) => item.id === "number-latest");
+		localStorage.setItem(
+			"randomlab.history",
+			JSON.stringify([
+				{
+					...saved,
+					id: "invalid-newer",
+					timestamp: savedResultTime + 10_000,
+					rows: [{ numbers: [1.5] }],
+				},
+				saved,
+			]),
+		);
+		render(<RandomGenerator />);
+		expect(within(currentResult()).getByText("마지막 추첨 결과")).toBeTruthy();
+		expect(
+			Array.from(currentResult().querySelectorAll(".number-value")).map(
+				(el) => el.textContent,
+			),
+		).toEqual(["42", "99"]);
+		expect(
+			JSON.parse(localStorage.getItem("randomlab.history") ?? "[]"),
+		).toEqual([saved]);
+		expect(generateRandomNumbers).not.toHaveBeenCalled();
+		expect(generateLotteryNumbers).not.toHaveBeenCalled();
 	});
 });
