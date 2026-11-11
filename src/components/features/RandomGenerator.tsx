@@ -20,12 +20,19 @@ import {
 	Wind,
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import CopyFallback from "@/components/features/CopyFallback";
+import DrawDownload from "@/components/features/DrawDownload";
 import DrawingAnimation from "@/components/features/DrawingAnimation";
 import LotteryGuide from "@/components/features/LotteryGuide";
 import LottoStrategyControls, {
 	type LottoMode,
 } from "@/components/features/LottoStrategyControls";
 import { Switch } from "@/components/ui/switch";
+import { type Draw, isDraw, type Mode, type Row } from "@/lib/drawHistory";
+import {
+	lotterySettingsKey,
+	parseLotterySettings,
+} from "@/lib/lotterySettings";
 import { validateLotteryRequest } from "@/services/randomCore";
 import {
 	generateLotteryNumbers,
@@ -34,28 +41,19 @@ import {
 	type RandomSource,
 } from "@/services/randomService";
 
-type Mode = "number" | "lotto" | "pension";
-type Row = { numbers: number[]; group?: number };
-type LottoOptions = {
-	mode: LottoMode;
-	fixedNumbers: number[];
-	excludedNumbers?: number[];
-	spreadRemainder: boolean;
-};
-type Draw = {
-	id: string;
-	kind: Mode;
-	rows: Row[];
-	source: RandomSource;
-	timestamp: number;
-	lottoOptions?: LottoOptions;
-};
 type Settings = {
 	min: string;
 	max: string;
 	count: number;
 	allowDuplicates: boolean;
 	sortResult: boolean;
+};
+type NumberField = "min" | "max" | "count";
+type CopyFailure = {
+	attempt: number;
+	copyId: string;
+	drawId: string;
+	text: string;
 };
 const defaults: Settings = {
 	min: "1",
@@ -189,32 +187,6 @@ function rowText(row: Row, mode: Mode) {
 		? `${row.group}조 ${row.numbers.join("")}`
 		: row.numbers.join(", ");
 }
-function isLottoOptions(value: unknown): value is LottoOptions {
-	if (!value || typeof value !== "object") return false;
-	const options = value as LottoOptions;
-	return (
-		["random", "spread", "fixed"].includes(options.mode) &&
-		Array.isArray(options.fixedNumbers) &&
-		options.fixedNumbers.length <= 5 &&
-		new Set(options.fixedNumbers).size === options.fixedNumbers.length &&
-		options.fixedNumbers.every(
-			(number) => Number.isInteger(number) && number >= 1 && number <= 45,
-		) &&
-		(options.excludedNumbers === undefined ||
-			(Array.isArray(options.excludedNumbers) &&
-				options.excludedNumbers.length <= 39 &&
-				new Set(options.excludedNumbers).size ===
-					options.excludedNumbers.length &&
-				options.excludedNumbers.every(
-					(number) =>
-						Number.isInteger(number) &&
-						number >= 1 &&
-						number <= 45 &&
-						!options.fixedNumbers.includes(number),
-				))) &&
-		typeof options.spreadRemainder === "boolean"
-	);
-}
 function describeLotto(draw: Draw) {
 	const options = draw.lottoOptions;
 	const strategy =
@@ -227,52 +199,47 @@ function describeLotto(draw: Draw) {
 		? `${strategy} · 제외: ${options.excludedNumbers.join(", ")}`
 		: strategy;
 }
-function isDraw(value: unknown): value is Draw {
-	if (!value || typeof value !== "object") return false;
-	const draw = value as Draw;
-	return (
-		typeof draw.id === "string" &&
-		["number", "lotto", "pension"].includes(draw.kind) &&
-		Number.isFinite(draw.timestamp) &&
-		(draw.lottoOptions === undefined || isLottoOptions(draw.lottoOptions)) &&
-		["quantum", "atmospheric", "csprng", "mixed"].includes(draw.source) &&
-		Array.isArray(draw.rows) &&
-		draw.rows.length > 0 &&
-		draw.rows.every(
-			(row) =>
-				row !== null &&
-				typeof row === "object" &&
-				Array.isArray(row.numbers) &&
-				row.numbers.length > 0 &&
-				row.numbers.every(Number.isSafeInteger),
-		)
-	);
-}
 export default function RandomGenerator() {
 	const id = useId();
 	const resultRef = useRef<HTMLDivElement>(null);
 	const lottoConstraintRef = useRef<HTMLOutputElement>(null);
 	const formRef = useRef<HTMLFormElement>(null);
+	const settingsTitleRef = useRef<HTMLHeadingElement>(null);
+	const minInputRef = useRef<HTMLInputElement>(null);
+	const maxInputRef = useRef<HTMLInputElement>(null);
+	const countInputRef = useRef<HTMLInputElement>(null);
+	const copyAttemptRef = useRef(0);
+	const copyTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const [mode, setMode] = useState<Mode>("number");
 	const [settings, setSettings] = useState<Settings>(defaults);
-	const [gameCount, setGameCount] = useState(1);
+	const [lottoGameCount, setLottoGameCount] = useState(1);
+	const [pensionGameCount, setPensionGameCount] = useState(1);
 	const [group, setGroup] = useState("random");
 	const [lottoMode, setLottoMode] = useState<LottoMode>("random");
 	const [fixedNumbers, setFixedNumbers] = useState<number[]>([]);
 	const [excludedNumbers, setExcludedNumbers] = useState<number[]>([]);
 	const [spreadRemainder, setSpreadRemainder] = useState(true);
+	const [lottoControlsRevision, setLottoControlsRevision] = useState(0);
 	const [draws, setDraws] = useState<Partial<Record<Mode, Draw>>>({});
+	const [restoredDrawIds, setRestoredDrawIds] = useState<
+		Partial<Record<Mode, string>>
+	>({});
 	const [history, setHistory] = useState<Draw[]>([]);
 	const [removed, setRemoved] = useState<Draw[] | null>(null);
 	const [ready, setReady] = useState(false);
 	const [historyLoaded, setHistoryLoaded] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState("");
+	const [numberErrorFields, setNumberErrorFields] = useState<NumberField[]>([]);
 	const [storageNotice, setStorageNotice] = useState("");
 	const [copied, setCopied] = useState("");
+	const [copyFailure, setCopyFailure] = useState<CopyFailure | null>(null);
 	const [appliedExample, setAppliedExample] = useState("");
 	const current = modes.find((item) => item.id === mode) ?? modes[0];
+	const gameCount = mode === "pension" ? pensionGameCount : lottoGameCount;
 	const draw = draws[mode];
+	const restoredCurrent =
+		!busy && draw !== undefined && restoredDrawIds[mode] === draw.id;
 	const recent = history.filter(
 		(item) => item.kind === mode && item.id !== draw?.id,
 	);
@@ -324,33 +291,61 @@ export default function RandomGenerator() {
 			setStorageNotice("저장된 설정을 읽지 못해 기본값으로 시작합니다.");
 		}
 		try {
+			const stored = localStorage.getItem(lotterySettingsKey);
+			if (stored !== null) {
+				const value = parseLotterySettings(JSON.parse(stored));
+				setLottoGameCount(value.lottoGameCount);
+				setPensionGameCount(value.pensionGameCount);
+				setGroup(value.group);
+				setLottoMode(value.lottoMode);
+				setFixedNumbers(value.fixedNumbers);
+				setExcludedNumbers(value.excludedNumbers);
+				setSpreadRemainder(value.spreadRemainder);
+			}
+		} catch {
+			setStorageNotice(
+				"저장된 복권 설정을 읽지 못해 복권 설정은 기본값으로 시작합니다.",
+			);
+		}
+		try {
 			const storedHistory = localStorage.getItem("randomlab.history");
+			let loadedHistory: Draw[];
 			if (storedHistory) {
 				const parsed = JSON.parse(storedHistory);
 				if (!Array.isArray(parsed)) throw new Error("Invalid saved history");
-				setHistory(parsed.filter(isDraw).slice(0, 50));
+				loadedHistory = parsed.filter(isDraw).slice(0, 50);
 			} else {
 				const legacy = JSON.parse(Cookies.get("rng_history") ?? "[]");
 				if (!Array.isArray(legacy)) throw new Error("Invalid legacy history");
-				setHistory(
-					legacy
-						.filter(
-							(item) =>
-								item !== null &&
-								typeof item === "object" &&
-								Array.isArray(item.numbers) &&
-								item.numbers.every(Number.isSafeInteger),
-						)
-						.map((item) => ({
-							...item,
-							kind: "number",
-							rows: [{ numbers: item.numbers }],
-							source: item.source ?? "csprng",
-						}))
-						.filter(isDraw)
-						.slice(0, 50),
-				);
+				loadedHistory = legacy
+					.filter(
+						(item) =>
+							item !== null &&
+							typeof item === "object" &&
+							Array.isArray(item.numbers) &&
+							item.numbers.every(Number.isSafeInteger),
+					)
+					.map((item) => ({
+						...item,
+						kind: "number",
+						rows: [{ numbers: item.numbers }],
+						source: item.source ?? "csprng",
+					}))
+					.filter(isDraw)
+					.slice(0, 50);
 			}
+			const latest: Partial<Record<Mode, Draw>> = {};
+			const latestIds: Partial<Record<Mode, string>> = {};
+			for (const item of loadedHistory) {
+				const previous = latest[item.kind];
+				if (!previous || item.timestamp > previous.timestamp) {
+					latest[item.kind] = item;
+					latestIds[item.kind] = item.id;
+				}
+			}
+			setHistory(loadedHistory);
+			setDraws(latest);
+			setRestoredDrawIds(latestIds);
 			setHistoryLoaded(true);
 		} catch {
 			setStorageNotice(
@@ -364,44 +359,133 @@ export default function RandomGenerator() {
 		try {
 			localStorage.setItem("randomlab.settings", JSON.stringify(settings));
 			Cookies.remove("rng_settings");
-			if (historyLoaded) {
-				localStorage.setItem("randomlab.history", JSON.stringify(history));
-				Cookies.remove("rng_history");
-			}
+		} catch {
+			setStorageNotice("이 브라우저에 설정을 저장할 수 없습니다.");
+		}
+	}, [settings, ready]);
+	useEffect(() => {
+		if (!ready) return;
+		try {
+			localStorage.setItem(
+				lotterySettingsKey,
+				JSON.stringify({
+					lottoGameCount,
+					pensionGameCount,
+					group,
+					lottoMode,
+					fixedNumbers,
+					excludedNumbers,
+					spreadRemainder,
+				}),
+			);
+		} catch {
+			setStorageNotice("이 브라우저에 복권 설정을 저장할 수 없습니다.");
+		}
+	}, [
+		lottoGameCount,
+		pensionGameCount,
+		group,
+		lottoMode,
+		fixedNumbers,
+		excludedNumbers,
+		spreadRemainder,
+		ready,
+	]);
+	useEffect(() => {
+		if (!ready || !historyLoaded) return;
+		try {
+			localStorage.setItem("randomlab.history", JSON.stringify(history));
+			Cookies.remove("rng_history");
 		} catch {
 			setStorageNotice(
 				"이 브라우저에 기록을 저장할 수 없습니다. 필요한 결과는 복사해 주세요.",
 			);
 		}
-	}, [settings, history, ready, historyLoaded]);
+	}, [history, ready, historyLoaded]);
 	useEffect(() => {
 		if (!copied) return;
 		const timer = setTimeout(() => setCopied(""), 2000);
 		return () => clearTimeout(timer);
 	}, [copied]);
-	async function copyText(text: string, copyId: string) {
+	useEffect(() => {
+		const first = numberErrorFields[0];
+		if (first === "min") minInputRef.current?.focus();
+		else if (first === "max") maxInputRef.current?.focus();
+		else if (first === "count") countInputRef.current?.focus();
+	}, [numberErrorFields]);
+	function clearCopyFeedback() {
+		copyAttemptRef.current++;
+		copyTriggerRef.current = null;
+		setCopied("");
+		setCopyFailure(null);
+	}
+	function dismissCopyFallback() {
+		const trigger = copyTriggerRef.current;
+		clearCopyFeedback();
+		if (trigger?.isConnected) trigger.focus();
+	}
+	async function copyText(
+		text: string,
+		copyId: string,
+		drawId: string,
+		trigger?: HTMLButtonElement,
+	) {
+		const attempt = ++copyAttemptRef.current;
+		if (trigger) copyTriggerRef.current = trigger;
+		setCopied("");
+		setCopyFailure(null);
 		try {
 			await navigator.clipboard.writeText(text);
+			if (attempt !== copyAttemptRef.current) return;
 			setCopied(copyId);
+			if (!trigger && copyTriggerRef.current?.isConnected)
+				copyTriggerRef.current.focus();
 		} catch {
-			setError("복사하지 못했습니다. 화면의 숫자를 선택해 직접 복사해 주세요.");
+			if (attempt === copyAttemptRef.current)
+				setCopyFailure({ attempt, copyId, drawId, text });
 		}
 	}
-	async function copy(value: Draw) {
+	async function copy(value: Draw, trigger: HTMLButtonElement) {
 		await copyText(
 			value.rows.map((row) => rowText(row, value.kind)).join("\n"),
 			value.id,
+			value.id,
+			trigger,
 		);
 	}
-	function copyTicket(value: Draw, row: Row, index: number) {
+	function copyTicket(
+		value: Draw,
+		row: Row,
+		index: number,
+		trigger: HTMLButtonElement,
+	) {
 		return copyText(
 			value.kind === "pension" ? row.numbers.join("") : row.numbers.join(", "),
 			`${value.id}-row-${index}`,
+			value.id,
+			trigger,
+		);
+	}
+	function renderCopyFallback(drawId: string) {
+		if (copyFailure?.drawId !== drawId) return null;
+		const failure = copyFailure;
+		return (
+			<CopyFallback
+				key={failure.attempt}
+				text={failure.text}
+				onClose={dismissCopyFallback}
+				onRetry={() =>
+					void copyText(failure.text, failure.copyId, failure.drawId)
+				}
+			/>
 		);
 	}
 
 	async function generate() {
+		clearCopyFeedback();
+		setAppliedExample("");
 		setError("");
+		setNumberErrorFields([]);
 		if (mode === "lotto" && lottoConstraintError) {
 			lottoConstraintRef.current?.focus();
 			return;
@@ -417,16 +501,26 @@ export default function RandomGenerator() {
 		if (mode === "number") {
 			const min = Number(settings.min);
 			const max = Number(settings.max);
-			if (
-				!settings.min.trim() ||
-				!settings.max.trim() ||
-				!Number.isSafeInteger(min) ||
-				!Number.isSafeInteger(max) ||
-				!Number.isSafeInteger(max - min + 1) ||
-				min > max
-			) {
-				setError(
-					"최소값과 최대값에 정수를 입력해 주세요. 최대값은 최소값 이상이어야 합니다.",
+			const invalidBounds: NumberField[] = [];
+			if (!settings.min.trim() || !Number.isSafeInteger(min))
+				invalidBounds.push("min");
+			if (!settings.max.trim() || !Number.isSafeInteger(max))
+				invalidBounds.push("max");
+			if (invalidBounds.length) {
+				showNumberError(
+					"최소값과 최대값은 안전한 범위의 정수여야 합니다.",
+					invalidBounds,
+				);
+				return;
+			}
+			if (min > max) {
+				showNumberError("최대값은 최소값 이상이어야 합니다.", ["max"]);
+				return;
+			}
+			if (!Number.isSafeInteger(max - min + 1)) {
+				showNumberError(
+					"숫자 범위가 너무 큽니다. 최소값 또는 최대값을 조정해 주세요.",
+					["min", "max"],
 				);
 				return;
 			}
@@ -435,12 +529,15 @@ export default function RandomGenerator() {
 				settings.count < 1 ||
 				settings.count > 100
 			) {
-				setError("생성 개수는 1개부터 100개까지 선택해 주세요.");
+				showNumberError("생성 개수는 1개부터 100개까지 선택해 주세요.", [
+					"count",
+				]);
 				return;
 			}
 			if (!settings.allowDuplicates && settings.count > max - min + 1) {
-				setError(
+				showNumberError(
 					"중복 없이 뽑을 숫자가 부족합니다. 범위를 넓히거나 개수를 줄여 주세요.",
+					["count"],
 				);
 				return;
 			}
@@ -520,22 +617,65 @@ export default function RandomGenerator() {
 	}
 	function changeMode(next: Mode) {
 		if (busy) return;
-		if (next === "pension" && group === "all") setGameCount(5);
+		clearCopyFeedback();
 		setMode(next);
 		setError("");
+		setNumberErrorFields([]);
 		setAppliedExample("");
+		formRef.current?.scrollIntoView({
+			behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+				? "auto"
+				: "smooth",
+			block: "start",
+		});
 	}
 	function updateSettings(next: Settings) {
 		setSettings(next);
+		if (numberErrorFields.length) {
+			setError("");
+			setNumberErrorFields([]);
+		}
 		setAppliedExample("");
+	}
+	function showNumberError(message: string, fields: NumberField[]) {
+		setError(message);
+		setNumberErrorFields(fields);
+	}
+	function updateGameCount(value: number) {
+		if (mode === "pension") setPensionGameCount(value);
+		else setLottoGameCount(value);
 	}
 	function applyExample(example: Example) {
 		if (busy) return;
 		if (example.settings) setSettings(example.settings);
-		if (example.games) setGameCount(example.games);
+		if (example.games) updateGameCount(example.games);
 		if (example.group) setGroup(example.group);
 		setError("");
+		setNumberErrorFields([]);
 		setAppliedExample(example.title);
+		formRef.current?.scrollIntoView({
+			behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+				? "auto"
+				: "smooth",
+			block: "start",
+		});
+	}
+	function applySavedLotto(value: Draw) {
+		if (busy || value.kind !== "lotto" || !value.lottoOptions) return;
+		const options = value.lottoOptions;
+		setLottoGameCount(value.rows.length);
+		setLottoMode(options.mode);
+		setFixedNumbers([...options.fixedNumbers].sort((a, b) => a - b));
+		setExcludedNumbers(
+			[...(options.excludedNumbers ?? [])].sort((a, b) => a - b),
+		);
+		setSpreadRemainder(options.spreadRemainder);
+		setLottoControlsRevision((previous) => previous + 1);
+		setError("");
+		setNumberErrorFields([]);
+		clearCopyFeedback();
+		setAppliedExample("저장된 로또 추첨");
+		settingsTitleRef.current?.focus();
 		formRef.current?.scrollIntoView({
 			behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
 				? "auto"
@@ -613,7 +753,9 @@ export default function RandomGenerator() {
 							<span>조건 설정</span>
 							<span>01</span>
 						</div>
-						<h2>{current.title}</h2>
+						<h2 ref={settingsTitleRef} tabIndex={-1}>
+							{current.title}
+						</h2>
 						<p className="control-description">{current.description}</p>
 						{appliedExample && (
 							<output className="preset-notice">
@@ -627,7 +769,16 @@ export default function RandomGenerator() {
 										<label htmlFor={`${id}-min`}>
 											최소값
 											<input
+												ref={minInputRef}
 												id={`${id}-min`}
+												aria-invalid={
+													numberErrorFields.includes("min") || undefined
+												}
+												aria-describedby={
+													numberErrorFields.includes("min")
+														? `${id}-error`
+														: undefined
+												}
 												type="number"
 												step="1"
 												value={settings.min}
@@ -643,7 +794,16 @@ export default function RandomGenerator() {
 										<label htmlFor={`${id}-max`}>
 											최대값
 											<input
+												ref={maxInputRef}
 												id={`${id}-max`}
+												aria-invalid={
+													numberErrorFields.includes("max") || undefined
+												}
+												aria-describedby={
+													numberErrorFields.includes("max")
+														? `${id}-error`
+														: undefined
+												}
 												type="number"
 												step="1"
 												value={settings.max}
@@ -661,7 +821,16 @@ export default function RandomGenerator() {
 											<label htmlFor={`${id}-count`}>생성 개수</label>
 											<div className="count-input">
 												<input
+													ref={countInputRef}
 													id={`${id}-count`}
+													aria-invalid={
+														numberErrorFields.includes("count") || undefined
+													}
+													aria-describedby={
+														numberErrorFields.includes("count")
+															? `${id}-error`
+															: undefined
+													}
 													type="number"
 													min="1"
 													max="100"
@@ -752,7 +921,7 @@ export default function RandomGenerator() {
 														aria-pressed={gameCount === value}
 														className={gameCount === value ? "selected" : ""}
 														onClick={() => {
-															setGameCount(value);
+															updateGameCount(value);
 															setError("");
 															setAppliedExample("");
 														}}
@@ -781,7 +950,8 @@ export default function RandomGenerator() {
 														value={group}
 														onChange={(event) => {
 															setGroup(event.target.value);
-															if (event.target.value === "all") setGameCount(5);
+															if (event.target.value === "all")
+																setPensionGameCount(5);
 															setAppliedExample("");
 														}}
 													>
@@ -802,15 +972,18 @@ export default function RandomGenerator() {
 									</div>
 									{mode === "lotto" && (
 										<LottoStrategyControls
+											key={lottoControlsRevision}
 											mode={lottoMode}
 											onModeChange={(next) => {
 												setLottoMode(next);
 												setError("");
+												setAppliedExample("");
 											}}
 											fixedNumbers={fixedNumbers}
 											onFixedNumbersChange={(numbers) => {
 												setFixedNumbers(numbers);
 												setError("");
+												setAppliedExample("");
 											}}
 											excludedNumbers={excludedNumbers}
 											onExcludedNumbersChange={(numbers) => {
@@ -819,11 +992,13 @@ export default function RandomGenerator() {
 													prev.filter((number) => !numbers.includes(number)),
 												);
 												setError("");
+												setAppliedExample("");
 											}}
 											spreadRemainder={spreadRemainder}
 											onSpreadRemainderChange={(value) => {
 												setSpreadRemainder(value);
 												setError("");
+												setAppliedExample("");
 											}}
 											gameCount={gameCount}
 											disabled={busy}
@@ -845,7 +1020,7 @@ export default function RandomGenerator() {
 							{mode === "lotto" ? lottoConstraintError : ""}
 						</output>
 						{error && (
-							<p className="inline-error" role="alert">
+							<p id={`${id}-error`} className="inline-error" role="alert">
 								{error}
 							</p>
 						)}
@@ -886,7 +1061,8 @@ export default function RandomGenerator() {
 					>
 						<div className="result-toolbar">
 							<span>
-								<span className="result-indicator" /> 이번 추첨 결과
+								<span className="result-indicator" />
+								{restoredCurrent ? "마지막 추첨 결과" : "이번 추첨 결과"}
 							</span>
 							<span>
 								{busy
@@ -925,10 +1101,12 @@ export default function RandomGenerator() {
 													className={`number-item ${copied === `${draw.id}-number-${index}` ? "is-copied" : ""}`}
 													aria-label={`${index + 1}번째 숫자 ${number} 복사`}
 													title="이 숫자 복사"
-													onClick={() =>
+													onClick={(event) =>
 														void copyText(
 															String(number),
 															`${draw.id}-number-${index}`,
+															draw.id,
+															event.currentTarget,
 														)
 													}
 												>
@@ -990,7 +1168,14 @@ export default function RandomGenerator() {
 												<button
 													type="button"
 													className="ticket-copy"
-													onClick={() => void copyTicket(draw, row, index)}
+													onClick={(event) =>
+														void copyTicket(
+															draw,
+															row,
+															index,
+															event.currentTarget,
+														)
+													}
 													aria-label={`${String.fromCharCode(65 + index)}게임 ${mode === "pension" ? "여섯 자리 " : ""}번호 복사`}
 												>
 													{copied === `${draw.id}-row-${index}` ? (
@@ -1016,7 +1201,7 @@ export default function RandomGenerator() {
 										<button
 											type="button"
 											className="result-copy"
-											onClick={() => void copy(draw)}
+											onClick={(event) => void copy(draw, event.currentTarget)}
 										>
 											{copied === draw.id ? (
 												<Check size={16} />
@@ -1029,14 +1214,42 @@ export default function RandomGenerator() {
 													? "전체 결과 복사"
 													: "전체 번호 복사"}
 										</button>
+										<DrawDownload
+											draw={draw}
+											sourceLabel={getSourceDisplayName(draw.source)}
+											strategy={
+												mode === "lotto" ? describeLotto(draw) : undefined
+											}
+										/>
+										{mode === "lotto" && draw.lottoOptions && (
+											<button
+												type="button"
+												className="text-button"
+												disabled={busy}
+												aria-label="현재 로또 설정 다시 사용"
+												onClick={() => applySavedLotto(draw)}
+											>
+												설정 다시 사용{" "}
+												<ArrowUpRight size={16} aria-hidden="true" />
+											</button>
+										)}
 										<span>
-											{new Date(draw.timestamp).toLocaleTimeString("ko-KR", {
-												hour: "2-digit",
-												minute: "2-digit",
-											})}{" "}
+											{restoredCurrent
+												? new Date(draw.timestamp).toLocaleString("ko-KR", {
+														year: "numeric",
+														month: "2-digit",
+														day: "2-digit",
+														hour: "2-digit",
+														minute: "2-digit",
+													})
+												: new Date(draw.timestamp).toLocaleTimeString("ko-KR", {
+														hour: "2-digit",
+														minute: "2-digit",
+													})}{" "}
 											생성
 										</span>
 									</div>
+									{renderCopyFallback(draw.id)}
 								</div>
 							) : (
 								<div className="empty-result">
@@ -1135,6 +1348,7 @@ export default function RandomGenerator() {
 								type="button"
 								className="text-button"
 								onClick={() => {
+									clearCopyFeedback();
 									setHistory(removed);
 									setRemoved(null);
 								}}
@@ -1148,6 +1362,7 @@ export default function RandomGenerator() {
 								className="text-button clear-history"
 								disabled={!recent.length}
 								onClick={() => {
+									clearCopyFeedback();
 									setRemoved(history);
 									setHistory((prev) =>
 										prev.filter(
@@ -1187,6 +1402,18 @@ export default function RandomGenerator() {
 											{describeLotto(item)}
 										</p>
 									)}
+									{item.kind === "lotto" && item.lottoOptions && (
+										<button
+											type="button"
+											className="text-button"
+											disabled={busy}
+											aria-label={`${new Date(item.timestamp).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })} 로또 설정 다시 사용`}
+											onClick={() => applySavedLotto(item)}
+										>
+											설정 다시 사용{" "}
+											<ArrowUpRight size={16} aria-hidden="true" />
+										</button>
+									)}
 									<div className="history-numbers">
 										{item.rows.map((row, index) => (
 											<div className="history-row" key={`${item.id}-${index}`}>
@@ -1201,7 +1428,14 @@ export default function RandomGenerator() {
 														type="button"
 														className="history-row-copy"
 														aria-label={`이전 ${String.fromCharCode(65 + index)}게임 ${item.kind === "pension" ? "여섯 자리 " : ""}번호 복사`}
-														onClick={() => void copyTicket(item, row, index)}
+														onClick={(event) =>
+															void copyTicket(
+																item,
+																row,
+																index,
+																event.currentTarget,
+															)
+														}
 													>
 														{copied === `${item.id}-row-${index}` ? (
 															<Check size={16} />
@@ -1222,7 +1456,7 @@ export default function RandomGenerator() {
 										className="icon-button"
 										type="button"
 										aria-label={`${new Date(item.timestamp).toLocaleTimeString("ko-KR")} 생성 결과 전체 복사`}
-										onClick={() => void copy(item)}
+										onClick={(event) => void copy(item, event.currentTarget)}
 									>
 										{copied === item.id ? (
 											<Check size={17} />
@@ -1230,6 +1464,7 @@ export default function RandomGenerator() {
 											<Copy size={17} />
 										)}
 									</button>
+									{renderCopyFallback(item.id)}
 								</article>
 							))}
 						</div>

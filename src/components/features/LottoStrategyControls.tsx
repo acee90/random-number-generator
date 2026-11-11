@@ -7,7 +7,7 @@ import {
 	Shuffle,
 	X,
 } from "lucide-react";
-import { useId } from "react";
+import { useId, useRef, useState } from "react";
 import "./lotto-strategy.css";
 
 export type LottoMode = "random" | "spread" | "fixed";
@@ -50,6 +50,8 @@ const choices = [
 ];
 
 const lottoNumbers = Array.from({ length: 45 }, (_, index) => index + 1);
+type NumberEntryKind = "fixed" | "excluded";
+type NumberEntry = { text: string; error: string; status: string };
 
 export default function LottoStrategyControls({
 	mode,
@@ -66,6 +68,138 @@ export default function LottoStrategyControls({
 	const id = useId();
 	const fixedCount = fixedNumbers.length;
 	const excludedCount = excludedNumbers.length;
+	const fixedEntryRef = useRef<HTMLTextAreaElement>(null);
+	const excludedEntryRef = useRef<HTMLTextAreaElement>(null);
+	const [entries, setEntries] = useState<Record<NumberEntryKind, NumberEntry>>({
+		fixed: { text: "", error: "", status: "" },
+		excluded: { text: "", error: "", status: "" },
+	});
+
+	function addNumbers(kind: NumberEntryKind) {
+		if (disabled) return;
+		const inputRef = kind === "fixed" ? fixedEntryRef : excludedEntryRef;
+		const label = kind === "fixed" ? "고정 번호" : "제외 번호";
+		const text = entries[kind].text.trim();
+		function reject(error: string) {
+			setEntries((prev) => ({
+				...prev,
+				[kind]: { ...prev[kind], error, status: "" },
+			}));
+			inputRef.current?.focus();
+		}
+		if (!text) {
+			reject("추가할 번호를 입력해 주세요.");
+			return;
+		}
+		const tokens = text.split(/[,\s]+/);
+		if (
+			tokens.some(
+				(token) =>
+					!/^\d+$/.test(token) || Number(token) < 1 || Number(token) > 45,
+			)
+		) {
+			reject("1~45 사이의 정수를 쉼표나 공백으로 구분해 입력해 주세요.");
+			return;
+		}
+		const numbers = [...new Set(tokens.map(Number))];
+		const unavailable =
+			kind === "fixed" ? excludedNumbers : mode === "fixed" ? fixedNumbers : [];
+		const conflicts = numbers.filter((number) => unavailable.includes(number));
+		if (conflicts.length) {
+			reject(
+				kind === "fixed"
+					? `${conflicts.join(", ")}번은 제외 중입니다. 제외를 해제한 뒤 고정 번호에 추가해 주세요.`
+					: `${conflicts.join(", ")}번은 고정 중입니다. 고정을 해제한 뒤 제외 번호에 추가해 주세요.`,
+			);
+			return;
+		}
+		const selected = kind === "fixed" ? fixedNumbers : excludedNumbers;
+		const merged = [...new Set([...selected, ...numbers])].sort(
+			(a, b) => a - b,
+		);
+		const limit = kind === "fixed" ? 5 : 39;
+		if (merged.length > limit) {
+			reject(
+				`${label}는 최대 ${limit}개까지 선택할 수 있습니다. 일부 번호를 해제한 뒤 추가해 주세요.`,
+			);
+			return;
+		}
+		const addedCount = merged.length - selected.length;
+		if (addedCount > 0) {
+			if (kind === "fixed") onFixedNumbersChange(merged);
+			else onExcludedNumbersChange(merged);
+		}
+		setEntries((prev) => ({
+			...prev,
+			[kind]: {
+				text: "",
+				error: "",
+				status: `${label} ${addedCount}개를 추가했습니다.`,
+			},
+		}));
+		inputRef.current?.focus();
+	}
+
+	function numberEntry(kind: NumberEntryKind) {
+		const label = kind === "fixed" ? "고정 번호" : "제외 번호";
+		const entry = entries[kind];
+		const entryId = `${id}-${kind}-entry`;
+		return (
+			<div className="lotto-number-entry">
+				<label htmlFor={entryId}>{label} 한 번에 추가</label>
+				<div className="lotto-entry-controls">
+					<textarea
+						id={entryId}
+						name={`lotto-${kind}-numbers`}
+						ref={kind === "fixed" ? fixedEntryRef : excludedEntryRef}
+						rows={1}
+						inputMode="text"
+						autoComplete="off"
+						placeholder="3, 7, 21"
+						value={entry.text}
+						disabled={disabled}
+						aria-invalid={Boolean(entry.error)}
+						aria-describedby={`${entryId}-help ${entryId}-error`}
+						onChange={(event) => {
+							if (disabled) return;
+							const text = event.target.value;
+							setEntries((prev) => ({
+								...prev,
+								[kind]: { text, error: "", status: "" },
+							}));
+						}}
+						onKeyDown={(event) => {
+							if (event.key !== "Enter") return;
+							event.preventDefault();
+							if (!event.nativeEvent.isComposing) addNumbers(kind);
+						}}
+					/>
+					<button
+						type="button"
+						className={`lotto-fixed-clear lotto-entry-add ${kind === "excluded" ? "lotto-excluded-clear" : ""}`}
+						disabled={disabled}
+						aria-label={`${label} 추가`}
+						onClick={() => addNumbers(kind)}
+					>
+						추가
+					</button>
+				</div>
+				<p id={`${entryId}-help`} className="lotto-entry-help">
+					쉼표나 공백으로 구분하세요. 선택한 번호에 추가됩니다.
+				</p>
+				<p
+					id={`${entryId}-error`}
+					className="lotto-entry-error"
+					aria-live="polite"
+				>
+					{entry.error}
+				</p>
+				<output className="lotto-entry-status" aria-live="polite">
+					{entry.status}
+				</output>
+			</div>
+		);
+	}
 
 	function toggleNumber(number: number) {
 		if (disabled) return;
@@ -180,6 +314,7 @@ export default function LottoStrategyControls({
 							</div>
 						)}
 					</div>
+					{numberEntry("fixed")}
 					<div
 						className="lotto-number-grid"
 						aria-describedby={`${id}-fixed-help`}
@@ -294,6 +429,7 @@ export default function LottoStrategyControls({
 							</div>
 						)}
 					</div>
+					{numberEntry("excluded")}
 					<div
 						className="lotto-number-grid"
 						aria-describedby={`${id}-excluded-help`}
