@@ -7,7 +7,6 @@ import {
 	ChevronDown,
 	Copy,
 	Dices,
-	Hash,
 	History,
 	Layers3,
 	LoaderCircle,
@@ -15,7 +14,6 @@ import {
 	RotateCcw,
 	ShieldCheck,
 	Shuffle,
-	Ticket,
 	Trash2,
 	Wind,
 } from "lucide-react";
@@ -27,6 +25,7 @@ import LotteryGuide from "@/components/features/LotteryGuide";
 import LottoStrategyControls, {
 	type LottoMode,
 } from "@/components/features/LottoStrategyControls";
+import SiteHeader from "@/components/layout/SiteHeader";
 import { Switch } from "@/components/ui/switch";
 import { type Draw, isDraw, type Mode, type Row } from "@/lib/drawHistory";
 import {
@@ -66,21 +65,18 @@ const modes = [
 	{
 		id: "number" as const,
 		label: "랜덤 숫자",
-		icon: Hash,
 		description: "최소값과 최대값, 뽑을 개수를 설정하세요.",
 		title: "범위와 개수 설정",
 	},
 	{
 		id: "lotto" as const,
 		label: "로또 6/45",
-		icon: Ticket,
 		description: "1~45에서 중복 없는 숫자 6개를 뽑습니다.",
 		title: "로또 번호 추첨",
 	},
 	{
 		id: "pension" as const,
 		label: "연금복권 720+",
-		icon: Layers3,
 		description: "조와 여섯 자리 번호를 무작위로 뽑습니다.",
 		title: "연금복권 번호 추첨",
 	},
@@ -199,7 +195,13 @@ function describeLotto(draw: Draw) {
 		? `${strategy} · 제외: ${options.excludedNumbers.join(", ")}`
 		: strategy;
 }
-export default function RandomGenerator() {
+export default function RandomGenerator({
+	initialMode = "number",
+	onModeChange,
+}: {
+	initialMode?: Mode;
+	onModeChange?: (mode: Mode) => void;
+} = {}) {
 	const id = useId();
 	const resultRef = useRef<HTMLDivElement>(null);
 	const lottoConstraintRef = useRef<HTMLOutputElement>(null);
@@ -210,7 +212,7 @@ export default function RandomGenerator() {
 	const countInputRef = useRef<HTMLInputElement>(null);
 	const copyAttemptRef = useRef(0);
 	const copyTriggerRef = useRef<HTMLButtonElement | null>(null);
-	const [mode, setMode] = useState<Mode>("number");
+	const [mode, setMode] = useState<Mode>(initialMode);
 	const [settings, setSettings] = useState<Settings>(defaults);
 	const [lottoGameCount, setLottoGameCount] = useState(1);
 	const [pensionGameCount, setPensionGameCount] = useState(1);
@@ -235,6 +237,15 @@ export default function RandomGenerator() {
 	const [copied, setCopied] = useState("");
 	const [copyFailure, setCopyFailure] = useState<CopyFailure | null>(null);
 	const [appliedExample, setAppliedExample] = useState("");
+	useEffect(() => {
+		copyAttemptRef.current++;
+		setCopied("");
+		setCopyFailure(null);
+		setMode(initialMode);
+		setError("");
+		setNumberErrorFields([]);
+		setAppliedExample("");
+	}, [initialMode]);
 	const current = modes.find((item) => item.id === mode) ?? modes[0];
 	const gameCount = mode === "pension" ? pensionGameCount : lottoGameCount;
 	const draw = draws[mode];
@@ -622,6 +633,7 @@ export default function RandomGenerator() {
 		setError("");
 		setNumberErrorFields([]);
 		setAppliedExample("");
+		onModeChange?.(next);
 		formRef.current?.scrollIntoView({
 			behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
 				? "auto"
@@ -685,45 +697,16 @@ export default function RandomGenerator() {
 	}
 	return (
 		<div className="random-lab">
-			<header className="masthead">
-				<div className="top-bar">
-					<a className="wordmark" href="/" aria-label="랜덤랩 홈">
-						<span className="brand-icon">
-							<Shuffle size={22} strokeWidth={2.5} />
-						</span>
-						<span>
-							random<span className="wordmark-light">lab</span>
-							<span className="brand-period">.</span>
-						</span>
-					</a>
-					<a className="text-button" href="/lunch">
-						점심 메뉴 추첨 <ArrowUpRight size={16} aria-hidden="true" />
-					</a>
-				</div>{" "}
-				<nav className="tool-nav" aria-label="생성 도구">
-					{modes.map((item, index) => {
-						const Icon = item.icon;
-						return (
-							<button
-								type="button"
-								key={item.id}
-								className={`tool-tab ${mode === item.id ? "is-active" : ""}`}
-								aria-pressed={mode === item.id}
-								disabled={busy}
-								onClick={() => changeMode(item.id)}
-							>
-								<span className="tab-number">0{index + 1}</span>
-								<Icon size={18} />
-								<span>{item.label}</span>
-								{mode === item.id && <span className="active-dot" />}
-							</button>
-						);
-					})}
-				</nav>
-			</header>
+			<SiteHeader
+				active={mode}
+				onToolChange={changeMode}
+				toolsDisabled={busy}
+			/>
 			<main id="main-content">
 				<section className="page-heading" aria-labelledby={`${id}-title`}>
-					<h1 id={`${id}-title`}>랜덤 번호 생성기</h1>
+					<h1 id={`${id}-title`}>
+						{current.label} {mode === "number" ? "생성기" : "번호 생성기"}
+					</h1>
 					<div className="entropy-intro">
 						<p className="entropy-lead">
 							<Atom size={20} aria-hidden="true" />
@@ -1490,7 +1473,7 @@ export default function RandomGenerator() {
 				</section>
 			</main>
 			<footer className="lab-footer">
-				<span className="footer-brand">randomlab.</span>
+				<span className="footer-brand">점메추.</span>
 				<span>랜덤 숫자 · 로또 6/45 · 연금복권 720+</span>
 			</footer>
 			<output className="sr-only">

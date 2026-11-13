@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title description">
+  <title id="title">점메추 · 점심 메뉴 룰렛</title>
+  <desc id="description">링크로 참가하고 실시간 채팅을 하며 함께 보는 룰렛으로 점심 메뉴를 정하는 서비스. jeommechu.dev</desc>
+  <rect width="1200" height="630" fill="#f7f7f2"/>
+  <g font-family="Malgun Gothic, sans-serif" fill="#272b24">
+    <rect x="64" y="64" width="50" height="50" rx="14" fill="#d6f266"/>
+    <!-- The site's existing Lucide UtensilsCrossed mark. -->
+    <g transform="translate(76 76) scale(1.08)" fill="none" stroke="#272b24" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m16 2-2.3 2.3a3 3 0 0 0 0 4.2l1.8 1.8a3 3 0 0 0 4.2 0L22 8"/>
+      <path d="M15 15 3.3 3.3a4.2 4.2 0 0 0 0 6l7.3 7.3c.7.7 2 .7 2.8 0L15 15Zm0 0 7 7"/>
+      <path d="m2.1 21.8 6.4-6.3M19 5l-7 7"/>
+    </g>
+    <text x="128" y="104" font-size="36" font-weight="700">점메추<tspan fill="#718940">.</tspan></text>
+    <text x="64" y="246" font-size="68" font-weight="700" letter-spacing="-3">점심 메뉴 룰렛</text>
+    <g font-size="27" fill="#556247">
+      <text x="66" y="310">음식점을 고르고, 같은 룰렛을 보며</text>
+      <text x="66" y="354">함께 점심 메뉴를 정하세요.</text>
+    </g>
+    <g font-size="21" font-weight="700">
+      <rect x="64" y="418" width="152" height="52" rx="9" fill="#fff" stroke="#c9d1be"/>
+      <text x="140" y="452" text-anchor="middle">링크 참가</text>
+      <rect x="228" y="418" width="178" height="52" rx="9" fill="#fff" stroke="#c9d1be"/>
+      <text x="317" y="452" text-anchor="middle">실시간 채팅</text>
+      <rect x="418" y="418" width="216" height="52" rx="9" fill="#d6f266" stroke="#adc44f"/>
+      <text x="526" y="452" text-anchor="middle">함께 보는 룰렛</text>
+    </g>
+    <text x="64" y="566" font-size="26" font-weight="700">jeommechu.dev</text>
+    <g transform="translate(934 327)">
+      <path d="M0 0 0-190A190 190 0 0 1 164.5448-95Z" fill="#d6f266"/>
+      <path d="M0 0 164.5448-95A190 190 0 0 1 164.5448 95Z" fill="#fff"/>
+      <path d="M0 0 164.5448 95A190 190 0 0 1 0 190Z" fill="#e3ebd5"/>
+      <path d="M0 0 0 190A190 190 0 0 1-164.5448 95Z" fill="#d6f266"/>
+      <path d="M0 0-164.5448 95A190 190 0 0 1-164.5448-95Z" fill="#fff"/>
+      <path d="M0 0-164.5448-95A190 190 0 0 1 0-190Z" fill="#e3ebd5"/>
+      <circle r="190" fill="none" stroke="#8b967d" stroke-width="2"/>
+      <g font-size="27" font-weight="700" text-anchor="middle">
+        <text x="72" y="-115">한식</text>
+        <text x="139" y="10">일식</text>
+        <text x="72" y="136">중식</text>
+        <text x="-72" y="136">분식</text>
+        <text x="-139" y="10">양식</text>
+        <text x="-72" y="-115">샐러드</text>
+      </g>
+      <circle r="72" fill="#d6f266" stroke="#718940" stroke-width="2"/>
+      <text y="-10" font-size="17" text-anchor="middle">점심 메뉴</text>
+      <text y="25" font-size="26" font-weight="700" text-anchor="middle">추첨하기</text>
+      <path d="M-13-202H13L0-175Z" fill="#272b24"/>
+    </g>
+  </g>
+</svg>

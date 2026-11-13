@@ -1,6 +1,7 @@
 import { type ErrorComponentProps, useRouter } from "@tanstack/react-router";
-import { ArrowRight, LoaderCircle, RotateCcw, Shuffle } from "lucide-react";
+import { ArrowRight, LoaderCircle, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import SiteHeader from "@/components/layout/SiteHeader";
 
 export default function RouteError({ reset }: ErrorComponentProps) {
 	const router = useRouter();
@@ -26,19 +27,7 @@ export default function RouteError({ reset }: ErrorComponentProps) {
 
 	return (
 		<div className="random-lab">
-			<header className="masthead">
-				<div className="top-bar">
-					<a className="wordmark" href="/" aria-label="랜덤랩 홈">
-						<span className="brand-icon">
-							<Shuffle size={22} strokeWidth={2.5} aria-hidden="true" />
-						</span>
-						<span>
-							random<span className="wordmark-light">lab</span>
-							<span className="brand-period">.</span>
-						</span>
-					</a>
-				</div>
-			</header>
+			<SiteHeader active="lunch" />
 			<main
 				id="main-content"
 				ref={mainRef}

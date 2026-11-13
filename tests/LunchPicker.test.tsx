@@ -14,6 +14,7 @@ import {
 	type LunchCategory,
 	type LunchPlace,
 	lunchCategories,
+	lunchSource,
 	sampleLunchPlaces as realLunchPlaces,
 } from "../src/lib/lunch";
 import { lunchHistoryKey, readLunchHistory } from "../src/lib/lunchHistory";
@@ -134,12 +135,16 @@ function sourceResult(index: number) {
 }
 
 describe("lunch draw prototype", () => {
-	it("preserves every supplied restaurant and category with file-based distances", () => {
+	it("preserves every supplied restaurant and category, respects missing distances and draws from the full catalog", async () => {
 		render(<LunchPicker />);
 		expect(
 			screen.getByRole("heading", { name: "점심 메뉴 추첨", level: 1 }),
 		).toBeTruthy();
-		expect(screen.getByText(/선정릉 점심 식당 목록 35곳/)).toBeTruthy();
+		expect(
+			screen.getByText(
+				`${lunchSource.label} ${realLunchPlaces.length}곳을 불러왔습니다. 거리는 제공한 엑셀의 기준이며, 현재 위치에서 측정한 거리가 아닙니다.`,
+			),
+		).toBeTruthy();
 		expect(
 			screen.getByText(/현재 위치에서 측정한 거리가 아닙니다/),
 		).toBeTruthy();
@@ -159,16 +164,51 @@ describe("lunch draw prototype", () => {
 					.getByRole("button", { name: category })
 					.getAttribute("aria-pressed"),
 			).toBe("true");
-		for (const place of realLunchPlaces)
-			expect(
-				screen.getByRole("checkbox", { name: `${place.name} 추첨 포함` }),
-			).toBeTruthy();
-		expect(screen.getByText("67m")).toBeTruthy();
+		expect(
+			screen
+				.getAllByRole("checkbox")
+				.map((input) => input.getAttribute("aria-label")),
+		).toEqual(realLunchPlaces.map((place) => `${place.name} 추첨 포함`));
+		const withDistance = realLunchPlaces.find(
+			(place) => place.distanceMeters !== undefined,
+		);
+		expect(withDistance).toBeDefined();
+		const distanceRow = screen
+			.getByRole("checkbox", { name: `${withDistance?.name} 추첨 포함` })
+			.closest("label");
+		expect(
+			within(distanceRow as HTMLElement).getByText(
+				`${withDistance?.distanceMeters}m`,
+			),
+		).toBeTruthy();
+		for (const place of realLunchPlaces.filter(
+			(item) => item.distanceMeters === undefined,
+		)) {
+			const row = screen
+				.getByRole("checkbox", { name: `${place.name} 추첨 포함` })
+				.closest("label");
+			expect(row?.textContent).not.toMatch(/\d+m|undefined/);
+		}
 		expect(document.body.textContent).not.toContain("undefined");
 		expect(
 			screen.queryByRole("button", { name: /위치|실시간|엑셀/ }),
 		).toBeNull();
 		expect(generateRandomNumbers).not.toHaveBeenCalled();
+		sourceResult(realLunchPlaces.length - 1);
+		await draw();
+		expect(generateRandomNumbers).toHaveBeenCalledExactlyOnceWith({
+			data: {
+				min: 0,
+				max: realLunchPlaces.length - 1,
+				count: 1,
+				unique: false,
+			},
+		});
+		expect(
+			screen.getByRole("region", {
+				name: realLunchPlaces[realLunchPlaces.length - 1].name,
+			}),
+		).toBeTruthy();
 	});
 
 	it("toggles categories independently, allows none, and makes 전체 select all every time", async () => {
@@ -264,20 +304,26 @@ describe("lunch draw prototype", () => {
 		expect(
 			firstSelected?.querySelector(".lunch-place-number")?.textContent,
 		).toBe("2");
-		sourceResult(33);
+		const remainingCount = realLunchPlaces.length - 1;
+		const lastIndex = remainingCount - 1;
+		sourceResult(lastIndex);
 		await draw();
 		expect(generateRandomNumbers).toHaveBeenCalledWith({
-			data: { min: 0, max: 33, count: 1, unique: false },
+			data: { min: 0, max: lastIndex, count: 1, unique: false },
 		});
 		expect(
-			screen.getByRole("region", { name: realLunchPlaces[34].name }),
+			screen.getByRole("region", {
+				name: realLunchPlaces[realLunchPlaces.length - 1].name,
+			}),
 		).toBeTruthy();
 		const rotation = Number(
 			document
 				.querySelector<HTMLElement>(".lunch-wheel-rotor")
 				?.style.transform.match(/[\d.]+/)?.[0],
 		);
-		expect((rotation + (33.5 * 360) / 34) % 360).toBeCloseTo(0, 5);
+		expect(
+			(rotation + ((lastIndex + 0.5) * 360) / remainingCount) % 360,
+		).toBeCloseTo(0, 5);
 	});
 
 	it("keeps shortened names unambiguous with source numbers in a small category pool", () => {

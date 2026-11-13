@@ -5,9 +5,9 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "random-number-generator",
-	"compatibility_date": "2025-09-02",
+	"compatibility_date": "2026-11-13",
 	"compatibility_flags": ["nodejs_compat"],
-	"main": "@tanstack/react-start/server-entry",
+	"main": "src/worker.ts",
 	"observability": {
 		"enabled": true
 	},
@@ -16,6 +16,12 @@
 			"binding": "SEED_POOL",
 			"id": "7b7c12cb39d244be986759eaf5574593"
 		}
+	],
+	"durable_objects": {
+		"bindings": [{ "name": "LunchRooms", "class_name": "LunchRoomServer" }]
+	},
+	"migrations": [
+		{ "tag": "lunch-rooms-v1", "new_sqlite_classes": ["LunchRoomServer"] }
 	]
 	/**
 	 * Smart Placement

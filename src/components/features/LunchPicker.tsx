@@ -1,21 +1,10 @@
-import {
-	ArrowUpRight,
-	Check,
-	Copy,
-	LoaderCircle,
-	RotateCcw,
-	Shuffle,
-} from "lucide-react";
-import {
-	type CSSProperties,
-	type RefObject,
-	useEffect,
-	useId,
-	useRef,
-	useState,
-} from "react";
+import { Check, Copy, RotateCcw, Shuffle } from "lucide-react";
+import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
 import CopyFallback from "@/components/features/CopyFallback";
+import CreateLunchRoom from "@/components/features/CreateLunchRoom";
 import LunchHistoryPanel from "@/components/features/LunchHistoryPanel";
+import { LunchWheel } from "@/components/features/LunchWheel";
+import SiteHeader from "@/components/layout/SiteHeader";
 import {
 	getWheelRotation,
 	type LunchCategory,
@@ -41,121 +30,6 @@ type Phase = "idle" | "fetching" | "spinning" | "done";
 type LunchResult = LunchHistoryRecord;
 type ActivePanel = "wheel" | "candidates" | "history";
 const spinDurationMs = 7200;
-
-const wheelColors = ["#d6f266", "#edf2e3", "#ffffff", "#dce6c9"];
-
-function Wheel({
-	candidates,
-	candidateNumbers,
-	rotation,
-	phase,
-	onComplete,
-	onDraw,
-	buttonId,
-	errorId,
-	covered,
-	buttonRef,
-}: {
-	candidates: readonly LunchPlace[];
-	candidateNumbers: readonly number[];
-	rotation: number;
-	phase: Phase;
-	onComplete: () => void;
-	onDraw: () => void;
-	buttonId: string;
-	errorId?: string;
-	covered: boolean;
-	buttonRef: RefObject<HTMLButtonElement | null>;
-}) {
-	const size = candidates.length;
-	const dense = size > 12;
-	const background = size
-		? `conic-gradient(${candidates
-				.map(
-					(_, index) =>
-						`${wheelColors[index % wheelColors.length]} ${(index * 360) / size}deg ${((index + 1) * 360) / size}deg`,
-				)
-				.join(", ")})`
-		: "#edf2e3";
-	return (
-		<div className="lunch-wheel" data-candidate-count={size}>
-			<div className="lunch-wheel-pointer" aria-hidden="true" />
-			<div className="lunch-wheel-track" aria-hidden="true">
-				<div
-					className="lunch-wheel-rotor"
-					aria-hidden="true"
-					data-phase={phase}
-					style={{ background, transform: `rotate(${rotation}deg)` }}
-					onTransitionEnd={(event) => {
-						if (
-							event.target === event.currentTarget &&
-							event.propertyName === "transform"
-						)
-							onComplete();
-					}}
-				>
-					<svg viewBox="0 0 400 400" focusable="false" aria-hidden="true">
-						{candidates.map((place, index) => {
-							const angle = ((index + 0.5) * 360) / size;
-							const radians = ((angle - 90) * Math.PI) / 180;
-							const radius = dense ? 132 : 126;
-							// Avoid SVG hydration differences between math engines.
-							const x = Number((200 + Math.cos(radians) * radius).toFixed(4));
-							const y = Number((200 + Math.sin(radians) * radius).toFixed(4));
-							return (
-								<text
-									key={place.id}
-									x={x}
-									y={y}
-									textAnchor="middle"
-									dominantBaseline="central"
-									style={{ fontSize: dense ? 14 : 18 }}
-									transform={`rotate(${angle - 90 + (angle > 180 ? 180 : 0)}, ${x}, ${y})`}
-								>
-									{`${candidateNumbers[index]} ${place.name.length > 5 ? `${place.name.slice(0, 4)}…` : place.name}`}
-								</text>
-							);
-						})}
-					</svg>
-				</div>
-			</div>
-			<button
-				type="button"
-				id={buttonId}
-				ref={buttonRef}
-				className="lunch-wheel-center"
-				disabled={covered || phase === "fetching" || phase === "spinning"}
-				onClick={onDraw}
-				aria-label={
-					phase === "fetching"
-						? "추첨 준비 중…"
-						: phase === "spinning"
-							? "룰렛이 돌아가고 있어요"
-							: phase === "done"
-								? "한 번 더 추첨하기"
-								: "점심 메뉴 추첨하기"
-				}
-				aria-describedby={errorId}
-			>
-				{phase === "fetching" ? (
-					<LoaderCircle size={22} aria-hidden="true" />
-				) : (
-					<Shuffle size={22} aria-hidden="true" />
-				)}
-				<span aria-hidden="true">
-					{phase === "fetching"
-						? "준비 중"
-						: phase === "spinning"
-							? "룰렛"
-							: phase === "done"
-								? "한 번 더"
-								: "추첨하기"}
-				</span>
-				<small aria-hidden="true">{size}곳</small>
-			</button>
-		</div>
-	);
-}
 
 export default function LunchPicker({
 	places = sampleLunchPlaces,
@@ -345,27 +219,20 @@ export default function LunchPicker({
 				{ "--lunch-spin-duration": `${spinDurationMs}ms` } as CSSProperties
 			}
 		>
-			<header className="lunch-masthead">
-				<a className="wordmark" href="/" aria-label="랜덤랩 홈">
-					<span className="brand-icon">
-						<Shuffle size={22} strokeWidth={2.5} aria-hidden="true" />
-					</span>
-					<span>
-						random<span className="wordmark-light">lab</span>
-						<span className="brand-period">.</span>
-					</span>
-				</a>
-				<a className="text-button" href="/">
-					숫자·복권 도구 <ArrowUpRight size={16} aria-hidden="true" />
-				</a>
-			</header>
+			<SiteHeader active="lunch" />
 			<main id="main-content">
 				<section className="page-heading" aria-labelledby={`${id}-title`}>
-					<h1 id={`${id}-title`}>점심 메뉴 추첨</h1>
+					<div className="lunch-title-row">
+						<h1 id={`${id}-title`}>점심 메뉴 추첨</h1>
+						<CreateLunchRoom
+							candidateIds={candidates.map((place) => place.id)}
+							disabled={busy}
+						/>
+					</div>
 					<p>음식점을 고르고 룰렛을 돌려 점심 메뉴를 정하세요.</p>
 					<details className="lunch-source-details">
 						<summary>
-							선정릉 식당 {places.length}곳 · 목록 출처·거리 기준
+							회사 주변 음식점 {places.length}곳 · 목록 출처·거리 기준
 						</summary>
 						<p className="lunch-sample-notice">
 							{lunchSource.label} {places.length}곳을 불러왔습니다. 거리는
@@ -428,7 +295,7 @@ export default function LunchPicker({
 								className={`lunch-wheel-area ${showResult ? "is-covered" : ""}`}
 								aria-hidden={showResult}
 							>
-								<Wheel
+								<LunchWheel
 									candidates={candidates}
 									candidateNumbers={candidates.map(
 										(place) => sourceNumbers.get(place.id) ?? 0,

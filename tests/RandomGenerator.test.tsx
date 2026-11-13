@@ -19,6 +19,36 @@ import {
 	getSourceDisplayName,
 } from "../src/services/randomService";
 
+// Keep mode-switch behavior covered independently of the lunch-only site menu.
+vi.mock("../src/components/layout/SiteHeader", () => ({
+	default: ({
+		onToolChange,
+		toolsDisabled,
+	}: {
+		onToolChange: (mode: "number" | "lotto" | "pension") => void;
+		toolsDisabled?: boolean;
+	}) => (
+		<nav aria-label="생성 도구">
+			{(
+				[
+					["number", "랜덤 숫자"],
+					["lotto", "로또 6/45"],
+					["pension", "연금복권 720+"],
+				] as const
+			).map(([mode, label]) => (
+				<button
+					type="button"
+					key={mode}
+					disabled={toolsDisabled}
+					onClick={() => onToolChange(mode)}
+				>
+					{label}
+				</button>
+			))}
+		</nav>
+	),
+}));
+
 vi.mock("../src/services/randomService", () => ({
 	generateLotteryNumbers: vi.fn(async ({ data }) => ({
 		tickets: Array.from({ length: data.count }, (_, index) => ({
@@ -977,9 +1007,11 @@ describe("manual copy fallback", () => {
 			throw new Error("Copy field is not a textarea");
 		expect(field.value).toBe(expected);
 		expect(field.readOnly).toBe(true);
-		expect(document.activeElement).toBe(field);
-		expect(field.selectionStart).toBe(0);
-		expect(field.selectionEnd).toBe(expected.length);
+		await waitFor(() => {
+			expect(document.activeElement).toBe(field);
+			expect(field.selectionStart).toBe(0);
+			expect(field.selectionEnd).toBe(expected.length);
+		});
 		return field;
 	}
 

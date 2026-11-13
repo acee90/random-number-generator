@@ -1,6 +1,22 @@
 # 점심 메뉴 추첨: 프로토타입부터 완성품까지
 
-작성일: 2026-11-13 · 작업 브랜치: `codex/lunch-prototype`
+작성일: 2026-11-13 · 프로토타입 배포 후 `codex/lunch-rooms`에서 공동 시청·채팅 구현
+
+**계획·진행 상태의 기준: [GitHub 전체 로드맵 #7](https://github.com/acee90/random-number-generator/issues/7).** 이 문서는 상세 설계와 과거 작업 기록을 보관하는 보조 자료다. 새 계획과 상태 변경은 GitHub 이슈에 먼저 기록한다.
+
+| 후속 작업 | GitHub 이슈 |
+| --- | --- |
+| 최신 구현 출시·도메인 연결 | [#8](https://github.com/acee90/random-number-generator/issues/8) |
+| 커스텀 메뉴·내 목록·편집 권한 | [#4](https://github.com/acee90/random-number-generator/issues/4) |
+| 엑셀 왕복 편집·교체 복구 | [#9](https://github.com/acee90/random-number-generator/issues/9) |
+| 공개방·비공개방 | [#3](https://github.com/acee90/random-number-generator/issues/3) |
+| 투표와 확률 가중치 | [#5](https://github.com/acee90/random-number-generator/issues/5) |
+| 실제 음식점 검색 | [#10](https://github.com/acee90/random-number-generator/issues/10) |
+| 사다리·오리 경주·핀볼 | [#11](https://github.com/acee90/random-number-generator/issues/11) |
+| 전체 화면·선택형 효과음 | [#12](https://github.com/acee90/random-number-generator/issues/12) |
+| 결과 공유 확장 기획 | [#13](https://github.com/acee90/random-number-generator/issues/13) |
+
+현재 1단계와 3A·3B를 구현했다. 2단계 목록 편집·엑셀과 4단계 위치 검색은 후속 범위다. 실시간 방의 실제 동작·제한·배포 구성은 [실시간 추첨방 문서](lunch-rooms.md)를 따른다.
 
 ## 목표와 기본 흐름
 
@@ -12,7 +28,7 @@
 - 샘플·직접 입력·엑셀·검색 결과는 같은 후보 모델로 변환한다.
 - 추첨은 후보의 고유 ID를 기준으로 하고, 애니메이션은 확정된 결과를 공개한다.
 - 먼저 룰렛을 만들고, 사다리·오리 경주·핀볼은 별도 연출 모듈로 추가한다.
-- 이번 착수 범위는 1단계다. 이후 단계는 앞 단계의 실제 사용 결과를 보고 작은 단위로 진행한다.
+- 1단계 이후 요청에 따라 3A·3B를 먼저 구현했다. 나머지 단계는 실제 사용 결과를 보고 작은 단위로 진행한다.
 
 ## 단계별 납품과 완료 기준
 

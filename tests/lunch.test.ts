@@ -13,9 +13,9 @@ function indexAtPointer(rotation: number, count: number) {
 }
 
 describe("provided lunch restaurant list", () => {
-	it("preserves all 35 workbook rows in their original order without fabricated menus", () => {
-		expect(sampleLunchPlaces).toHaveLength(35);
-		expect(new Set(sampleLunchPlaces.map((place) => place.id)).size).toBe(35);
+	it("preserves all 107 workbook rows in their original order without fabricated menus", () => {
+		expect(sampleLunchPlaces).toHaveLength(107);
+		expect(new Set(sampleLunchPlaces.map((place) => place.id)).size).toBe(107);
 		expect(sampleLunchPlaces[0]).toEqual({
 			id: "seonjeongneung-01",
 			name: "세븐일레븐 선릉스타점",
@@ -23,10 +23,9 @@ describe("provided lunch restaurant list", () => {
 			distanceMeters: 67,
 		});
 		expect(sampleLunchPlaces.at(-1)).toEqual({
-			id: "seonjeongneung-35",
-			name: "마이니치 라멘 (선정릉점)",
+			id: "company-nearby-107",
+			name: "구영회참치&초밥 강남점",
 			category: "일식",
-			distanceMeters: 420,
 		});
 		expect(sampleLunchPlaces.every((place) => place.menu === undefined)).toBe(
 			true,
@@ -34,7 +33,7 @@ describe("provided lunch restaurant list", () => {
 	});
 
 	it("keeps convenience stores, cafes and exact original category labels", () => {
-		expect(lunchCategories).toHaveLength(8);
+		expect(lunchCategories).toHaveLength(11);
 		expect(
 			Object.fromEntries(
 				lunchCategories.map((category) => [
@@ -44,33 +43,62 @@ describe("provided lunch restaurant list", () => {
 				]),
 			),
 		).toEqual({
-			한식: 12,
-			편의점: 8,
-			"카페/베이커리/패스트푸드": 7,
-			샐러드: 2,
-			일식: 2,
+			한식: 44,
+			편의점: 11,
+			"카페/베이커리/패스트푸드": 20,
+			샐러드: 3,
+			일식: 8,
 			분식: 2,
-			"편의점/마트": 1,
-			중식: 1,
+			"편의점/마트": 3,
+			중식: 5,
+			양식: 6,
+			아시안푸드: 3,
+			"확인 불가": 2,
 		});
 		expect(
 			sampleLunchPlaces.every(
 				(place) =>
 					lunchCategories.includes(place.category) &&
-					Number.isInteger(place.distanceMeters) &&
-					(place.distanceMeters ?? 0) > 0,
+					(place.distanceMeters === undefined ||
+						(Number.isInteger(place.distanceMeters) &&
+							place.distanceMeters > 0)),
 			),
 		).toBe(true);
 	});
 
 	it("identifies the provided worksheet and labels distances as spreadsheet values", () => {
 		expect(lunchSource).toEqual({
-			label: "선정릉 점심 식당 목록",
-			fileName: "선정릉_점심식당_목록.xlsx",
-			sheetName: "식당 목록",
-			cellRange: "A5:D39",
+			label: "회사 주변 음식점 목록",
+			fileName: "회사주변_음식점_목록.xlsx",
+			sheetName: "회사 주변 음식점",
+			cellRange: "A6:C112",
 			distanceLabel: "엑셀 기준 거리",
 		});
+	});
+
+	it("keeps the workbook's unknown distance missing and retains branch distinctions", () => {
+		expect(
+			sampleLunchPlaces
+				.filter((place) => place.distanceMeters === undefined)
+				.map((place) => place.name),
+		).toEqual(["구영회참치&초밥 강남점"]);
+		expect(
+			sampleLunchPlaces
+				.filter((place) => place.category === "확인 불가")
+				.map((place) => place.name),
+		).toEqual(["돈웍", "언제나커피(서울삼성점)"]);
+		expect(sampleLunchPlaces.some((place) => place.name === "고향집")).toBe(
+			true,
+		);
+		expect(
+			sampleLunchPlaces.some((place) => place.name === "고향집(르네상스)"),
+		).toBe(true);
+		const knownDistances = sampleLunchPlaces.flatMap((place) =>
+			place.distanceMeters === undefined ? [] : [place.distanceMeters],
+		);
+		expect(knownDistances).toEqual(
+			[...knownDistances].sort((left, right) => left - right),
+		);
 	});
 });
 
