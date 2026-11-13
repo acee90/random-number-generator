@@ -696,6 +696,9 @@ export default function RandomGenerator() {
 							<span className="brand-period">.</span>
 						</span>
 					</a>
+					<a className="text-button" href="/lunch">
+						점심 메뉴 추첨 <ArrowUpRight size={16} aria-hidden="true" />
+					</a>
 				</div>{" "}
 				<nav className="tool-nav" aria-label="생성 도구">
 					{modes.map((item, index) => {
