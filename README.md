@@ -1,6 +1,6 @@
 # Randomlab
 
-A Korean random-number toolkit with custom integer draws, Lotto 6/45 combinations, and Pension Lottery 720+ numbers. Built with TanStack Start, React, and Cloudflare Workers.
+A Korean random-number toolkit with custom integer draws, Lotto 6/45 combinations, Pension Lottery 720+ numbers, and a lunch roulette prototype. Built with TanStack Start, React, and Cloudflare Workers.
 
 # Getting Started
 
@@ -35,6 +35,7 @@ Keys are read only by the server. `.env.local` is ignored by Git. Use either `.e
 - Pension Lottery 720+: 1–5 distinct tickets, random or fixed group (1–5), with six digits including leading zeroes.
 - Copy results, per-tool history (50 records shared across tools), and undo history deletion. Settings and history stay in browser local storage, with migration from the previous cookie format.
 - Responsive desktop/mobile layout with keyboard support and reduced-motion preferences.
+- Lunch roulette at `/lunch`: 35 restaurants from the supplied Seonjeongneung spreadsheet, independent category selection and exclusions, a large labelled wheel with a 7.2-second spin, a result card, and browser history for the last 20 completed draws. Candidates and history open on demand; results and history can be copied individually. Draws use the existing entropy service and show their actual source and time. Distances are the spreadsheet's company-based values, not live device distances. Custom lists, Excel upload/export, live rooms, and place search are planned in [the phased development plan](docs/lunch-plan.md).
 
 Lottery generation follows the formats documented by [Donghaeng Lottery](https://www.dhlottery.co.kr/). This tool generates number selections; it does not predict winning numbers or purchase tickets.
 
