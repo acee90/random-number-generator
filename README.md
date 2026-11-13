@@ -1,337 +1,152 @@
-# Jeommechu · 점메추
+# 점메추 · Jeommechu
 
-A lunch draw service with shared roulette rooms and real-time chat, plus custom integer draws, Lotto 6/45 and Pension Lottery 720+ tools. The service brand is **점메추 (jeommechu.dev)**. Built with TanStack Start, React and Cloudflare Workers.
+**[jeommechu.dev](https://jeommechu.dev)** — 방을 만들고 링크로 초대해, 같은 룰렛을 보며 채팅으로 점심 메뉴를 정하는 서비스입니다.
 
-# Getting Started
+TanStack Start · React · Cloudflare Workers · Durable Objects · PartyServer/PartySocket으로 구현했습니다.
 
-To run this application:
+## 이용 방법
 
-```bash
-npm install
-```
+1. 방 이름과 닉네임을 정해 추첨방을 만듭니다.
+2. 초대 링크를 공유합니다. 참가자는 닉네임 확인 후 직접 입장합니다.
+3. 방장이 음식 분류와 개별 음식점을 선택하고 **후보 적용**을 누릅니다.
+4. 방장이 룰렛을 시작하면 참가자가 같은 회차와 결과를 함께 봅니다.
+5. 참가자는 현재 결과에 **좋아요 / 아쉬워요**를 남기고, 방장은 투표와 채팅을 보고 재추첨 여부를 정합니다.
 
-Copy `.env.example` to `.env.local`, then enter your API keys:
+혼자 사용할 때는 [단독 룰렛](https://jeommechu.dev/solo)을 이용할 수 있습니다.
+
+## 주요 기능
+
+### 함께 보는 추첨방
+
+- 방 생성·링크 초대·실시간 룰렛과 채팅, 방장 전용 후보 변경·추첨 시작
+- 닉네임 1~12자, 입력 중 중복 확인·확인 중 표시, 입장 후 이름 변경
+- 내 메시지는 오른쪽, 다른 참가자는 왼쪽에 표시하고 입장·퇴장·이름 변경·추첨 알림 제공
+- 참가자 온라인·5분 이상 자리비움·오프라인 상태와 재접속 지원
+- 음식 분류 다중 선택·제외와 개별 후보 선택, 스크롤 중에도 사용할 수 있는 적용 도구
+- 회차별 후보·확률·참가자·시각·난수 출처 기록과 복사
+- 작은 화면, 키보드 조작과 동작 줄이기 설정 지원
+
+방은 **생성 후 24시간** 유지됩니다. 방장이나 전원이 나가도 즉시 삭제되지 않으며 재입장해도 만료 시각은 연장되지 않습니다. 최대 30명, 최근 채팅·시스템 메시지 100개, 확정 결과 20개와 현재 회차를 보관하고 만료되면 방 데이터를 삭제합니다.
+
+### 현재 결과의 up/down 투표
+
+- 참가자는 **현재 완료된 결과에 회차별 한 번** 투표하며, 제출 후 취소·변경할 수 없습니다.
+- 별도의 투표 시간제한은 없습니다. 방장은 투표하지 않고 실시간 집계를 확인합니다.
+- 투표 당시 이름·결과 공개 후 반응 시간과 전체 선착순 세 명의 메달을 표시합니다. 반응 시간에는 네트워크 지연이 포함됩니다.
+- 방장이 **다음 추첨을 시작하면 이전 결과와 투표를 확정 기록으로 고정**합니다. 과거 기록에는 투표할 수 없고 내용도 바뀌지 않습니다. 다음 추첨 준비가 실패해도 이전 기록을 다시 열지 않습니다.
+- 같은 참가자의 재입장·닉네임 변경·다중 연결·서버 재시작 후에도 첫 표를 유지합니다. 결과당 최대 60표를 보관합니다.
+- 투표가 다음 추첨의 확률을 바꾸거나 자동 재추첨을 실행하지는 않습니다.
+
+참가자 구분은 같은 브라우저에서 공유하는 방별 비공개 증명을 사용합니다. 다른 브라우저나 저장소 삭제까지 같은 사람으로 판별하는 계정 기반 인증은 제공하지 않습니다. 방장 권한도 저장된 별도 증명으로 복원하며 자동 승계하지 않습니다.
+
+### 단독 룰렛과 음식점 목록
+
+기본 후보는 제공받은 회사 주변 음식점 엑셀의 **107곳·11개 분류**입니다. 음식 분류와 개별 후보를 골라 이름이 표시된 룰렛으로 추첨하고, 최근 20개의 개인 기록을 브라우저에 보관합니다.
+
+거리 값은 엑셀에 기재된 회사 기준 거리이며 현재 기기 위치에서 측정하지 않습니다. 실시간 주변 검색·커스텀 목록·엑셀 업로드/내보내기는 후속 개발 항목입니다.
+
+## 경로
+
+| 경로 | 기능 |
+| --- | --- |
+| `/` | 점메추 메인·방 만들기 |
+| `/lunch-room/<UUID>` | 닉네임 입장·공동 룰렛·채팅·투표·결과 기록 |
+| `/solo` | 혼자 사용하는 점심 룰렛 |
+| `/lunch` | 메인(`/`)으로 이동 |
+| `/tools?tool=number` | 랜덤 정수 생성 |
+| `/tools?tool=lotto` | 로또 6/45 번호 생성 |
+| `/tools?tool=pension` | 연금복권 720+ 번호 생성 |
+
+상단 메뉴에는 점메추만 표시합니다. 기존 번호 도구는 직접 주소로 사용할 수 있으며 검색 색인에서 제외합니다. 추첨방도 검색 색인에서 제외하고, 메인·단독 룰렛에는 `jeommechu.dev` 기준 canonical·Open Graph·공유 이미지를 제공합니다.
+
+번호 도구에는 범위·중복·정렬 설정, 로또 고정/제외 번호와 게임 간 분산, 연금복권 조 선택, 개별/전체 복사와 브라우저 기록이 남아 있습니다. 복권 번호를 선택하는 도구이며 당첨 예측이나 구매 기능은 없습니다.
+
+## 난수 출처
+
+추첨 요청마다 새로운 난수를 가져오며 다음 순서로 사용 가능한 출처를 선택합니다.
+
+1. **ANU Quantum Numbers** — API 키가 있을 때 양자 난수 요청
+2. **Random.org** — 대기 잡음 기반 난수 요청
+3. **서버 Web Crypto CSPRNG** — 외부 출처를 사용할 수 없을 때 암호학적 난수 생성
+
+결과에는 실제 사용한 출처를 표시하고, 여러 출처를 사용한 요청은 혼합으로 표시합니다. 범위 변환에는 rejection sampling을 사용해 편향을 제거합니다. 외부 출처를 사용할 수 없으면 CSPRNG로 대체합니다. 기존 KV 시드 풀은 진단용이며 실제 추첨에서는 소비하지 않습니다.
+
+## 로컬 실행
+
+Node.js와 npm이 필요합니다. 저장소 루트에서 실행합니다.
 
 ```powershell
+npm ci
 Copy-Item .env.example .env.local
-```
-
-- `ANU_API_KEY`: ANU Quantum Numbers key from https://quantumnumbers.anu.edu.au/. Without a key, ANU is skipped.
-- `RANDOM_ORG_API_KEY`: Optional key from https://api.random.org/api-keys. When set, the server uses the JSON-RPC API; otherwise it uses the public HTTP API.
-- `RANDOM_ORG_HASHED_API_KEY`: Optional legacy setting, currently unused for random-number requests.
-
-Start the local app at http://localhost:3000:
-
-```bash
+# .env.local에 사용할 API 키를 입력한 뒤 실행합니다.
+npm run cf-typegen
 npm run dev
 ```
 
-Keys are read only by the server. `.env.local` is ignored by Git. Use either `.env.local` or `.dev.vars`; `.dev.vars` takes precedence. Restart the development server after changing keys. Every generation request fetches fresh entropy: ANU first, then Random.org, then server Web Crypto if both are unavailable. Rejection sampling removes range-conversion bias, and the result identifies mixed sources when applicable. The legacy KV pool is diagnostic only and is never consumed by draws. No Cloudflare API token is required for local development.
+처음 설정할 때 `.env.example`을 복사하고 필요한 API 키를 입력합니다. 개발 주소는 **[localhost:3000](http://localhost:3000)**입니다.
 
-## Service structure
+| 환경 변수 | 용도 |
+| --- | --- |
+| `ANU_API_KEY` | [ANU Quantum Numbers](https://quantumnumbers.anu.edu.au/) 키. 비어 있으면 ANU를 건너뜁니다. |
+| `RANDOM_ORG_API_KEY` | [Random.org](https://api.random.org/api-keys) 키. 있으면 JSON-RPC API, 없으면 공개 HTTP API를 사용합니다. |
+| `RANDOM_ORG_HASHED_API_KEY` | 기존 설정 호환용. 현재 난수 요청 인증에는 사용하지 않습니다. |
 
-- `/`: create a lunch room with a room name and nickname.
-- `/lunch-room/<UUID>`: shared roulette/results, candidates below the draw, chat, nickname editing and explicit expiry time. Existing invitation URLs remain valid.
-- `/tools?tool=number|lotto|pension`: retained direct-entry tools, hidden from the lunch-only navigation and search indexes.
-- `/solo`: independent lunch roulette; `/lunch` redirects to `/`.
-- Rooms expire 24 hours after creation. Leaving or reconnecting does not shorten or extend that period.
+키는 서버에서만 읽습니다. `.env.local`과 `.dev.vars`는 Git에서 제외됩니다. **`.dev.vars` 파일이 있으면 `.env.local`을 읽지 않으므로** 한 방식만 사용합니다. 키를 바꾸면 개발 서버를 다시 시작합니다. 키 없이도 이후 출처로 대체하며 로컬 개발에 Cloudflare 인증 토큰은 필요하지 않습니다.
 
-Development plans and progress are tracked in the [GitHub roadmap #7](https://github.com/acee90/random-number-generator/issues/7), which links all nine follow-up tasks and their completion criteria. New plans belong in GitHub Issues; local documents such as [the IA and lifecycle design](docs/jeommechu-ia-plan.md) provide supporting detail. Public/private rooms, custom menu permissions and vote weighting remain in #3–#5. Latest release verification and jeommechu.dev activation are tracked separately in [#8](https://github.com/acee90/random-number-generator/issues/8).
+로컬 KV와 Durable Object 저장소는 `.wrangler/` 아래에 생성됩니다. 로컬 방과 운영 방은 서로 별개입니다. 같은 브라우저의 여러 탭은 참가 정보를 공유하므로 방장·참가자를 따로 확인하려면 다른 브라우저나 별도 브라우저 프로필을 사용합니다.
 
-## Features
+## 검사와 빌드
 
-- Custom integer ranges, 1–100 results, optional duplicates and sorting.
-- Lotto 6/45: 1–5 distinct combinations, with standard random selection, disjoint numbers across games, or 1–5 fixed numbers shared by every game. Excluded numbers apply to every strategy; insufficient candidate pools are rejected before requesting entropy. Results and history retain fixed/excluded numbers and the draw strategy.
-- Pension Lottery 720+: 1–5 distinct tickets, random or fixed group (1–5), with six digits including leading zeroes.
-- Copy results, per-tool history (50 records shared across tools), and undo history deletion. Settings and history stay in browser local storage, with migration from the previous cookie format.
-- Responsive desktop/mobile layout with keyboard support and reduced-motion preferences.
-- Solo lunch roulette at `/solo`: 107 restaurants and 11 categories from the supplied company-nearby spreadsheet, independent category selection and exclusions, a large labelled wheel with a 7.2-second spin, a result card, and browser history for the last 20 completed draws. Candidates and history open on demand; results and history can be copied individually. Draws use the existing entropy service and show their actual source and time. Distances are the spreadsheet's company-based values, not live device distances; an unknown distance is omitted.
-- Live lunch rooms: create a room directly from `/`, then adjust its candidates, share its invitation URL, chat, and watch the host's shared draw. Rooms last 24 hours with up to 30 participants, the last 100 chat/system messages and 20 completed draws. Chat aligns your messages to the right and others to the left. Completed draws retain their candidate/probability/participant snapshot, request and draw times, source and round ID; legacy records retain unknown fields without inventing participants. PartyServer (the official successor to PartyKit hosting) and PartySocket run on Cloudflare Durable Objects in this Worker's account. See [room behavior, local testing and deployment](docs/lunch-rooms.md). Custom lists, Excel upload/export and place search remain in [the phased development plan](docs/lunch-plan.md).
-
-Lottery generation follows the formats documented by [Donghaeng Lottery](https://www.dhlottery.co.kr/). This tool generates number selections; it does not predict winning numbers or purchase tickets.
-
-# Building For Production
-
-To build this application for production:
-
-```bash
+```powershell
+npm test
+npx tsc --noEmit
 npm run build
+npm run serve
 ```
 
-## Analytics
+`npm run serve`는 빌드한 결과를 미리 봅니다. `npm run preview`는 빌드와 미리보기를 이어서 실행합니다. 바인딩을 변경하면 `npm run cf-typegen`으로 타입을 다시 생성합니다.
 
-Google Tag Manager container `GTM-PH7KTBC8` is installed in the shared document head for all routes. It loads only in production builds (`npm run build`, including local production previews); `npm run dev` does not load it.
+테스트는 난수 범위·추첨 조건, 방 입장·권한·접속 상태, 다중 연결·투표 중복 방지·기록 불변성과 UI 동작을 검증합니다. 운영 확인 범위와 남은 확인 항목은 [출시 체크리스트 #8](https://github.com/acee90/random-number-generator/issues/8)에서 관리합니다.
 
-To collect GA4 data for `https://jeommechu.dev`, configure a Google tag with the GA4 measurement ID in this GTM container and publish it. The container installation alone does not configure a GA4 destination. After deploying the site, verify the published tag with Tag Assistant and GA4 Realtime.
+## 배포
 
-## Testing
+기존 GitHub 연결 Cloudflare Workers Builds를 사용합니다. 작업 브랜치의 미리보기 검사 후 `main`에 머지하면 운영 빌드·배포가 실행됩니다.
 
-This project uses [Vitest](https://vitest.dev/) for testing. You can run the tests with:
+직접 배포할 때는 Cloudflare 계정에 인증하고, `wrangler.jsonc`의 KV 네임스페이스와 `LunchRooms` Durable Object 바인딩을 해당 계정에 맞게 준비합니다. 운영 API 키는 로컬 파일과 별도로 Worker secrets에 설정합니다.
 
-```bash
-npm run test
+```powershell
+npx wrangler login
+npx wrangler secret put ANU_API_KEY
+# Random.org 키도 사용할 경우
+npx wrangler secret put RANDOM_ORG_API_KEY
+npm run deploy
 ```
 
-## Styling
+최초 Durable Object 생성이나 새 migration은 `wrangler deploy`로 적용해야 합니다. `wrangler versions upload`에서 미적용 migration 오류가 나면 먼저 정식 배포한 뒤 미리보기를 다시 실행합니다. 상세 구성과 배포 절차는 [추첨방 운영 문서](docs/lunch-rooms.md#cloudflare-구성)를 참고하세요.
 
-This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.
+### 분석 태그
 
+공통 문서에 Google Tag Manager `GTM-PH7KTBC8`을 설치했습니다. 운영 빌드와 로컬 운영 미리보기에서 로드하며 개발 서버에서는 로드하지 않습니다. GA4 수집은 별도로 GTM 컨테이너에 Google 태그와 측정 ID를 설정·게시하고 확인해야 합니다.
 
+## 코드 구조
 
+| 위치 | 역할 |
+| --- | --- |
+| `src/routes/` | 메인·추첨방·단독 룰렛·번호 도구 경로와 메타데이터 |
+| `src/components/features/` | 룰렛·채팅·투표·기록 화면 |
+| `src/hooks/useLunchRoom.ts` | 방 연결·입장·재연결·클라이언트 요청 |
+| `src/rooms/LunchRoomServer.ts` | 방 상태·권한·추첨·투표·보관·만료 처리 |
+| `src/server/lunchRoomHttp.ts` | 방 생성·닉네임 확인·WebSocket 진입점 |
+| `src/services/` | 외부 난수 요청·범위 변환·출처 처리 |
+| `wrangler.jsonc` | Worker·KV·SQLite Durable Object 설정 |
+| `tests/` | Vitest 자동 검사 |
 
-## Routing
-This project uses [TanStack Router](https://tanstack.com/router). The initial setup is a file based router. Which means that the routes are managed as files in `src/routes`.
+## 개발 계획과 상세 문서
 
-### Adding A Route
+개발 계획과 진행 상태의 기준은 **[GitHub 로드맵 #7](https://github.com/acee90/random-number-generator/issues/7)**과 연결된 이슈입니다. 공개/비공개방, 커스텀 목록·엑셀 편집, 실제 음식점 검색, 투표 가중치와 추가 추첨 연출은 여기서 관리합니다. 현재 결과에 반응하는 up/down 투표와 다음 추첨 확률을 바꾸는 투표 가중치는 별도 기능입니다.
 
-To add a new route to your application just add another a new file in the `./src/routes` directory.
-
-TanStack will automatically generate the content of the route file for you.
-
-Now that you have two routes you can use a `Link` component to navigate between them.
-
-### Adding Links
-
-To use SPA (Single Page Application) navigation you will need to import the `Link` component from `@tanstack/react-router`.
-
-```tsx
-import { Link } from "@tanstack/react-router";
-```
-
-Then anywhere in your JSX you can use it like so:
-
-```tsx
-<Link to="/about">About</Link>
-```
-
-This will create a link that will navigate to the `/about` route.
-
-More information on the `Link` component can be found in the [Link documentation](https://tanstack.com/router/v1/docs/framework/react/api/router/linkComponent).
-
-### Using A Layout
-
-In the File Based Routing setup the layout is located in `src/routes/__root.tsx`. Anything you add to the root route will appear in all the routes. The route content will appear in the JSX where you use the `<Outlet />` component.
-
-Here is an example layout that includes a header:
-
-```tsx
-import { Outlet, createRootRoute } from '@tanstack/react-router'
-import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
-
-import { Link } from "@tanstack/react-router";
-
-export const Route = createRootRoute({
-  component: () => (
-    <>
-      <header>
-        <nav>
-          <Link to="/">Home</Link>
-          <Link to="/about">About</Link>
-        </nav>
-      </header>
-      <Outlet />
-      <TanStackRouterDevtools />
-    </>
-  ),
-})
-```
-
-The `<TanStackRouterDevtools />` component is not required so you can remove it if you don't want it in your layout.
-
-More information on layouts can be found in the [Layouts documentation](https://tanstack.com/router/latest/docs/framework/react/guide/routing-concepts#layouts).
-
-
-## Data Fetching
-
-There are multiple ways to fetch data in your application. You can use TanStack Query to fetch data from a server. But you can also use the `loader` functionality built into TanStack Router to load the data for a route before it's rendered.
-
-For example:
-
-```tsx
-const peopleRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/people",
-  loader: async () => {
-    const response = await fetch("https://swapi.dev/api/people");
-    return response.json() as Promise<{
-      results: {
-        name: string;
-      }[];
-    }>;
-  },
-  component: () => {
-    const data = peopleRoute.useLoaderData();
-    return (
-      <ul>
-        {data.results.map((person) => (
-          <li key={person.name}>{person.name}</li>
-        ))}
-      </ul>
-    );
-  },
-});
-```
-
-Loaders simplify your data fetching logic dramatically. Check out more information in the [Loader documentation](https://tanstack.com/router/latest/docs/framework/react/guide/data-loading#loader-parameters).
-
-### React-Query
-
-React-Query is an excellent addition or alternative to route loading and integrating it into you application is a breeze.
-
-First add your dependencies:
-
-```bash
-npm install @tanstack/react-query @tanstack/react-query-devtools
-```
-
-Next we'll need to create a query client and provider. We recommend putting those in `main.tsx`.
-
-```tsx
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-
-// ...
-
-const queryClient = new QueryClient();
-
-// ...
-
-if (!rootElement.innerHTML) {
-  const root = ReactDOM.createRoot(rootElement);
-
-  root.render(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>
-  );
-}
-```
-
-You can also add TanStack Query Devtools to the root route (optional).
-
-```tsx
-import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-
-const rootRoute = createRootRoute({
-  component: () => (
-    <>
-      <Outlet />
-      <ReactQueryDevtools buttonPosition="top-right" />
-      <TanStackRouterDevtools />
-    </>
-  ),
-});
-```
-
-Now you can use `useQuery` to fetch your data.
-
-```tsx
-import { useQuery } from "@tanstack/react-query";
-
-import "./App.css";
-
-function App() {
-  const { data } = useQuery({
-    queryKey: ["people"],
-    queryFn: () =>
-      fetch("https://swapi.dev/api/people")
-        .then((res) => res.json())
-        .then((data) => data.results as { name: string }[]),
-    initialData: [],
-  });
-
-  return (
-    <div>
-      <ul>
-        {data.map((person) => (
-          <li key={person.name}>{person.name}</li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-export default App;
-```
-
-You can find out everything you need to know on how to use React-Query in the [React-Query documentation](https://tanstack.com/query/latest/docs/framework/react/overview).
-
-## State Management
-
-Another common requirement for React applications is state management. There are many options for state management in React. TanStack Store provides a great starting point for your project.
-
-First you need to add TanStack Store as a dependency:
-
-```bash
-npm install @tanstack/store
-```
-
-Now let's create a simple counter in the `src/App.tsx` file as a demonstration.
-
-```tsx
-import { useStore } from "@tanstack/react-store";
-import { Store } from "@tanstack/store";
-import "./App.css";
-
-const countStore = new Store(0);
-
-function App() {
-  const count = useStore(countStore);
-  return (
-    <div>
-      <button onClick={() => countStore.setState((n) => n + 1)}>
-        Increment - {count}
-      </button>
-    </div>
-  );
-}
-
-export default App;
-```
-
-One of the many nice features of TanStack Store is the ability to derive state from other state. That derived state will update when the base state updates.
-
-Let's check this out by doubling the count using derived state.
-
-```tsx
-import { useStore } from "@tanstack/react-store";
-import { Store, Derived } from "@tanstack/store";
-import "./App.css";
-
-const countStore = new Store(0);
-
-const doubledStore = new Derived({
-  fn: () => countStore.state * 2,
-  deps: [countStore],
-});
-doubledStore.mount();
-
-function App() {
-  const count = useStore(countStore);
-  const doubledCount = useStore(doubledStore);
-
-  return (
-    <div>
-      <button onClick={() => countStore.setState((n) => n + 1)}>
-        Increment - {count}
-      </button>
-      <div>Doubled - {doubledCount}</div>
-    </div>
-  );
-}
-
-export default App;
-```
-
-We use the `Derived` class to create a new store that is derived from another store. The `Derived` class has a `mount` method that will start the derived store updating.
-
-Once we've created the derived store we can use it in the `App` component just like we would any other store using the `useStore` hook.
-
-You can find out everything you need to know on how to use TanStack Store in the [TanStack Store documentation](https://tanstack.com/store/latest).
-
-# Demo files
-
-Files prefixed with `demo` can be safely deleted. They are there to provide a starting point for you to play around with the features you've installed.
-
-# Learn More
-
-You can learn more about all of the offerings from TanStack in the [TanStack documentation](https://tanstack.com).
+- [추첨방 동작·보관·로컬 검증·배포](docs/lunch-rooms.md)
+- [점메추 정보 구조와 방 수명 설계](docs/jeommechu-ia-plan.md)
+- [프로토타입부터 완성품까지의 단계별 기록](docs/lunch-plan.md)
+- [현재 결과 피드백 투표 #20](https://github.com/acee90/random-number-generator/issues/20)
+- [운영 출시 확인 #8](https://github.com/acee90/random-number-generator/issues/8)
