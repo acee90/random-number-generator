@@ -1332,6 +1332,158 @@ describe("LunchRoomServer", () => {
 	});
 });
 
+describe("LunchRoomServer nickname availability", () => {
+	it("normalizes names, excludes only proven identities, and does not register or mutate any participants", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const guestToken = "g".repeat(64);
+		const guest = await connect(
+			server,
+			context,
+			"Alice",
+			undefined,
+			undefined,
+			guestToken,
+		);
+		const storageBefore = structuredClone(context.storage.values);
+		const alarmBefore = context.storage.alarm;
+		const hostBefore = structuredClone(host.state);
+		const guestBefore = structuredClone(guest.state);
+		const sentBefore = [host.sent.length, guest.sent.length];
+		for (const [input, name, available] of [
+			[{ name: " ＡLICE " }, "ALICE", false],
+			[{ name: "새이름" }, "새이름", true],
+			[{ name: "방장" }, "방장", false],
+			[{ name: "방장", hostToken }, "방장", true],
+			[{ name: "alice", guestToken }, "alice", true],
+			[{ name: "방장", guestToken }, "방장", false],
+			[{ name: "방장", guestToken: hostToken }, "방장", false],
+			[{ name: "alice", guestToken: "unknown-guest-proof" }, "alice", false],
+		] as const)
+			expect(await server.checkNicknameAvailability(input)).toEqual({
+				status: 200,
+				body: { name, available },
+			});
+		expect(context.storage.values).toEqual(storageBefore);
+		expect(context.storage.alarm).toBe(alarmBefore);
+		expect(context.sockets.size).toBe(2);
+		expect(host.state).toEqual(hostBefore);
+		expect(guest.state).toEqual(guestBefore);
+		expect([host.sent.length, guest.sent.length]).toEqual(sentBefore);
+		expect(entropy).not.toHaveBeenCalled();
+	});
+
+	it("keeps away names unavailable without refreshing activity and permits offline name reuse", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const guest = await connect(server, context, "동료");
+		vi.advanceTimersByTime(lunchRoomLimits.awayAfterMs);
+		await server.onAlarm();
+		const activeAt = member(host, guest.state?.participant?.id).lastActiveAt;
+		expect(await server.checkNicknameAvailability({ name: "동료" })).toEqual({
+			status: 200,
+			body: { name: "동료", available: false },
+		});
+		expect(member(host, guest.state?.participant?.id)).toMatchObject({
+			status: "away",
+			lastActiveAt: activeAt,
+		});
+		guest.closed = true;
+		await server.onClose(socketConnection(guest));
+		expect(await server.checkNicknameAvailability({ name: "동료" })).toEqual({
+			status: 200,
+			body: { name: "동료", available: true },
+		});
+	});
+
+	it("returns explicit validation and host-proof errors rather than ignoring an invalid supplied proof", async () => {
+		const { server, context } = await room();
+		await connect(server, context, "방장", hostToken);
+		for (const name of ["", " ", "가".repeat(13), "\u200b", "이\n름"])
+			expect(await server.checkNicknameAvailability({ name })).toMatchObject({
+				status: 400,
+				body: { code: "INVALID_NICKNAME" },
+			});
+		for (const invalid of [null, [], false, 1])
+			expect(await server.checkNicknameAvailability(invalid)).toMatchObject({
+				status: 400,
+				body: { code: "INVALID_REQUEST" },
+			});
+		for (const proof of [null, "", 1, "b".repeat(64)]) {
+			const response = await server.checkNicknameAvailability({
+				name: "새이름",
+				hostToken: proof,
+			});
+			expect(response).toEqual({
+				status: 403,
+				body: { code: "HOST_AUTH_FAILED", error: "방장 인증을 확인해 주세요." },
+			});
+		}
+		for (const guestToken of [null, 1, "short"])
+			expect(
+				await server.checkNicknameAvailability({ name: "새이름", guestToken }),
+			).toMatchObject({ status: 400, body: { code: "INVALID_REQUEST" } });
+	});
+
+	it("loads a saved identity for self-exclusion without creating a connection or changing its stored name", async () => {
+		const { server, context } = await room();
+		const guestToken = "g".repeat(64);
+		await connect(
+			server,
+			context,
+			"기존참가자",
+			undefined,
+			undefined,
+			guestToken,
+		);
+		const before = structuredClone(context.storage.values);
+		const restored = createServer(context);
+		expect(
+			await restored.checkNicknameAvailability({
+				name: "기존참가자",
+				guestToken,
+			}),
+		).toEqual({ status: 200, body: { name: "기존참가자", available: true } });
+		expect(context.storage.values).toEqual(before);
+		expect(context.sockets.size).toBe(1);
+	});
+
+	it("returns404 for a missing room and410 for an expired room without extending or deleting data during a check", async () => {
+		const missingContext = new HarnessContext();
+		const missing = createServer(missingContext);
+		expect(await missing.checkNicknameAvailability({ name: "이름" })).toEqual({
+			status: 404,
+			body: { code: "ROOM_NOT_FOUND", error: "방을 찾을 수 없습니다." },
+		});
+		expect(missingContext.storage.values.size).toBe(0);
+		expect(missingContext.sockets.size).toBe(0);
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const before = structuredClone(context.storage.values);
+		const sentBefore = host.sent.length;
+		vi.setSystemTime(latestExpiry(context));
+		expect(await server.checkNicknameAvailability({ name: "이름" })).toEqual({
+			status: 410,
+			body: { code: "ROOM_EXPIRED", error: "방이 만료됐습니다." },
+		});
+		expect(context.storage.values).toEqual(before);
+		expect(context.storage.deleteCount).toBe(0);
+		expect(host.sent).toHaveLength(sentBefore);
+		expect(host.closed).toBe(false);
+	});
+
+	it("does not reserve a checked name and still rejects a join if another person claims it first", async () => {
+		const { server, context } = await room();
+		expect(
+			await server.checkNicknameAvailability({ name: "같은이름" }),
+		).toEqual({ status: 200, body: { name: "같은이름", available: true } });
+		await connect(server, context, "같은이름");
+		const late = await connect(server, context, "같은이름");
+		expect(late.state?.participant).toBeUndefined();
+		expect(hasError(late, "NICKNAME_TAKEN")).toBe(true);
+	});
+});
+
 function storedSnapshot(context: HarnessContext) {
 	return (
 		context.storage.values.get("lunch-room:v1") as {

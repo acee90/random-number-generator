@@ -688,6 +688,7 @@ export default function LunchRoomPage({
 				<main id="main-content" className="room-entry-main">
 					<RoomEntryGate
 						key={roomId}
+						roomId={roomId}
 						pending={room.entryPending}
 						error={room.error}
 						onEnter={room.enter}
