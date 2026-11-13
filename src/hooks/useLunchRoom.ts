@@ -1,5 +1,11 @@
 import PartySocket from "partysocket";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react";
 import {
 	type ClientMessage,
 	clampLunchRoomNickname,
@@ -17,6 +23,7 @@ import {
 	readOrCreateLunchRoomGuestToken,
 	saveLunchRoomName,
 } from "@/lib/lunchRoomClient";
+import { beginRoomTiming } from "@/lib/roomTimings";
 
 export type RoomConnection =
 	| "waiting"
@@ -77,6 +84,7 @@ export function useLunchRoom(
 	const terminalRef = useRef(false);
 	const offsetRef = useRef(0);
 	const measuredClockRef = useRef(false);
+	const finishCommitRef = useRef<(() => void) | null>(null);
 	const nicknameRef = useRef("");
 	const explicitNameRef = useRef(false);
 	const hostTokenRef = useRef<string | undefined>(undefined);
@@ -92,6 +100,18 @@ export function useLunchRoom(
 	);
 	const serverNow = useCallback(() => Date.now() + offsetRef.current, []);
 	const clearError = useCallback(() => setErrorState(null), []);
+	const committedSelfId = self?.id;
+	useLayoutEffect(() => {
+		if (
+			connection !== "connected" ||
+			!committedSelfId ||
+			snapshot?.roomId !== roomId
+		)
+			return;
+		const finish = finishCommitRef.current;
+		finishCommitRef.current = null;
+		finish?.();
+	}, [connection, committedSelfId, snapshot, roomId]);
 	useEffect(() => {
 		if (admissionScopeRef.current !== roomId) {
 			admissionScopeRef.current = roomId;
@@ -118,6 +138,7 @@ export function useLunchRoom(
 		joinedRef.current = false;
 		terminalRef.current = false;
 		measuredClockRef.current = false;
+		finishCommitRef.current = null;
 		snapshotRef.current = null;
 		selfRef.current = null;
 		setSnapshot(null);
@@ -156,6 +177,15 @@ export function useLunchRoom(
 		guestTokenRef.current = hostTokenRef.current
 			? undefined
 			: readOrCreateLunchRoomGuestToken(roomId);
+		let finishSocketOpen: (() => void) | undefined =
+			beginRoomTiming("socket_open");
+		let finishJoinAck: (() => void) | undefined;
+		function finishConnectionTimings() {
+			finishSocketOpen?.();
+			finishJoinAck?.();
+			finishSocketOpen = undefined;
+			finishJoinAck = undefined;
+		}
 		const socket = new PartySocket({
 			host: window.location.host,
 			party: "lunch-rooms",
@@ -248,6 +278,8 @@ export function useLunchRoom(
 			setVotePendingDrawId(null);
 		}
 		function stop(message: string) {
+			finishCommitRef.current = null;
+			finishConnectionTimings();
 			terminalRef.current = true;
 			joinedRef.current = false;
 			clearInterval(pingTimer);
@@ -268,6 +300,8 @@ export function useLunchRoom(
 		}
 		function onOpen() {
 			if (!active || terminalRef.current) return;
+			finishCommitRef.current = null;
+			finishConnectionTimings();
 			joinedRef.current = false;
 			selfRef.current = null;
 			setSelf(null);
@@ -279,6 +313,7 @@ export function useLunchRoom(
 			clockSamples.length = 0;
 			measuredClockRef.current = false;
 			clearVotePending();
+			finishJoinAck = beginRoomTiming("join_ack");
 			socket.send(
 				JSON.stringify({
 					type: "join",
@@ -294,6 +329,8 @@ export function useLunchRoom(
 			pingTimer = setInterval(ping, 15000);
 			joinTimer = setTimeout(() => {
 				if (!active || joinedRef.current || terminalRef.current) return;
+				finishJoinAck?.();
+				finishJoinAck = undefined;
 				setErrorState({
 					kind: "network",
 					message: "방에 연결하는 데 시간이 걸립니다. 다시 연결하고 있습니다.",
@@ -326,6 +363,8 @@ export function useLunchRoom(
 					(message.code === "NICKNAME_TAKEN" ||
 						message.code === "INVALID_NICKNAME")
 				) {
+					finishConnectionTimings();
+					finishCommitRef.current = null;
 					active = false;
 					clearInterval(pingTimer);
 					clearTimeout(joinTimer);
@@ -380,6 +419,11 @@ export function useLunchRoom(
 				setClockOffset(offsetRef.current);
 			}
 			const previous = snapshotRef.current;
+			if (message.self && !joinedRef.current) {
+				finishJoinAck?.();
+				finishJoinAck = undefined;
+				finishCommitRef.current = beginRoomTiming("room_commit");
+			}
 			snapshotRef.current = message.snapshot;
 			setSnapshot(message.snapshot);
 			if (message.self) {
@@ -443,13 +487,20 @@ export function useLunchRoom(
 			)
 				stop("이 방의 이용 시간이 끝났습니다. 새 방을 만들어 주세요.");
 		}
-		function onOffline() {
+		function onOffline(event: Event) {
 			if (!active) return;
+			finishCommitRef.current = null;
+			finishJoinAck?.();
+			finishJoinAck = undefined;
 			clearInterval(pingTimer);
 			clearTimeout(joinTimer);
 			clearActivity();
 			clearPending();
 			if (terminalRef.current) return;
+			if (event.type === "close" || !finishSocketOpen) {
+				finishSocketOpen?.();
+				finishSocketOpen = beginRoomTiming("socket_open");
+			}
 			joinedRef.current = false;
 			selfRef.current = null;
 			setSelf(null);
@@ -487,6 +538,8 @@ export function useLunchRoom(
 		});
 		return () => {
 			active = false;
+			finishCommitRef.current = null;
+			finishConnectionTimings();
 			joinedRef.current = false;
 			clearInterval(pingTimer);
 			clearTimeout(joinTimer);

@@ -14,6 +14,7 @@ import {
 	saveLunchRoomHost,
 	saveLunchRoomName,
 } from "@/lib/lunchRoomClient";
+import { beginRoomTiming } from "@/lib/roomTimings";
 import "./create-lunch-room.css";
 
 export default function CreateLunchRoom({
@@ -59,17 +60,29 @@ export default function CreateLunchRoom({
 		const controller = new AbortController();
 		requestRef.current = controller;
 		try {
-			const response = await fetch("/api/lunch/rooms", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					title: title.trim(),
-					hostName,
-					candidateIds,
-				}),
-				signal: controller.signal,
-			});
-			const body: unknown = await response.json();
+			const finishHttp = beginRoomTiming("create_http");
+			let response: Response;
+			try {
+				response = await fetch("/api/lunch/rooms", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						title: title.trim(),
+						hostName,
+						candidateIds,
+					}),
+					signal: controller.signal,
+				});
+			} finally {
+				finishHttp();
+			}
+			const finishDecode = beginRoomTiming("create_decode");
+			let body: unknown;
+			try {
+				body = await response.json();
+			} finally {
+				finishDecode();
+			}
 			if (controller.signal.aborted) return;
 			const value =
 				body && typeof body === "object"
@@ -92,10 +105,15 @@ export default function CreateLunchRoom({
 			saveLunchRoomHost(value.roomId, value.hostToken);
 			saveLunchRoomName(hostName);
 			prepareLunchRoomEntry(value.roomId, hostName);
-			await router.navigate({
-				to: "/lunch-room/$roomId",
-				params: { roomId: value.roomId },
-			});
+			const finishNavigation = beginRoomTiming("room_navigation");
+			try {
+				await router.navigate({
+					to: "/lunch-room/$roomId",
+					params: { roomId: value.roomId },
+				});
+			} finally {
+				finishNavigation();
+			}
 			setOpen(false);
 		} catch (cause) {
 			if (controller.signal.aborted) return;

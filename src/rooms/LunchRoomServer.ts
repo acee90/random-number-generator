@@ -154,7 +154,10 @@ export class LunchRoomServer extends Server<RoomEnv> {
 	async onStart() {
 		await this.exclusive(async () => {
 			await this.load();
-			if (!this.room) return;
+			if (!this.room) {
+				await this.ctx.storage.deleteAlarm();
+				return;
+			}
 			if (await this.expireIfNeeded()) return;
 			if (this.room.snapshot.status === "fetching") {
 				// An isolate restart cannot resume an external entropy request.
@@ -1052,6 +1055,10 @@ export class LunchRoomServer extends Server<RoomEnv> {
 	private async rejectUnavailable(
 		connection: Connection<SocketState>,
 	): Promise<boolean> {
+		if (this.expired) {
+			this.reject(connection, "ROOM_EXPIRED", "방이 만료됐습니다.", 4008);
+			return true;
+		}
 		if (await this.expireIfNeeded()) return true;
 		if (!this.room) {
 			this.reject(
@@ -1066,15 +1073,21 @@ export class LunchRoomServer extends Server<RoomEnv> {
 	}
 
 	private async expireIfNeeded(): Promise<boolean> {
-		if (!this.room || Date.now() < this.room.snapshot.expiresAt) return false;
-		this.room.snapshot.status = "closed";
-		this.publish();
+		if (
+			!this.room ||
+			(!this.expired && Date.now() < this.room.snapshot.expiresAt)
+		)
+			return false;
+		this.expired = true;
+		if (this.room.snapshot.status !== "closed") {
+			this.room.snapshot.status = "closed";
+			this.publish();
+		}
 		for (const connection of this.getConnections<SocketState>())
 			this.reject(connection, "ROOM_EXPIRED", "방이 만료됐습니다.", 4008);
-		this.room = null;
-		this.expired = true;
 		await this.ctx.storage.deleteAll();
 		await this.ctx.storage.deleteAlarm();
+		this.room = null;
 		return true;
 	}
 
@@ -1136,6 +1149,10 @@ export class LunchRoomServer extends Server<RoomEnv> {
 	async onAlarm() {
 		await this.exclusive(async () => {
 			await this.load();
+			if (!this.room) {
+				await this.ctx.storage.deleteAlarm();
+				return;
+			}
 			if (await this.expireIfNeeded()) return;
 			await this.finishOverdueDraw();
 			await this.closePendingConnections();

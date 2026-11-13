@@ -4,6 +4,7 @@ import {
 	readLunchRoomHost,
 	readOrCreateLunchRoomGuestToken,
 } from "@/lib/lunchRoomClient";
+import { beginRoomTiming } from "@/lib/roomTimings";
 
 type AvailabilityStatus =
 	| "idle"
@@ -53,10 +54,13 @@ export function useNicknameAvailability({
 		const controller = new AbortController();
 		const requestedName = normalizedName;
 		let requestTimeout: ReturnType<typeof setTimeout> | undefined;
+		let finishCheck: (() => void) | undefined;
 		const timer = setTimeout(async () => {
+			finishCheck = beginRoomTiming("nickname_check");
 			requestTimeout = setTimeout(() => {
 				if (!active || sequenceRef.current !== sequence) return;
 				controller.abort();
+				finishCheck?.();
 				setResult({ roomId, name: requestedName, attempt, status: "error" });
 			}, 8000);
 			let status: CheckResult["status"] = "error";
@@ -92,6 +96,7 @@ export function useNicknameAvailability({
 				// A failed check never grants entry; the user can retry explicitly.
 			} finally {
 				clearTimeout(requestTimeout);
+				finishCheck?.();
 			}
 			if (
 				!active ||
@@ -106,6 +111,7 @@ export function useNicknameAvailability({
 			clearTimeout(timer);
 			clearTimeout(requestTimeout);
 			controller.abort();
+			finishCheck?.();
 		};
 	}, [roomId, normalizedName, composing, enabled, rejected, attempt]);
 

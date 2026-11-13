@@ -73,7 +73,7 @@ TanStack Start · React · Cloudflare Workers · Durable Objects · PartyServer/
 
 ## 로컬 실행
 
-Node.js와 npm이 필요합니다. 저장소 루트에서 실행합니다.
+Node.js 22 계열(22.12 이상)과 npm을 사용합니다. 저장소 루트에서 실행합니다.
 
 ```powershell
 npm ci
@@ -107,6 +107,19 @@ npm run serve
 `npm run serve`는 빌드한 결과를 미리 봅니다. `npm run preview`는 빌드와 미리보기를 이어서 실행합니다. 바인딩을 변경하면 `npm run cf-typegen`으로 타입을 다시 생성합니다.
 
 테스트는 난수 범위·추첨 조건, 방 입장·권한·접속 상태, 다중 연결·투표 중복 방지·기록 불변성과 UI 동작을 검증합니다. 운영 확인 범위와 남은 확인 항목은 [출시 체크리스트 #8](https://github.com/acee90/random-number-generator/issues/8)에서 관리합니다.
+
+### 운영 검증 재현
+
+```powershell
+npm run check:release:web -- https://jeommechu.dev
+npm run check:release:room -- --origin https://jeommechu.dev
+```
+
+웹 검사는 공개 경로의 검색·공유 메타데이터와 정적 파일을 확인합니다. 방 검사는 새 검증용 방을 만들어 최대 두 번 추첨하며, 권한·양방향 채팅·늦은 입장·재접속·투표·기록 보존을 확인한 뒤 연결을 모두 종료합니다. 키·인증 증명은 출력하지 않습니다. 생성한 방은 기존 24시간 정책에 따라 만료됩니다.
+
+입장 시간을 구간별로 볼 때는 새 페이지를 `?debugRoom=1`로 열고 브라우저 콘솔의 `[room timing]`을 확인합니다. HTTP·응답 해석·화면 이동·닉네임 검사·소켓 연결·입장 승인·첫 화면 커밋 시간을 기록하며, 이름·주소·키는 기록하지 않습니다. 첫 화면 커밋은 React 갱신 완료 시점이며 실제 화면 표시나 일반적인 속도를 보장하는 수치가 아닙니다. 일반 페이지에서는 계측하지 않습니다.
+
+버전·키 바인딩 확인과 복구 기준은 [운영 확인·복구 문서](docs/release-runbook.md)를 참고하세요.
 
 ## 배포
 

@@ -1103,6 +1103,109 @@ describe("LunchRoomServer", () => {
 		expect(hasError(late, "ROOM_EXPIRED")).toBe(true);
 	});
 
+	it("retries failed expiry data deletion on the next alarm without reopening the room", async () => {
+		const { server, context, input } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const deleteAll = vi
+			.spyOn(context.storage, "deleteAll")
+			.mockRejectedValueOnce(new Error("temporary data deletion failure"));
+		vi.setSystemTime(input.createdAt + lunchRoomLimits.ttlMs);
+		await expect(server.onAlarm()).rejects.toThrow(
+			"temporary data deletion failure",
+		);
+		expect(host.closed).toBe(true);
+		expect(host.closeCode).toBe(4008);
+		expect(context.storage.values.has("lunch-room:v1")).toBe(true);
+		expect(
+			await server.checkNicknameAvailability({ name: "참가자" }),
+		).toMatchObject({ status: 410 });
+		await server.onAlarm();
+		expect(deleteAll).toHaveBeenCalledTimes(2);
+		expect(context.storage.values.size).toBe(0);
+		expect(context.storage.alarm).toBeNull();
+		await server.onAlarm();
+		expect(deleteAll).toHaveBeenCalledTimes(2);
+	});
+
+	it("retries alarm deletion after data deletion has already succeeded", async () => {
+		const { server, context, input } = await room();
+		await connect(server, context, "방장", hostToken);
+		const deleteAlarm = vi
+			.spyOn(context.storage, "deleteAlarm")
+			.mockRejectedValueOnce(new Error("temporary alarm deletion failure"));
+		vi.setSystemTime(input.createdAt + lunchRoomLimits.ttlMs);
+		await expect(server.onAlarm()).rejects.toThrow(
+			"temporary alarm deletion failure",
+		);
+		expect(context.storage.values.size).toBe(0);
+		expect(context.storage.alarm).not.toBeNull();
+		expect(
+			await server.checkNicknameAvailability({ name: "참가자" }),
+		).toMatchObject({ status: 410 });
+		await server.onAlarm();
+		expect(deleteAlarm).toHaveBeenCalledTimes(2);
+		expect(context.storage.alarm).toBeNull();
+		expect(context.storage.values.size).toBe(0);
+	});
+
+	it("keeps repeated cleanup failures retryable in one isolate and rejects fresh sockets without publishing expired room data", async () => {
+		const { server, context, input } = await room();
+		await connect(server, context, "방장", hostToken);
+		const guest = await connect(server, context, "참가자");
+		await send(server, guest, {
+			type: "chat",
+			id: "before-expiry-chat",
+			text: "expired private test content",
+		});
+		const deleteAll = vi
+			.spyOn(context.storage, "deleteAll")
+			.mockRejectedValue(new Error("temporary cleanup failure"));
+		vi.setSystemTime(input.createdAt + lunchRoomLimits.ttlMs);
+		for (let attempt = 0; attempt < 3; attempt++)
+			await expect(server.onAlarm()).rejects.toThrow(
+				"temporary cleanup failure",
+			);
+		expect(deleteAll).toHaveBeenCalledTimes(3);
+		vi.setSystemTime(input.createdAt + lunchRoomLimits.ttlMs - 60_000);
+		const late = await connect(server, context, "새 참가자");
+		expect(late.closed).toBe(true);
+		expect(messages(late)).toEqual([
+			{ type: "error", code: "ROOM_EXPIRED", message: "방이 만료됐습니다." },
+		]);
+		expect(late.sent.join(" ")).not.toContain("expired private test content");
+		expect(deleteAll).toHaveBeenCalledTimes(3);
+		deleteAll.mockRestore();
+		await server.onAlarm();
+		expect(context.storage.values.size).toBe(0);
+		expect(context.storage.alarm).toBeNull();
+	});
+
+	it.each([
+		"startup",
+		"alarm",
+	])("removes an orphan alarm after a restart between deleting room data and its alarm: %s", async (entrypoint) => {
+		const { server, context, input } = await room();
+		await connect(server, context, "방장", hostToken);
+		const deleteAlarm = vi
+			.spyOn(context.storage, "deleteAlarm")
+			.mockRejectedValueOnce(new Error("interrupted cleanup"));
+		vi.setSystemTime(input.createdAt + lunchRoomLimits.ttlMs);
+		await expect(server.onAlarm()).rejects.toThrow("interrupted cleanup");
+		expect(context.storage.values.size).toBe(0);
+		expect(context.storage.alarm).not.toBeNull();
+		deleteAlarm.mockRestore();
+		const restored = createServer(context);
+		if (entrypoint === "startup") await restored.onStart();
+		else await restored.onAlarm();
+		expect(context.storage.alarm).toBeNull();
+		expect(context.storage.values.size).toBe(0);
+		const late = await connect(restored, context, "늦은 참가자");
+		expect(hasError(late, "ROOM_NOT_FOUND")).toBe(true);
+		expect(messages(late).some((message) => message.type === "snapshot")).toBe(
+			false,
+		);
+	});
+
 	it("becomes away at exactly five minutes and ping does not postpone the transition", async () => {
 		const { server, context } = await room();
 		const host = await connect(server, context, "방장", hostToken);
