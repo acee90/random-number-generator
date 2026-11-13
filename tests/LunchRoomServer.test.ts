@@ -412,6 +412,8 @@ describe("LunchRoomServer", () => {
 					name: participant.isHost ? hostName : guestName,
 				}));
 		}
+		if (stored.snapshot.draw)
+			stored.snapshot.history = [structuredClone(stored.snapshot.draw)];
 		stored.snapshot.messages.push({
 			id: "legacy-message",
 			participantId: guestId as string,
@@ -819,7 +821,7 @@ describe("LunchRoomServer", () => {
 		expect(systemEvents(second, "draw-started")).toHaveLength(1);
 	});
 
-	it("shares canonical timing and an immutable candidate snapshot, then records completion only once", async () => {
+	it("shares canonical timing and immutable candidates, then archives a completed result only when the next draw starts", async () => {
 		const { server, context } = await room();
 		const host = await connect(server, context, "방장", hostToken);
 		await send(server, host, { type: "start", id: "first-draw" });
@@ -840,7 +842,7 @@ describe("LunchRoomServer", () => {
 		await server.onAlarm();
 		await server.onAlarm();
 		expect(latestSnapshot(host).snapshot.status).toBe("waiting");
-		expect(latestSnapshot(host).snapshot.history).toEqual([draw]);
+		expect(latestSnapshot(host).snapshot.history).toEqual([]);
 		expect(systemEvents(host, "draw-finished")).toHaveLength(1);
 		expect(systemEvents(host, "draw-finished")[0].text).toContain(
 			candidates[1].name,
@@ -853,7 +855,14 @@ describe("LunchRoomServer", () => {
 		expect(snapshot.listVersion).toBe(2);
 		expect(snapshot.candidates).toHaveLength(2);
 		expect(snapshot.draw?.candidates).toEqual(candidates);
-		expect(snapshot.history[0].candidates).toEqual(candidates);
+		expect(snapshot.history).toEqual([]);
+		await send(server, host, { type: "start", id: "second-draw" });
+		expect(latestSnapshot(host).snapshot.history).toEqual([draw]);
+		expect(latestSnapshot(host).snapshot.draw).toBeNull();
+		await context.drain();
+		expect(latestSnapshot(host).snapshot.history[0].candidates).toEqual(
+			candidates,
+		);
 	});
 
 	it("captures participant names, request time, and equal probabilities before entropy and preserves them in history", async () => {
@@ -891,8 +900,14 @@ describe("LunchRoomServer", () => {
 		await server.onAlarm();
 		const restored = createServer(context);
 		await restored.onStart();
-		expect(latestSnapshot(host).snapshot.history[0]).toEqual(draw);
+		expect(latestSnapshot(host).snapshot.history).toEqual([]);
 		expect(latestSnapshot(host).snapshot.draw).toEqual(draw);
+		await send(restored, host, {
+			type: "start",
+			id: "archive-captured-metadata",
+		});
+		expect(latestSnapshot(host).snapshot.history[0]).toEqual(draw);
+		await context.drain();
 	});
 
 	it("restores a legacy draw without fabricating missing participant or probability metadata", async () => {
@@ -908,11 +923,14 @@ describe("LunchRoomServer", () => {
 			snapshot: RoomSnapshot;
 			presentParticipantIds?: string[];
 		};
+		if (stored.snapshot.draw)
+			stored.snapshot.history = [structuredClone(stored.snapshot.draw)];
 		for (const draw of [stored.snapshot.draw, ...stored.snapshot.history]) {
 			if (!draw) continue;
 			delete draw.participants;
 			delete draw.requestedAt;
 			delete draw.probabilities;
+			delete draw.votes;
 		}
 		delete stored.presentParticipantIds;
 		context.storage.values.set("lunch-room:v1", stored);
@@ -924,6 +942,7 @@ describe("LunchRoomServer", () => {
 		expect(snapshot.draw?.participants).toBeUndefined();
 		expect(snapshot.draw?.requestedAt).toBeUndefined();
 		expect(snapshot.draw?.probabilities).toBeUndefined();
+		expect(snapshot.draw?.votes).toBeUndefined();
 		expect(snapshot.history[0]).toEqual(snapshot.draw);
 		expect(snapshot.messages).toEqual(beforeWake);
 	});
@@ -1012,7 +1031,7 @@ describe("LunchRoomServer", () => {
 		expect(latestSnapshot(host).snapshot.status).toBe("drawing");
 	});
 
-	it("finalizes an overdue draw on wake and retains only the latest 20 completed rounds", async () => {
+	it("finalizes an overdue draw on wake and retains the latest20 archived rounds separately from the current result", async () => {
 		const { server, context } = await room();
 		const host = await connect(server, context, "방장", hostToken);
 		await send(server, host, { type: "start", id: "draw-0" });
@@ -1020,7 +1039,8 @@ describe("LunchRoomServer", () => {
 		vi.advanceTimersByTime(8700);
 		const restored = createServer(context);
 		await restored.onStart();
-		expect(latestSnapshot(host).snapshot.history[0].id).toBe("draw-0");
+		expect(latestSnapshot(host).snapshot.history).toEqual([]);
+		expect(latestSnapshot(host).snapshot.draw?.id).toBe("draw-0");
 		for (let index = 1; index <= 20; index++) {
 			await send(restored, host, { type: "start", id: `draw-${index}` });
 			await context.drain();
@@ -1029,8 +1049,9 @@ describe("LunchRoomServer", () => {
 		}
 		const history = latestSnapshot(host).snapshot.history;
 		expect(history).toHaveLength(20);
-		expect(history[0].id).toBe("draw-20");
-		expect(history.at(-1)?.id).toBe("draw-1");
+		expect(history[0].id).toBe("draw-19");
+		expect(history.at(-1)?.id).toBe("draw-0");
+		expect(latestSnapshot(host).snapshot.draw?.id).toBe("draw-20");
 		expect(entropy).toHaveBeenCalledTimes(21);
 	});
 
@@ -1329,6 +1350,429 @@ describe("LunchRoomServer", () => {
 		await send(restored, host, { type: "ping", clientTime: Date.now() });
 		expect(member(host).lastActiveAt).toBe(joinedAt);
 		expect(context.storage.alarm).toBe(latestExpiry(context));
+	});
+});
+
+describe("LunchRoomServer irreversible current-result votes", () => {
+	const guestProof = "v".repeat(64);
+	async function votingRoom(finished = true) {
+		const value = await room();
+		const host = await connect(value.server, value.context, "방장", hostToken);
+		const guest = await connect(
+			value.server,
+			value.context,
+			"투표참가자",
+			undefined,
+			undefined,
+			guestProof,
+		);
+		await send(value.server, host, { type: "start", id: "vote-draw-1" });
+		await value.context.drain();
+		if (finished) {
+			vi.advanceTimersByTime(8700);
+			await value.server.onAlarm();
+		}
+		const draw = latestSnapshot(host).snapshot.draw;
+		if (!draw) throw new Error("Expected draw for voting");
+		return { ...value, host, guest, draw };
+	}
+	function voteErrors(socket: TestSocket, requestId: string) {
+		return messages(socket).filter(
+			(message) => message.type === "error" && message.requestId === requestId,
+		);
+	}
+
+	it("records authoritative guest identity and server reaction timing, then publishes the current result without modifying history", async () => {
+		const { server, context, host, guest, draw } = await votingRoom();
+		const beforeEvents = systemEvents(host);
+		vi.advanceTimersByTime(1450);
+		const votedAt = Date.now();
+		await send(server, guest, {
+			type: "vote",
+			id: "vote-up",
+			drawId: draw.id,
+			vote: "up",
+			participantId: latestSnapshot(host).self?.id,
+			name: "위조방장",
+			timestamp: 0,
+			reactionMs: 0,
+		});
+		const expected = [
+			{
+				participantId: latestSnapshot(guest).self?.id,
+				name: "투표참가자",
+				vote: "up",
+				timestamp: votedAt,
+				reactionMs: 1450,
+			},
+		];
+		expect(latestSnapshot(host).snapshot.draw?.votes).toEqual(expected);
+		expect(latestSnapshot(guest).snapshot.draw?.votes).toEqual(expected);
+		expect(latestSnapshot(host).snapshot.history).toEqual([]);
+		expect(systemEvents(host)).toEqual(beforeEvents);
+		expect(guest.sent.join(" ")).not.toContain(guestProof);
+		expect(host.sent.join(" ")).not.toContain(hostToken);
+		const persisted = context.storage.values.get("lunch-room:v1") as {
+			snapshot: RoomSnapshot;
+		};
+		expect(persisted.snapshot.draw?.votes).toEqual(expected);
+		expect(entropy).toHaveBeenCalledTimes(1);
+	});
+
+	it("rejects unjoined users, hosts, unknown rounds and pre-result votes with the request ID, but accepts exactly at reveal", async () => {
+		const { server, context, host, guest, draw } = await votingRoom(false);
+		const pending = await connect(server, context);
+		await send(server, pending, {
+			type: "vote",
+			id: "unjoined-vote",
+			drawId: draw.id,
+			vote: "up",
+		});
+		expect(voteErrors(pending, "unjoined-vote")).toMatchObject([
+			{ code: "JOIN_REQUIRED" },
+		]);
+		await send(server, host, {
+			type: "vote",
+			id: "host-vote",
+			drawId: draw.id,
+			vote: "up",
+		});
+		expect(voteErrors(host, "host-vote")).toMatchObject([
+			{ code: "HOST_CANNOT_VOTE" },
+		]);
+		await send(server, guest, {
+			type: "vote",
+			id: "unknown-vote",
+			drawId: "missing-draw",
+			vote: "down",
+		});
+		expect(voteErrors(guest, "unknown-vote")).toMatchObject([
+			{ code: "VOTE_NOT_FOUND" },
+		]);
+		vi.advanceTimersByTime(8699);
+		await send(server, guest, {
+			type: "vote",
+			id: "early-vote",
+			drawId: draw.id,
+			vote: "down",
+		});
+		expect(voteErrors(guest, "early-vote")).toMatchObject([
+			{ code: "VOTE_NOT_READY" },
+		]);
+		expect(latestSnapshot(host).snapshot.draw?.votes).toEqual([]);
+		vi.advanceTimersByTime(1);
+		await send(server, guest, {
+			type: "vote",
+			id: "on-time-vote",
+			drawId: draw.id,
+			vote: "down",
+		});
+		expect(latestSnapshot(host).snapshot.draw?.votes).toMatchObject([
+			{ vote: "down", reactionMs: 0 },
+		]);
+		expect(latestSnapshot(host).snapshot.status).toBe("waiting");
+	});
+
+	it("lets only the first opposite vote win across same-identity tabs, renaming and a persisted reconnect", async () => {
+		const { server, context, host, guest, draw } = await votingRoom();
+		const otherTab = await connect(
+			server,
+			context,
+			"오래된이름",
+			undefined,
+			undefined,
+			guestProof,
+		);
+		const participantId = latestSnapshot(guest).self?.id;
+		await Promise.all([
+			send(server, guest, {
+				type: "vote",
+				id: "first-choice",
+				drawId: draw.id,
+				vote: "up",
+			}),
+			send(server, otherTab, {
+				type: "vote",
+				id: "opposite-choice",
+				drawId: draw.id,
+				vote: "down",
+			}),
+		]);
+		const firstVote = structuredClone(
+			latestSnapshot(host).snapshot.draw?.votes,
+		);
+		expect(firstVote).toMatchObject([
+			{ participantId, name: "투표참가자", vote: "up" },
+		]);
+		expect(voteErrors(otherTab, "opposite-choice")).toMatchObject([
+			{ code: "VOTE_ALREADY_CAST" },
+		]);
+		expect(messages(otherTab).at(-1)).toMatchObject({
+			type: "snapshot",
+			snapshot: { draw: { votes: firstVote } },
+		});
+		await send(server, guest, { type: "join", name: "바꾼참가자" });
+		await send(server, guest, {
+			type: "vote",
+			id: "renamed-choice",
+			drawId: draw.id,
+			vote: "down",
+		});
+		expect(voteErrors(guest, "renamed-choice")).toMatchObject([
+			{ code: "VOTE_ALREADY_CAST" },
+		]);
+		for (const socket of [guest, otherTab]) {
+			socket.closed = true;
+			await server.onClose(socketConnection(socket));
+		}
+		const restored = createServer(context);
+		await restored.onStart();
+		const returned = await connect(
+			restored,
+			context,
+			"입장입력값",
+			undefined,
+			undefined,
+			guestProof,
+		);
+		expect(latestSnapshot(returned).self?.id).toBe(participantId);
+		await send(restored, returned, {
+			type: "vote",
+			id: "returned-choice",
+			drawId: draw.id,
+			vote: "down",
+		});
+		expect(voteErrors(returned, "returned-choice")).toMatchObject([
+			{ code: "VOTE_ALREADY_CAST" },
+		]);
+		expect(latestSnapshot(host).snapshot.draw?.votes).toEqual(firstVote);
+	});
+
+	it("keeps voting open without a timer until the next draw archives and freezes the complete result", async () => {
+		const { server, context, host, guest, draw } = await votingRoom();
+		vi.advanceTimersByTime(4 * 60 * 60 * 1000);
+		await send(server, guest, {
+			type: "vote",
+			id: "hours-late",
+			drawId: draw.id,
+			vote: "down",
+		});
+		expect(latestSnapshot(host).snapshot.draw?.votes).toMatchObject([
+			{ reactionMs: 4 * 60 * 60 * 1000 },
+		]);
+		const frozen = structuredClone(latestSnapshot(host).snapshot.draw);
+		await send(server, host, { type: "start", id: "vote-draw-2" });
+		expect(latestSnapshot(host).snapshot.draw).toBeNull();
+		expect(latestSnapshot(host).snapshot.history).toEqual([frozen]);
+		await send(server, guest, {
+			type: "vote",
+			id: "archived-choice",
+			drawId: draw.id,
+			vote: "up",
+		});
+		expect(voteErrors(guest, "archived-choice")).toMatchObject([
+			{ code: "VOTE_CLOSED" },
+		]);
+		await context.drain();
+		vi.advanceTimersByTime(8700);
+		await server.onAlarm();
+		await send(server, guest, {
+			type: "vote",
+			id: "next-choice",
+			drawId: "vote-draw-2",
+			vote: "up",
+		});
+		expect(latestSnapshot(host).snapshot.draw?.votes).toMatchObject([
+			{ vote: "up" },
+		]);
+		expect(latestSnapshot(host).snapshot.history).toEqual([frozen]);
+	});
+
+	it.each([
+		"vote-first",
+		"start-first",
+	])("serializes a next-draw race so archived votes never change: %s", async (order) => {
+		const { server, context, host, guest, draw } = await votingRoom();
+		const vote = () =>
+			send(server, guest, {
+				type: "vote",
+				id: "racing-choice",
+				drawId: draw.id,
+				vote: "up",
+			});
+		const start = () =>
+			send(server, host, { type: "start", id: "racing-next-draw" });
+		await Promise.all(
+			order === "vote-first" ? [vote(), start()] : [start(), vote()],
+		);
+		await context.drain();
+		const archived = latestSnapshot(host).snapshot.history[0];
+		expect(archived.id).toBe(draw.id);
+		expect(archived.votes?.length ?? 0).toBe(order === "vote-first" ? 1 : 0);
+		if (order === "start-first")
+			expect(voteErrors(guest, "racing-choice")).toMatchObject([
+				{ code: "VOTE_CLOSED" },
+			]);
+		const frozen = structuredClone(archived);
+		await send(server, guest, {
+			type: "vote",
+			id: "post-race-choice",
+			drawId: draw.id,
+			vote: "down",
+		});
+		expect(latestSnapshot(host).snapshot.history[0]).toEqual(frozen);
+	});
+
+	it("keeps a previous result archived and closed if fetching its replacement fails", async () => {
+		const { server, context, host, guest, draw } = await votingRoom();
+		await send(server, guest, {
+			type: "vote",
+			id: "before-failure-choice",
+			drawId: draw.id,
+			vote: "up",
+		});
+		const frozen = structuredClone(latestSnapshot(host).snapshot.draw);
+		entropy.mockRejectedValueOnce(new Error("test entropy failure"));
+		await send(server, host, { type: "start", id: "failed-next-draw" });
+		await context.drain();
+		expect(latestSnapshot(host).snapshot).toMatchObject({
+			status: "waiting",
+			draw: null,
+			history: [frozen],
+		});
+		await send(server, guest, {
+			type: "vote",
+			id: "after-failure-choice",
+			drawId: draw.id,
+			vote: "down",
+		});
+		expect(voteErrors(guest, "after-failure-choice")).toMatchObject([
+			{ code: "VOTE_CLOSED" },
+		]);
+		await send(server, host, { type: "start", id: "fresh-next-draw" });
+		await context.drain();
+		expect(latestSnapshot(host).snapshot.history).toEqual([frozen]);
+	});
+
+	it("does not reopen or alter legacy results already copied into history", async () => {
+		const { context, host, guest, draw } = await votingRoom();
+		const saved = structuredClone(
+			context.storage.values.get("lunch-room:v1"),
+		) as { snapshot: RoomSnapshot };
+		saved.snapshot.history = [structuredClone(draw)];
+		context.storage.values.set("lunch-room:v1", saved);
+		const restored = createServer(context);
+		await restored.onStart();
+		await send(restored, guest, {
+			type: "vote",
+			id: "legacy-history-choice",
+			drawId: draw.id,
+			vote: "up",
+		});
+		expect(voteErrors(guest, "legacy-history-choice")).toMatchObject([
+			{ code: "VOTE_CLOSED" },
+		]);
+		expect(latestSnapshot(host).snapshot.history).toEqual([draw]);
+		await send(restored, host, { type: "start", id: "after-legacy-history" });
+		await context.drain();
+		expect(latestSnapshot(host).snapshot.history).toEqual([draw]);
+	});
+
+	it("caps each result at60 ballots and retains voter proofs through roster eviction and server reload", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		await send(server, host, { type: "start", id: "many-votes-1" });
+		await context.drain();
+		vi.advanceTimersByTime(8700);
+		await server.onAlarm();
+		const voters: { id: string; token: string }[] = [];
+		for (let index = 0; index < 65; index++) {
+			vi.advanceTimersByTime(1);
+			const token = `retained-voter-proof-${index}`;
+			const guest = await connect(
+				server,
+				context,
+				`투표자${index}`,
+				undefined,
+				undefined,
+				token,
+			);
+			voters.push({ id: latestSnapshot(guest).self?.id ?? "", token });
+			if (index === 60) {
+				await send(server, guest, {
+					type: "vote",
+					id: "over-cap-choice",
+					drawId: "many-votes-1",
+					vote: "up",
+				});
+				expect(voteErrors(guest, "over-cap-choice")).toMatchObject([
+					{ code: "VOTE_LIMIT" },
+				]);
+				await send(server, host, { type: "start", id: "many-votes-2" });
+				await context.drain();
+				vi.advanceTimersByTime(8700);
+				await server.onAlarm();
+			}
+			await send(server, guest, {
+				type: "vote",
+				id: `choice-${index}`,
+				drawId: index < 60 ? "many-votes-1" : "many-votes-2",
+				vote: "up",
+			});
+			guest.closed = true;
+			await server.onClose(socketConnection(guest));
+		}
+		for (let index = 0; index < 65; index++) {
+			vi.advanceTimersByTime(1);
+			const guest = await connect(
+				server,
+				context,
+				`대기자${index}`,
+				undefined,
+				undefined,
+				`nonvoter-guest-proof-${index}`,
+			);
+			guest.closed = true;
+			await server.onClose(socketConnection(guest));
+		}
+		const currentVoter = voters[64];
+		const before = latestSnapshot(host).snapshot;
+		expect(before.history[0].votes).toHaveLength(60);
+		expect(before.draw?.votes).toHaveLength(5);
+		expect(before.members?.some((entry) => entry.id === currentVoter.id)).toBe(
+			false,
+		);
+		const stored = context.storage.values.get("lunch-room:v1") as {
+			guestTokenIds: Record<string, string>;
+		};
+		expect(Object.values(stored.guestTokenIds)).toContain(currentVoter.id);
+		expect(Object.keys(stored.guestTokenIds).length).toBeGreaterThan(60);
+		expect(Object.keys(stored.guestTokenIds).length).toBeLessThanOrEqual(
+			lunchRoomLimits.maxMembers * (lunchRoomLimits.maxHistory + 2),
+		);
+		const restored = createServer(context);
+		await restored.onStart();
+		const returned = await connect(
+			restored,
+			context,
+			"돌아온참가자",
+			undefined,
+			undefined,
+			currentVoter.token,
+		);
+		expect(latestSnapshot(returned).self?.id).toBe(currentVoter.id);
+		await send(restored, returned, {
+			type: "vote",
+			id: "evicted-voter-repeat",
+			drawId: "many-votes-2",
+			vote: "down",
+		});
+		expect(voteErrors(returned, "evicted-voter-repeat")).toMatchObject([
+			{ code: "VOTE_ALREADY_CAST" },
+		]);
+		expect(latestSnapshot(host).snapshot.draw?.votes).toEqual(
+			before.draw?.votes,
+		);
 	});
 });
 

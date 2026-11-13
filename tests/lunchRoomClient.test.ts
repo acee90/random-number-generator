@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const roomId = "12345678-abcd-4abc-8abc-123456789012";
 const token = "a".repeat(64);
 const hostKey = `randomlab:lunch-room-host:${roomId}`;
+const guestKey = `randomlab:lunch-room-guest:${roomId}`;
 const nameKey = "randomlab:lunch-room-name";
 const storageDescriptors = {
 	localStorage: Object.getOwnPropertyDescriptor(window, "localStorage"),
@@ -116,15 +117,13 @@ describe("lunch room browser credentials", () => {
 		client.saveLunchRoomName("가".repeat(13));
 		expect(client.readLunchRoomName()).toBe("😀".repeat(6));
 	});
-	it("keeps a distinct guest proof per room in session storage, restores it on reload, and never writes it to local storage", async () => {
+	it("shares a distinct private guest proof per room through local storage and restores it on reload", async () => {
 		let client = await import("../src/lib/lunchRoomClient");
 		const proof = client.readOrCreateLunchRoomGuestToken(roomId);
 		expect(proof).toMatch(/^[0-9a-f]{64}$/);
 		expect(client.readOrCreateLunchRoomGuestToken(roomId)).toBe(proof);
-		expect(
-			window.sessionStorage.getItem(`randomlab:lunch-room-guest:${roomId}`),
-		).toBe(proof);
-		expect(window.localStorage.length).toBe(0);
+		expect(window.sessionStorage.getItem(guestKey)).toBe(proof);
+		expect(window.localStorage.getItem(guestKey)).toBe(proof);
 		const otherId = "22345678-abcd-4abc-8abc-123456789012";
 		expect(client.readOrCreateLunchRoomGuestToken(otherId)).not.toBe(proof);
 		vi.resetModules();
@@ -132,24 +131,84 @@ describe("lunch room browser credentials", () => {
 		expect(client.readOrCreateLunchRoomGuestToken(roomId)).toBe(proof);
 	});
 
-	it("replaces an invalid guest proof and rejects invalid room IDs", async () => {
-		window.sessionStorage.setItem(
-			`randomlab:lunch-room-guest:${roomId}`,
-			"bad token",
-		);
+	it("restores the same guest identity in a fresh tab with separate session storage", async () => {
+		let client = await import("../src/lib/lunchRoomClient");
+		const proof = client.readOrCreateLunchRoomGuestToken(roomId);
+		window.sessionStorage.clear();
+		vi.resetModules();
+		client = await import("../src/lib/lunchRoomClient");
+		expect(client.readOrCreateLunchRoomGuestToken(roomId)).toBe(proof);
+		expect(window.sessionStorage.getItem(guestKey)).toBe(proof);
+	});
+
+	it("prefers the shared canonical guest proof over stale memory and session proofs", async () => {
 		const client = await import("../src/lib/lunchRoomClient");
-		expect(client.readOrCreateLunchRoomGuestToken(roomId)).toMatch(
-			/^[0-9a-f]{64}$/,
-		);
+		const original = client.readOrCreateLunchRoomGuestToken(roomId);
+		const canonical = "c".repeat(64);
+		expect(original).not.toBe(canonical);
+		window.localStorage.setItem(guestKey, canonical);
+		window.sessionStorage.setItem(guestKey, "d".repeat(64));
+		expect(client.readOrCreateLunchRoomGuestToken(roomId)).toBe(canonical);
+		expect(window.sessionStorage.getItem(guestKey)).toBe(canonical);
+		blockStorage("localStorage");
+		blockStorage("sessionStorage");
+		expect(client.readOrCreateLunchRoomGuestToken(roomId)).toBe(canonical);
+	});
+
+	it("migrates a valid legacy session guest proof without replacing its identity", async () => {
+		window.sessionStorage.setItem(guestKey, token);
+		const client = await import("../src/lib/lunchRoomClient");
+		expect(client.readOrCreateLunchRoomGuestToken(roomId)).toBe(token);
+		expect(window.localStorage.getItem(guestKey)).toBe(token);
+	});
+
+	it("uses a valid session guest proof when the shared value is corrupt", async () => {
+		window.localStorage.setItem(guestKey, "corrupt proof");
+		window.sessionStorage.setItem(guestKey, token);
+		const client = await import("../src/lib/lunchRoomClient");
+		expect(client.readOrCreateLunchRoomGuestToken(roomId)).toBe(token);
+		expect(window.localStorage.getItem(guestKey)).toBe(token);
+	});
+
+	it("replaces an invalid guest proof and rejects invalid room IDs", async () => {
+		window.localStorage.setItem(guestKey, "bad shared token");
+		window.sessionStorage.setItem(guestKey, "bad token");
+		const client = await import("../src/lib/lunchRoomClient");
+		const proof = client.readOrCreateLunchRoomGuestToken(roomId);
+		expect(proof).toMatch(/^[0-9a-f]{64}$/);
+		expect(window.localStorage.getItem(guestKey)).toBe(proof);
+		expect(window.sessionStorage.getItem(guestKey)).toBe(proof);
 		expect(() => client.readOrCreateLunchRoomGuestToken("invalid")).toThrow();
 	});
 
-	it("keeps guest reconnect identity in memory when session storage is blocked", async () => {
+	it("keeps shared guest identity when session storage is blocked", async () => {
+		blockStorage("sessionStorage");
+		let client = await import("../src/lib/lunchRoomClient");
+		const proof = client.readOrCreateLunchRoomGuestToken(roomId);
+		expect(client.readOrCreateLunchRoomGuestToken(roomId)).toBe(proof);
+		expect(window.localStorage.getItem(guestKey)).toBe(proof);
+		vi.resetModules();
+		client = await import("../src/lib/lunchRoomClient");
+		expect(client.readOrCreateLunchRoomGuestToken(roomId)).toBe(proof);
+	});
+
+	it("falls back to the legacy session guest identity on reload when local storage is blocked", async () => {
+		window.sessionStorage.setItem(guestKey, token);
+		blockStorage("localStorage");
+		let client = await import("../src/lib/lunchRoomClient");
+		expect(client.readOrCreateLunchRoomGuestToken(roomId)).toBe(token);
+		vi.resetModules();
+		client = await import("../src/lib/lunchRoomClient");
+		expect(client.readOrCreateLunchRoomGuestToken(roomId)).toBe(token);
+	});
+
+	it("keeps guest reconnect identity in memory when both storage APIs are blocked", async () => {
+		blockStorage("localStorage");
 		blockStorage("sessionStorage");
 		const client = await import("../src/lib/lunchRoomClient");
 		const proof = client.readOrCreateLunchRoomGuestToken(roomId);
+		expect(proof).toMatch(/^[0-9a-f]{64}$/);
 		expect(client.readOrCreateLunchRoomGuestToken(roomId)).toBe(proof);
-		expect(window.localStorage.length).toBe(0);
 	});
 
 	it("saves validated host credentials and a trimmed nickname in both stores and restores them after a module reload", async () => {

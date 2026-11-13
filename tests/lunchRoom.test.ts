@@ -10,6 +10,7 @@ import {
 	parseRoomSnapshot,
 	parseServerMessage,
 	type RoomDraw,
+	type RoomDrawVote,
 	type RoomMember,
 	type RoomSnapshot,
 	resolveCandidateIds,
@@ -69,6 +70,118 @@ function makeRoom(overrides: Partial<RoomSnapshot> = {}): RoomSnapshot {
 
 const client = (value: unknown) => parseClientMessage(JSON.stringify(value));
 const server = (value: unknown) => parseServerMessage(JSON.stringify(value));
+
+describe("room draw vote protocol", () => {
+	const endedAt = now + 8200;
+	const vote: RoomDrawVote = {
+		participantId: "voter-1",
+		name: "참가자",
+		vote: "up",
+		timestamp: endedAt + 1450,
+		reactionMs: 1450,
+	};
+
+	it("accepts only an identified up/down request and discards client-supplied voter metadata", () => {
+		for (const choice of ["up", "down"])
+			expect(
+				client({
+					type: "vote",
+					id: "vote-request",
+					drawId: "draw-1",
+					vote: choice,
+					participantId: "forged-host",
+					name: "위조이름",
+					timestamp: 1,
+					reactionMs: 0,
+				}),
+			).toEqual({
+				type: "vote",
+				id: "vote-request",
+				drawId: "draw-1",
+				vote: choice,
+			});
+		for (const invalid of [
+			{ type: "vote", drawId: "draw-1", vote: "up" },
+			{ type: "vote", id: "vote-request", vote: "up" },
+			{ type: "vote", id: "vote-request", drawId: "draw-1", vote: "clear" },
+			{ type: "vote", id: "vote-request", drawId: "draw-1", vote: 1 },
+			{ type: "vote", id: "vote-request", drawId: "../draw", vote: "down" },
+		])
+			expect(client(invalid)).toBeNull();
+	});
+
+	it("keeps legacy vote absence intact and copies valid public ballots without private fields", () => {
+		const old = makeRoom({ draw: makeDraw() });
+		expect(parseRoomSnapshot(old)).toEqual(old);
+		expect(parseRoomSnapshot(old)?.draw).not.toHaveProperty("votes");
+		const original = makeDraw({
+			votes: [
+				{
+					...vote,
+					hostToken: "private-proof",
+					guestTokenHash: "private-hash",
+				} as RoomDrawVote,
+			],
+		});
+		const parsed = parseRoomSnapshot(makeRoom({ draw: original }));
+		expect(parsed?.draw?.votes).toEqual([vote]);
+		expect(JSON.stringify(parsed)).not.toContain("private");
+		if (original.votes) original.votes[0].name = "바뀐이름";
+		expect(parsed?.draw?.votes?.[0].name).toBe("참가자");
+		expect(
+			parseRoomSnapshot(
+				makeRoom({
+					draw: makeDraw({
+						votes: [{ ...vote, timestamp: endedAt, reactionMs: 0 }],
+					}),
+				}),
+			),
+		).not.toBeNull();
+	});
+
+	it("rejects duplicate voters, excessive lists and malformed vote timestamps or reaction durations", () => {
+		const invalidLists: unknown[] = [
+			null,
+			{},
+			[vote, { ...vote, vote: "down" }],
+			Array.from({ length: lunchRoomLimits.maxMembers + 1 }, (_, index) => ({
+				...vote,
+				participantId: `voter-${index}`,
+			})),
+			...[
+				{ participantId: "../voter" },
+				{ participantId: "" },
+				{ name: " " },
+				{ name: "가".repeat(13) },
+				{ name: "\u0000" },
+				{ vote: "cancel" },
+				{ timestamp: endedAt - 1, reactionMs: -1 },
+				{ timestamp: endedAt + 0.5, reactionMs: 0.5 },
+				{
+					timestamp: Number.MAX_SAFE_INTEGER,
+					reactionMs: Number.MAX_SAFE_INTEGER - endedAt,
+				},
+				{ reactionMs: -1 },
+				{ reactionMs: 1 },
+				{ reactionMs: undefined },
+			].map((overrides) => [{ ...vote, ...overrides }]),
+		];
+		for (const votes of invalidLists)
+			expect(
+				parseRoomSnapshot(
+					makeRoom({ draw: makeDraw({ votes: votes as RoomDrawVote[] }) }),
+				),
+			).toBeNull();
+		const full = Array.from(
+			{ length: lunchRoomLimits.maxMembers },
+			(_, index) => ({ ...vote, participantId: `voter-${index}` }),
+		);
+		expect(
+			parseRoomSnapshot(makeRoom({ draw: makeDraw({ votes: full }) }))?.draw
+				?.votes,
+		).toHaveLength(60);
+	});
+});
 
 describe("explicit room nickname input", () => {
 	it("normalizes width, whitespace and composed Unicode before enforcing the display limit", () => {
@@ -953,6 +1066,13 @@ describe("lunch room server wire parsing", () => {
 			participants,
 			requestedAt: now,
 			probabilities: candidates.map(() => 1 / candidates.length),
+			votes: Array.from({ length: lunchRoomLimits.maxMembers }, (_, index) => ({
+				participantId: `voter-${index}-${"x".repeat(60)}`,
+				name: "가".repeat(12),
+				vote: "up",
+				timestamp: now + 8200,
+				reactionMs: 0,
+			})),
 		});
 		const snapshot = makeRoom({
 			candidates,
@@ -1015,6 +1135,13 @@ describe("lunch room server wire parsing", () => {
 			participants,
 			requestedAt: now,
 			probabilities: candidates.map(() => 1 / candidates.length),
+			votes: Array.from({ length: lunchRoomLimits.maxMembers }, (_, index) => ({
+				participantId: `voter-${index}-${"x".repeat(60)}`,
+				name: "\uDC00".repeat(12),
+				vote: "down",
+				timestamp: now + 8200,
+				reactionMs: 0,
+			})),
 		});
 		const snapshot = makeRoom({
 			candidates,

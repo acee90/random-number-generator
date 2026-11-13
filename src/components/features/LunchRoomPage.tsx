@@ -33,6 +33,7 @@ import {
 import RoomDrawDialog, {
 	roomDrawCopyText,
 } from "@/components/features/RoomDrawDialog";
+import RoomDrawFeedback from "@/components/features/RoomDrawFeedback";
 import RoomEntryGate from "@/components/features/RoomEntryGate";
 import SiteHeader from "@/components/layout/SiteHeader";
 import { useLunchRoom } from "@/hooks/useLunchRoom";
@@ -249,11 +250,14 @@ export default function LunchRoomPage({
 	const candidateTitleRef = useRef<HTMLHeadingElement>(null);
 	const snapshot = room.snapshot;
 	const draw = snapshot?.draw ?? null;
+	const drawMatchesCandidates = draw?.listVersion === snapshot?.listVersion;
+	const drawArchived =
+		snapshot?.history.some((entry) => entry.id === draw?.id) ?? false;
 	const fetching = room.startPending || snapshot?.status === "fetching";
 	const displayedDraw =
 		fetching ||
 		room.connection === "closed" ||
-		draw?.listVersion !== snapshot?.listVersion
+		(!drawMatchesCandidates && drawArchived)
 			? null
 			: draw;
 	const finished = useRoomTimeline(
@@ -269,7 +273,10 @@ export default function LunchRoomPage({
 	const busy = fetching || spinning;
 	const connected = room.connection === "connected";
 	const isHost = connected && room.self?.isHost === true;
-	const places = displayedDraw?.candidates ?? snapshot?.candidates ?? [];
+	const places =
+		(drawMatchesCandidates ? displayedDraw?.candidates : undefined) ??
+		snapshot?.candidates ??
+		[];
 	const winner =
 		displayedDraw && finished
 			? displayedDraw.candidates[displayedDraw.winnerIndex]
@@ -598,6 +605,9 @@ export default function LunchRoomPage({
 			...(draw.probabilities === undefined
 				? {}
 				: { probabilities: [...draw.probabilities] }),
+			...(draw.votes === undefined
+				? {}
+				: { votes: draw.votes.map((vote) => ({ ...vote })) }),
 		});
 	}
 	function candidateCategoryButtons(readOnly: boolean) {
@@ -935,7 +945,9 @@ export default function LunchRoomPage({
 													(place) => roomCandidateNumbers.get(place.id) ?? 0,
 												)}
 												rotation={
-													finished ? (displayedDraw?.toRotation ?? 0) : 0
+													finished && drawMatchesCandidates
+														? (displayedDraw?.toRotation ?? 0)
+														: 0
 												}
 												phase={
 													fetching
@@ -1007,6 +1019,17 @@ export default function LunchRoomPage({
 														)}
 														{copied === "result" ? "복사됨" : "결과 복사"}
 													</button>
+													<RoomDrawFeedback
+														draw={displayedDraw}
+														selfId={room.self?.id}
+														isHost={room.self?.isHost === true}
+														connected={connected}
+														pending={
+															room.votePendingDrawId === displayedDraw.id
+														}
+														onVote={room.vote}
+														readOnly={drawArchived}
+													/>
 													<div className="room-result-actions">
 														{isHost && (
 															<button
@@ -1073,8 +1096,8 @@ export default function LunchRoomPage({
 									</div>
 									{completedHistory.length === 0 ? (
 										<p className="room-panel-note">
-											아직 완료된 추첨이 없습니다. 룰렛이 멈추면 기록에
-											남습니다.
+											아직 확정된 추첨 기록이 없습니다. 방장이 다음 추첨을
+											시작하면 이전 결과와 투표가 기록으로 확정됩니다.
 										</p>
 									) : (
 										<ol className="room-history-list">
@@ -1117,6 +1140,22 @@ export default function LunchRoomPage({
 															<span className="room-history-detail-hint">
 																상세 보기 →
 															</span>
+															{entry.votes && (
+																<span>
+																	좋아요{" "}
+																	{
+																		entry.votes.filter(
+																			(vote) => vote.vote === "up",
+																		).length
+																	}{" "}
+																	· 아쉬워요{" "}
+																	{
+																		entry.votes.filter(
+																			(vote) => vote.vote === "down",
+																		).length
+																	}
+																</span>
+															)}
 														</button>
 														<button
 															type="button"

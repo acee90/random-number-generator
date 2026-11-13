@@ -9,6 +9,7 @@ import {
 	useState,
 } from "react";
 import CopyFallback from "@/components/features/CopyFallback";
+import RoomDrawFeedback from "@/components/features/RoomDrawFeedback";
 import type { RoomDraw } from "@/lib/lunchRoom";
 import { getSourceDisplayName } from "@/services/randomService";
 
@@ -29,6 +30,16 @@ export function roomDrawCopyText(draw: RoomDraw) {
 		`룰렛 시작: ${new Date(draw.startedAt).toISOString()}`,
 		`공개 예정 시각: ${new Date(draw.startedAt + draw.durationMs).toISOString()}`,
 		`난수 출처: ${getSourceDisplayName(draw.source)}`,
+		...(draw.votes === undefined
+			? []
+			: [
+					"",
+					"확정 투표:",
+					...draw.votes.map(
+						(vote) =>
+							`- ${vote.name}: ${vote.vote === "up" ? "좋아요" : "아쉬워요"} (+${vote.reactionMs}ms · ${new Date(vote.timestamp).toISOString()})`,
+					),
+				]),
 		"",
 		"추첨 요청 시 참가자:",
 		...(draw.participants === undefined
@@ -274,6 +285,16 @@ export default function RoomDrawDialog({
 						</div>
 						<div className="room-record-body">
 							<RoomDrawRecordBody draw={draw} />
+							{draw.votes && (
+								<RoomDrawFeedback
+									draw={draw}
+									isHost={false}
+									connected={false}
+									pending={false}
+									readOnly
+									onVote={() => false}
+								/>
+							)}
 							{copyFailure && (
 								<CopyFallback
 									text={roomDrawCopyText(draw)}

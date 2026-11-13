@@ -18,7 +18,7 @@ export const lunchRoomLimits = {
 	maxHistory: 20,
 	maxCandidates: sampleLunchPlaces.length,
 	maxMessageBytes: 4096,
-	maxServerMessageBytes: 1024 * 1024,
+	maxServerMessageBytes: 2 * 1024 * 1024,
 } as const;
 
 export interface RoomParticipant {
@@ -50,6 +50,14 @@ export interface ChatMessage {
 	event?: RoomSystemEvent;
 }
 
+export interface RoomDrawVote {
+	participantId: string;
+	name: string;
+	vote: "up" | "down";
+	timestamp: number;
+	reactionMs: number;
+}
+
 export interface RoomDraw {
 	id: string;
 	candidates: LunchPlace[];
@@ -64,6 +72,7 @@ export interface RoomDraw {
 	participants?: RoomParticipant[];
 	requestedAt?: number;
 	probabilities?: number[];
+	votes?: RoomDrawVote[];
 }
 
 export interface RoomSnapshot {
@@ -98,6 +107,7 @@ export type ClientMessage =
 	| { type: "activity" }
 	| { type: "chat"; id: string; text: string }
 	| { type: "start"; id: string }
+	| { type: "vote"; id: string; drawId: string; vote: "up" | "down" }
 	| { type: "candidates"; ids: string[] }
 	| { type: "ping"; clientTime: number };
 
@@ -287,6 +297,12 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
 		}
 		case "start":
 			return isId(value.id) ? { type: "start", id: value.id } : null;
+		case "vote":
+			return isId(value.id) &&
+				isId(value.drawId) &&
+				(value.vote === "up" || value.vote === "down")
+				? { type: "vote", id: value.id, drawId: value.drawId, vote: value.vote }
+				: null;
 		case "candidates": {
 			const ids = candidateIds(value.ids);
 			return ids ? { type: "candidates", ids } : null;
@@ -375,7 +391,12 @@ function parseDraw(value: unknown): RoomDraw | null {
 		value.probabilities === undefined
 			? undefined
 			: parseProbabilities(value.probabilities, candidates.length);
-	if (participants === null || probabilities === null) return null;
+	const votes =
+		value.votes === undefined
+			? undefined
+			: parseDrawVotes(value.votes, value.startedAt + value.durationMs);
+	if (participants === null || probabilities === null || votes === null)
+		return null;
 	return {
 		id: value.id,
 		candidates,
@@ -392,7 +413,46 @@ function parseDraw(value: unknown): RoomDraw | null {
 			? {}
 			: { requestedAt: value.requestedAt as number }),
 		...(probabilities === undefined ? {} : { probabilities }),
+		...(votes === undefined ? {} : { votes }),
 	};
+}
+
+function parseDrawVotes(
+	value: unknown,
+	endedAt: number,
+): RoomDrawVote[] | null {
+	if (
+		!Array.isArray(value) ||
+		value.length > lunchRoomLimits.maxMembers ||
+		!isTime(endedAt)
+	)
+		return null;
+	const votes: RoomDrawVote[] = [];
+	const seen = new Set<string>();
+	for (const item of value) {
+		if (
+			!isRecord(item) ||
+			!isId(item.participantId) ||
+			seen.has(item.participantId) ||
+			(item.vote !== "up" && item.vote !== "down") ||
+			!isTime(item.timestamp) ||
+			item.timestamp < endedAt ||
+			!Number.isSafeInteger(item.reactionMs) ||
+			item.reactionMs !== item.timestamp - endedAt
+		)
+			return null;
+		const name = normalizeLunchRoomNickname(item.name);
+		if (!name) return null;
+		seen.add(item.participantId);
+		votes.push({
+			participantId: item.participantId,
+			name,
+			vote: item.vote,
+			timestamp: item.timestamp,
+			reactionMs: item.reactionMs as number,
+		});
+	}
+	return votes;
 }
 
 function parseProbabilities(value: unknown, count: number): number[] | null {

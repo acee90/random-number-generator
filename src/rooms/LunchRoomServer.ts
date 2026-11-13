@@ -65,6 +65,8 @@ const joinTimeoutMs = 10_000;
 const chatIntervalMs = 750;
 const maxPendingConnections = 30;
 const maxProcessedStarts = 100;
+const maxGuestTokenMappings =
+	lunchRoomLimits.maxMembers * (lunchRoomLimits.maxHistory + 2);
 const hashPattern = /^[0-9a-f]{64}$/i;
 const opaqueIdPattern = /^[A-Za-z0-9_-]{1,80}$/;
 const tokenPattern = /^[A-Za-z0-9_-]{16,256}$/;
@@ -114,7 +116,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 									opaqueIdPattern.test(id) &&
 									id !== saved.hostParticipantId,
 							)
-							.slice(0, lunchRoomLimits.maxMembers),
+							.slice(0, maxGuestTokenMappings),
 					),
 				};
 			}
@@ -364,6 +366,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 					connection,
 					"JOIN_REQUIRED",
 					"이름을 입력하고 방에 입장해 주세요.",
+					message.type === "vote" ? message.id : undefined,
 				);
 				return;
 			}
@@ -384,6 +387,9 @@ export class LunchRoomServer extends Server<RoomEnv> {
 					break;
 				case "chat":
 					await this.chat(connection, message);
+					break;
+				case "vote":
+					await this.vote(connection, message);
 					break;
 				case "start":
 				case "candidates":
@@ -623,6 +629,90 @@ export class LunchRoomServer extends Server<RoomEnv> {
 		this.publish();
 	}
 
+	private async vote(
+		connection: Connection<SocketState>,
+		message: Extract<ClientMessage, { type: "vote" }>,
+	) {
+		const participant = connection.state?.participant;
+		if (!this.room || !participant) return;
+		if (participant.isHost || participant.id === this.room.hostParticipantId) {
+			this.sendError(
+				connection,
+				"HOST_CANNOT_VOTE",
+				"참가자만 추첨 결과에 투표할 수 있습니다.",
+				message.id,
+			);
+			return;
+		}
+		if (this.room.snapshot.history.some((draw) => draw.id === message.drawId)) {
+			this.sendError(
+				connection,
+				"VOTE_CLOSED",
+				"기록으로 보관된 결과에는 투표할 수 없습니다.",
+				message.id,
+			);
+			return;
+		}
+		const draw = this.room.snapshot.draw;
+		if (!draw || draw.id !== message.drawId) {
+			this.sendError(
+				connection,
+				"VOTE_NOT_FOUND",
+				"투표할 현재 추첨 결과를 찾을 수 없습니다.",
+				message.id,
+			);
+			return;
+		}
+		const now = Date.now();
+		const endedAt = draw.startedAt + draw.durationMs;
+		if (this.room.snapshot.status !== "waiting" || now < endedAt) {
+			this.sendError(
+				connection,
+				"VOTE_NOT_READY",
+				"추첨 결과가 나온 뒤 투표해 주세요.",
+				message.id,
+			);
+			return;
+		}
+		const votes = draw.votes ?? [];
+		if (votes.some((vote) => vote.participantId === participant.id)) {
+			this.sendError(
+				connection,
+				"VOTE_ALREADY_CAST",
+				"이미 투표했습니다. 투표는 한 번만 할 수 있으며 바꿀 수 없습니다.",
+				message.id,
+			);
+			this.sendSnapshot(connection);
+			return;
+		}
+		if (votes.length >= lunchRoomLimits.maxMembers) {
+			this.sendError(
+				connection,
+				"VOTE_LIMIT",
+				"이 결과의 투표 인원이 가득 찼습니다.",
+				message.id,
+			);
+			return;
+		}
+		this.room.snapshot.draw = {
+			...draw,
+			votes: [
+				...votes,
+				{
+					participantId: participant.id,
+					name: normalizeLunchRoomNickname(participant.name) ?? "참가자",
+					vote: message.vote,
+					timestamp: now,
+					reactionMs: now - endedAt,
+				},
+			],
+		};
+		this.recordActivity(connection);
+		await this.save();
+		await this.scheduleAlarm();
+		this.publish();
+	}
+
 	private async beginDraw(
 		connection: Connection<SocketState>,
 		requestId: string,
@@ -645,6 +735,17 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			-maxProcessedStarts,
 		);
 		this.recordActivity(connection);
+		const previousDraw = this.room.snapshot.draw;
+		if (
+			previousDraw &&
+			Date.now() >= previousDraw.startedAt + previousDraw.durationMs &&
+			!this.room.snapshot.history.some((draw) => draw.id === previousDraw.id)
+		)
+			this.room.snapshot.history = [
+				structuredClone(previousDraw),
+				...this.room.snapshot.history,
+			].slice(0, lunchRoomLimits.maxHistory);
+		this.room.snapshot.draw = null;
 		this.room.pendingStartId = requestId;
 		this.room.snapshot.status = "fetching";
 		const candidates = this.room.snapshot.candidates.map((place) => ({
@@ -706,6 +807,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 					fromRotation: 0,
 					toRotation,
 					listVersion,
+					votes: [],
 				};
 				this.room.pendingStartId = null;
 				this.room.snapshot.status = "drawing";
@@ -816,9 +918,14 @@ export class LunchRoomServer extends Server<RoomEnv> {
 				Number(right.isHost) - Number(left.isHost) ||
 				left.id.localeCompare(right.id),
 		);
+		const retainedVoters = new Set(
+			[this.room.snapshot.draw, ...this.room.snapshot.history].flatMap(
+				(draw) => draw?.votes?.map((vote) => vote.participantId) ?? [],
+			),
+		);
 		this.room.guestTokenIds = Object.fromEntries(
-			Object.entries(this.room.guestTokenIds).filter(([, id]) =>
-				members.has(id),
+			Object.entries(this.room.guestTokenIds).filter(
+				([, id]) => members.has(id) || retainedVoters.has(id),
 			),
 		);
 		this.room.presentParticipantIds = this.room.presentParticipantIds.filter(
@@ -981,16 +1088,10 @@ export class LunchRoomServer extends Server<RoomEnv> {
 		)
 			return;
 		this.room.snapshot.status = "waiting";
-		if (!this.room.snapshot.history.some((entry) => entry.id === draw.id)) {
-			this.room.snapshot.history = [draw, ...this.room.snapshot.history].slice(
-				0,
-				lunchRoomLimits.maxHistory,
-			);
-			this.appendSystemEvent(
-				"draw-finished",
-				`추첨 결과: ${draw.candidates[draw.winnerIndex].name}`,
-			);
-		}
+		this.appendSystemEvent(
+			"draw-finished",
+			`추첨 결과: ${draw.candidates[draw.winnerIndex].name}`,
+		);
 		await this.save();
 		this.publish();
 	}
