@@ -100,6 +100,44 @@
 	color: #a13322;
 }
 
+.room-entry-availability {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	min-block-size: 40px;
+	font-size: 12px;
+	line-height: 1.5;
+	color: #556247;
+}
+
+.room-entry-availability > svg {
+	flex-shrink: 0;
+}
+
+.room-entry-availability > span {
+	flex: 1;
+}
+
+.room-entry-availability[data-status="available"] {
+	color: #3f5e25;
+}
+
+.room-entry-availability[data-status="taken"],
+.room-entry-availability[data-status="invalid"],
+.room-entry-availability[data-status="error"] {
+	color: #a13322;
+}
+
+.room-entry-recheck {
+	flex-shrink: 0;
+	min-block-size: 32px;
+	padding: 4px 6px;
+	font-size: 12px;
+	font-weight: 650;
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+
 .room-entry-submit {
 	display: flex;
 	align-items: center;
@@ -136,10 +174,23 @@
 }
 
 .room-entry-submit:focus-visible,
+.room-entry-recheck:focus-visible,
 .room-entry-form input:focus-visible,
 .room-entry-back:focus-visible {
 	outline: 3px solid #627c34;
 	outline-offset: 3px;
+}
+
+@keyframes room-entry-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.room-entry-spinner {
+		animation: room-entry-spin 850ms linear infinite;
+	}
 }
 
 @media (max-width: 480px) {

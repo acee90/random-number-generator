@@ -43,6 +43,7 @@ type RoomState = ReturnType<typeof useLunchRoom>;
 let room: RoomState;
 let reduced = false;
 const writeText = vi.fn<(text: string) => Promise<void>>();
+const fetchNicknameAvailability = vi.fn<typeof fetch>();
 const animations: {
 	currentTime: number | null;
 	pause: ReturnType<typeof vi.fn>;
@@ -101,6 +102,15 @@ beforeEach(() => {
 	animations.length = 0;
 	animate.mockClear();
 	writeText.mockReset().mockResolvedValue(undefined);
+	fetchNicknameAvailability
+		.mockReset()
+		.mockImplementation(async (_url, options) => {
+			const { name } = JSON.parse(String(options?.body));
+			return new Response(JSON.stringify({ name, available: true }), {
+				headers: { "Content-Type": "application/json" },
+			});
+		});
+	vi.stubGlobal("fetch", fetchNicknameAvailability);
 	Object.defineProperty(HTMLElement.prototype, "animate", {
 		configurable: true,
 		value: animate,
@@ -202,11 +212,11 @@ describe("synchronized lunch room UI", () => {
 		expect(
 			(screen.getByRole("button", { name: "입장하기" }) as HTMLButtonElement)
 				.disabled,
-		).toBe(false);
+		).toBe(true);
 		expect(room.enter).not.toHaveBeenCalled();
 	});
 
-	it("keeps entry controls pending until the server accepts the participant", () => {
+	it("keeps entry controls pending until the server accepts the participant", async () => {
 		room = {
 			...room,
 			snapshot: null,
@@ -218,6 +228,13 @@ describe("synchronized lunch room UI", () => {
 		const view = render(<LunchRoomPage roomId={roomId} />);
 		const input = screen.getByRole("textbox", { name: "닉네임" });
 		fireEvent.change(input, { target: { value: "  동료  " } });
+		expect(
+			(screen.getByRole("button", { name: "입장하기" }) as HTMLButtonElement)
+				.disabled,
+		).toBe(true);
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(350);
+		});
 		fireEvent.submit(screen.getByRole("form", { name: "추첨방 입장" }));
 		expect(room.enter).toHaveBeenCalledExactlyOnceWith("동료");
 		updateRoom(view, { entryPending: true });
@@ -239,7 +256,7 @@ describe("synchronized lunch room UI", () => {
 		expect(screen.getByRole("heading", { name: "채팅" })).toBeTruthy();
 	});
 
-	it("keeps the attempted nickname editable after a duplicate rejection and allows another choice", () => {
+	it("keeps the attempted nickname editable after a duplicate rejection and allows another choice", async () => {
 		room = {
 			...room,
 			snapshot: null,
@@ -251,6 +268,9 @@ describe("synchronized lunch room UI", () => {
 		const view = render(<LunchRoomPage roomId={roomId} />);
 		const input = screen.getByRole("textbox", { name: "닉네임" });
 		fireEvent.change(input, { target: { value: "동료" } });
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(350);
+		});
 		fireEvent.submit(screen.getByRole("form", { name: "추첨방 입장" }));
 		updateRoom(view, {
 			error: "이미 사용 중인 닉네임입니다. 다른 이름을 입력해 주세요.",
@@ -259,6 +279,10 @@ describe("synchronized lunch room UI", () => {
 		expect((input as HTMLInputElement).value).toBe("동료");
 		expect(document.activeElement).toBe(input);
 		fireEvent.change(input, { target: { value: "다른 동료" } });
+		updateRoom(view, { error: "" });
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(350);
+		});
 		fireEvent.submit(screen.getByRole("form", { name: "추첨방 입장" }));
 		expect(room.enter).toHaveBeenLastCalledWith("다른 동료");
 		expect(room.enter).toHaveBeenCalledTimes(2);

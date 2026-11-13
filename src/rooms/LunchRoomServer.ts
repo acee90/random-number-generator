@@ -50,6 +50,16 @@ interface SocketState {
 	closing?: boolean;
 }
 
+interface NicknameAvailabilityResult {
+	status: number;
+	body: {
+		name?: string;
+		available?: boolean;
+		error?: string;
+		code?: string;
+	};
+}
+
 const roomKey = "lunch-room:v1";
 const joinTimeoutMs = 10_000;
 const chatIntervalMs = 750;
@@ -57,6 +67,7 @@ const maxPendingConnections = 30;
 const maxProcessedStarts = 100;
 const hashPattern = /^[0-9a-f]{64}$/i;
 const opaqueIdPattern = /^[A-Za-z0-9_-]{1,80}$/;
+const tokenPattern = /^[A-Za-z0-9_-]{16,256}$/;
 
 export class LunchRoomServer extends Server<RoomEnv> {
 	static options = { hibernate: true };
@@ -212,6 +223,81 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			};
 			await this.save();
 			await this.scheduleAlarm();
+		});
+	}
+
+	async checkNicknameAvailability(
+		input: unknown,
+	): Promise<NicknameAvailabilityResult> {
+		return this.exclusive(async () => {
+			await this.load();
+			if (
+				this.expired ||
+				(this.room && Date.now() >= this.room.snapshot.expiresAt)
+			)
+				return {
+					status: 410,
+					body: { code: "ROOM_EXPIRED", error: "방이 만료됐습니다." },
+				};
+			if (!this.room)
+				return {
+					status: 404,
+					body: { code: "ROOM_NOT_FOUND", error: "방을 찾을 수 없습니다." },
+				};
+			if (!input || typeof input !== "object" || Array.isArray(input))
+				return {
+					status: 400,
+					body: {
+						code: "INVALID_REQUEST",
+						error: "입력 내용을 확인해 주세요.",
+					},
+				};
+			const value = input as Record<string, unknown>;
+			const name = normalizeLunchRoomNickname(value.name);
+			if (!name)
+				return {
+					status: 400,
+					body: {
+						code: "INVALID_NICKNAME",
+						error: `닉네임은 제어문자 없이 1~${lunchRoomLimits.maxNicknameLength}자로 입력해 주세요.`,
+					},
+				};
+			let participantId: string | undefined;
+			if (value.hostToken !== undefined) {
+				if (
+					typeof value.hostToken !== "string" ||
+					!tokenPattern.test(value.hostToken) ||
+					(await this.hashToken(value.hostToken)) !== this.room.hostTokenHash
+				)
+					return {
+						status: 403,
+						body: {
+							code: "HOST_AUTH_FAILED",
+							error: "방장 인증을 확인해 주세요.",
+						},
+					};
+				participantId = this.room.hostParticipantId;
+			}
+			if (value.guestToken !== undefined) {
+				if (
+					typeof value.guestToken !== "string" ||
+					!tokenPattern.test(value.guestToken)
+				)
+					return {
+						status: 400,
+						body: {
+							code: "INVALID_REQUEST",
+							error: "입력 내용을 확인해 주세요.",
+						},
+					};
+				if (!participantId)
+					participantId =
+						this.room.guestTokenIds[await this.hashToken(value.guestToken)];
+			}
+			return {
+				status: 200,
+				body: { name, available: !this.isNicknameTaken(name, participantId) },
+			};
 		});
 	}
 
@@ -444,12 +530,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 		name: string,
 		participantId: string,
 	): boolean {
-		const key = name.normalize("NFKC").trim().toLowerCase();
-		const taken = this.participants().some(
-			(participant) =>
-				participant.id !== participantId &&
-				participant.name.normalize("NFKC").trim().toLowerCase() === key,
-		);
+		const taken = this.isNicknameTaken(name, participantId);
 		if (taken)
 			this.sendError(
 				connection,
@@ -457,6 +538,15 @@ export class LunchRoomServer extends Server<RoomEnv> {
 				"이미 사용 중인 닉네임입니다. 다른 닉네임을 입력해 주세요.",
 			);
 		return taken;
+	}
+
+	private isNicknameTaken(name: string, participantId?: string): boolean {
+		const key = name.normalize("NFKC").trim().toLowerCase();
+		return this.participants().some(
+			(participant) =>
+				participant.id !== participantId &&
+				participant.name.normalize("NFKC").trim().toLowerCase() === key,
+		);
 	}
 
 	private updateAttachedName(participantId: string, name: string) {

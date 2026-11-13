@@ -49,6 +49,56 @@ export async function handleLunchRoomRequest(
 	env: Env,
 ): Promise<Response | null> {
 	const url = new URL(request.url);
+	const availabilityPath = url.pathname.match(
+		/^\/api\/lunch\/rooms\/([^/]+)\/nickname-availability$/,
+	);
+	if (availabilityPath) {
+		const roomId = availabilityPath[1];
+		if (!isLunchRoomId(roomId))
+			return json(
+				{ code: "ROOM_NOT_FOUND", error: "방을 찾을 수 없습니다." },
+				404,
+			);
+		if (request.method !== "POST")
+			return json({ error: "POST 요청이 필요합니다." }, 405, { Allow: "POST" });
+		if (request.headers.get("Origin") !== url.origin)
+			return json({ error: "같은 사이트에서 닉네임을 확인해 주세요." }, 403);
+		if (
+			request.headers.get("Content-Type")?.split(";")[0].trim() !==
+			"application/json"
+		)
+			return json({ error: "JSON 형식이 필요합니다." }, 415);
+		let body: unknown;
+		try {
+			body = await boundedJson(request);
+		} catch (error) {
+			return json(
+				{ code: "INVALID_REQUEST", error: "입력 내용을 확인해 주세요." },
+				error instanceof RangeError ? 413 : 400,
+			);
+		}
+		try {
+			const room = await getServerByName(env.LunchRooms, roomId);
+			const result = await room.checkNicknameAvailability(body);
+			return result.status === 200
+				? json(
+						{ name: result.body.name, available: result.body.available },
+						200,
+					)
+				: json(
+						{ code: result.body.code, error: result.body.error },
+						result.status,
+					);
+		} catch {
+			return json(
+				{
+					code: "AVAILABILITY_UNAVAILABLE",
+					error: "닉네임을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+				},
+				503,
+			);
+		}
+	}
 	if (url.pathname === "/api/lunch/rooms") {
 		if (request.method !== "POST")
 			return json({ error: "POST 요청이 필요합니다." }, 405, { Allow: "POST" });
