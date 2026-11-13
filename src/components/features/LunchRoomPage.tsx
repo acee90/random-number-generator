@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import {
 	type RefObject,
+	useCallback,
 	useEffect,
 	useId,
 	useMemo,
@@ -24,6 +25,11 @@ import {
 } from "react";
 import CopyFallback from "@/components/features/CopyFallback";
 import { LunchWheel } from "@/components/features/LunchWheel";
+import {
+	RoomEditableCandidateList,
+	RoomReadonlyCandidateList,
+	roomCandidateNumbers,
+} from "@/components/features/RoomCandidateList";
 import RoomDrawDialog, {
 	roomDrawCopyText,
 } from "@/components/features/RoomDrawDialog";
@@ -268,9 +274,6 @@ export default function LunchRoomPage({
 		displayedDraw && finished
 			? displayedDraw.candidates[displayedDraw.winnerIndex]
 			: null;
-	const sourceNumbers = new Map(
-		sampleLunchPlaces.map((place, index) => [place.id, index + 1]),
-	);
 	const participants = snapshot?.participants ?? [];
 	const members =
 		snapshot?.members ??
@@ -305,12 +308,31 @@ export default function LunchRoomPage({
 			snapshot?.candidates.map((place) => place.id) ?? [],
 		),
 	).join(",");
-	const candidateIds = getRoomCandidateIds(candidateSelection);
+	const serverCandidateSelection = useMemo(
+		() =>
+			createRoomCandidateSelection(
+				actualCandidateIds ? actualCandidateIds.split(",") : [],
+			),
+		[actualCandidateIds],
+	);
+	// Show the approved candidates on the first room paint, before the effect syncs the editable draft.
+	const displayedSelection =
+		observedCandidatesRef.current?.roomId === roomId
+			? candidateSelection
+			: serverCandidateSelection;
+	const candidateIds = useMemo(
+		() => getRoomCandidateIds(displayedSelection),
+		[displayedSelection],
+	);
 	const candidateDraftIds = candidateIds.join(",");
 	const candidatesChanged = actualCandidateIds !== candidateDraftIds;
 	const candidateControlsDisabled = busy || room.candidatesPending || !isHost;
-	const visibleCandidates = sampleLunchPlaces.filter((place) =>
-		candidateSelection.categories.includes(place.category),
+	const visibleCandidates = useMemo(
+		() =>
+			sampleLunchPlaces.filter((place) =>
+				displayedSelection.categories.includes(place.category),
+			),
+		[displayedSelection.categories],
 	);
 	const guestVisibleCandidates = (snapshot?.candidates ?? []).filter((place) =>
 		guestCategories.includes(place.category),
@@ -319,6 +341,15 @@ export default function LunchRoomPage({
 		.filter((entry) => room.serverNow() >= entry.startedAt + entry.durationMs)
 		.slice(0, lunchRoomLimits.maxHistory);
 	const closed = room.connection === "closed";
+	const setCandidateIncluded = useCallback(
+		(placeId: string, included: boolean) => {
+			setCandidateSelection((previous) =>
+				setRoomCandidateIncluded(previous, placeId, included),
+			);
+			setCandidateError("");
+		},
+		[],
+	);
 
 	useEffect(() => {
 		setInviteUrl(
@@ -470,12 +501,7 @@ export default function LunchRoomPage({
 			candidateVersion >= expectedVersionRef.current &&
 			submittedCandidateIdsRef.current === actualCandidateIds &&
 			candidateDraftIdsRef.current === actualCandidateIds;
-		if (!ownAcknowledgement)
-			setCandidateSelection(
-				createRoomCandidateSelection(
-					actualCandidateIds ? actualCandidateIds.split(",") : [],
-				),
-			);
+		if (!ownAcknowledgement) setCandidateSelection(serverCandidateSelection);
 		if (previous?.roomId !== roomId) setGuestCategories(lunchCategories);
 		observedCandidatesRef.current = {
 			roomId,
@@ -487,6 +513,7 @@ export default function LunchRoomPage({
 		setCandidateError("");
 	}, [
 		actualCandidateIds,
+		serverCandidateSelection,
 		candidateVersion,
 		roomId,
 		candidateRoomId,
@@ -576,7 +603,7 @@ export default function LunchRoomPage({
 	function candidateCategoryButtons(readOnly: boolean) {
 		const categories = readOnly
 			? guestCategories
-			: candidateSelection.categories;
+			: displayedSelection.categories;
 		return (
 			<fieldset
 				className="room-candidate-categories"
@@ -905,7 +932,7 @@ export default function LunchRoomPage({
 											<LunchWheel
 												candidates={places}
 												candidateNumbers={places.map(
-													(place) => sourceNumbers.get(place.id) ?? 0,
+													(place) => roomCandidateNumbers.get(place.id) ?? 0,
 												)}
 												rotation={
 													finished ? (displayedDraw?.toRotation ?? 0) : 0
@@ -1252,35 +1279,11 @@ export default function LunchRoomPage({
 												<legend className="sr-only">
 													함께 추첨할 음식점 선택
 												</legend>
-												<div className="room-candidate-list">
-													{visibleCandidates.map((place) => (
-														<label key={place.id}>
-															<input
-																type="checkbox"
-																checked={candidateIds.includes(place.id)}
-																aria-label={`${place.name} 추첨 포함`}
-																onChange={(event) => {
-																	const included = event.target.checked;
-																	setCandidateSelection((previous) =>
-																		setRoomCandidateIncluded(
-																			previous,
-																			place.id,
-																			included,
-																		),
-																	);
-																	setCandidateError("");
-																}}
-															/>
-															<span className="room-candidate-number">
-																{sourceNumbers.get(place.id)}
-															</span>
-															<span>
-																<strong>{place.name}</strong>
-																<small>{place.category}</small>
-															</span>
-														</label>
-													))}
-												</div>
+												<RoomEditableCandidateList
+													places={visibleCandidates}
+													selectedIds={candidateIds}
+													onIncludedChange={setCandidateIncluded}
+												/>
 											</fieldset>
 											{visibleCandidates.length === 0 && (
 												<p className="room-candidate-empty">
@@ -1305,19 +1308,9 @@ export default function LunchRoomPage({
 												</p>
 												{candidateCategoryButtons(true)}
 											</div>
-											<ul className="room-readonly-candidates">
-												{guestVisibleCandidates.map((place) => (
-													<li key={place.id}>
-														<span className="room-candidate-number">
-															{sourceNumbers.get(place.id)}
-														</span>
-														<span>
-															<strong>{place.name}</strong>
-															<small>{place.category}</small>
-														</span>
-													</li>
-												))}
-											</ul>
+											<RoomReadonlyCandidateList
+												places={guestVisibleCandidates}
+											/>
 											{guestVisibleCandidates.length === 0 && (
 												<p className="room-candidate-empty">
 													선택한 분류의 후보가 없습니다. 다른 분류를 켜 보세요.
