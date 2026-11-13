@@ -66,6 +66,9 @@ export function useLunchRoom(
 	const [errorState, setErrorState] = useState<RoomError | null>(null);
 	const [startPending, setStartPending] = useState(false);
 	const [candidatesPending, setCandidatesPending] = useState(false);
+	const [votePendingDrawId, setVotePendingDrawId] = useState<string | null>(
+		null,
+	);
 	const [clockOffset, setClockOffset] = useState(0);
 	const socketRef = useRef<PartySocket | null>(null);
 	const snapshotRef = useRef<RoomSnapshot | null>(null);
@@ -80,6 +83,10 @@ export function useLunchRoom(
 	const guestTokenRef = useRef<string | undefined>(undefined);
 	const startRequestRef = useRef<string | null>(null);
 	const candidatesRequestRef = useRef<number | null>(null);
+	const voteRequestRef = useRef<{ id: string; drawId: string } | null>(null);
+	const voteTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+		undefined,
+	);
 	const actionTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
 		undefined,
 	);
@@ -118,6 +125,9 @@ export function useLunchRoom(
 		setConnection(requireEntry && !entry ? "waiting" : "connecting");
 		setStartPending(false);
 		setCandidatesPending(false);
+		setVotePendingDrawId(null);
+		voteRequestRef.current = null;
+		clearTimeout(voteTimerRef.current);
 		startRequestRef.current = null;
 		candidatesRequestRef.current = null;
 		clearTimeout(actionTimerRef.current);
@@ -230,6 +240,12 @@ export function useLunchRoom(
 			candidatesRequestRef.current = null;
 			setStartPending(false);
 			setCandidatesPending(false);
+			clearVotePending();
+		}
+		function clearVotePending() {
+			clearTimeout(voteTimerRef.current);
+			voteRequestRef.current = null;
+			setVotePendingDrawId(null);
 		}
 		function stop(message: string) {
 			terminalRef.current = true;
@@ -262,6 +278,7 @@ export function useLunchRoom(
 			pings.clear();
 			clockSamples.length = 0;
 			measuredClockRef.current = false;
+			clearVotePending();
 			socket.send(
 				JSON.stringify({
 					type: "join",
@@ -321,7 +338,19 @@ export function useLunchRoom(
 					socket.close(1000, "Choose another nickname");
 					return;
 				}
-				clearPending();
+				// A chat or another action's error is not a vote acknowledgement.
+				if (
+					voteRequestRef.current &&
+					message.requestId === voteRequestRef.current.id
+				) {
+					clearVotePending();
+				} else {
+					clearTimeout(actionTimerRef.current);
+					startRequestRef.current = null;
+					candidatesRequestRef.current = null;
+					setStartPending(false);
+					setCandidatesPending(false);
+				}
 				setErrorState({ kind: "action", message: message.message });
 				return;
 			}
@@ -378,6 +407,19 @@ export function useLunchRoom(
 				setConnection("connected");
 				setErrorState((error) => (error?.kind === "network" ? null : error));
 			}
+			const pendingVote = voteRequestRef.current;
+			if (
+				pendingVote &&
+				(message.snapshot.draw?.id !== pendingVote.drawId ||
+					message.snapshot.status === "fetching" ||
+					message.snapshot.history.some(
+						(entry) => entry.id === pendingVote.drawId,
+					) ||
+					message.snapshot.draw?.votes?.some(
+						(vote) => vote.participantId === selfRef.current?.id,
+					))
+			)
+				clearVotePending();
 			if (
 				startRequestRef.current &&
 				(message.snapshot.status === "fetching" ||
@@ -450,6 +492,7 @@ export function useLunchRoom(
 			clearTimeout(joinTimer);
 			clearActivity();
 			clearTimeout(actionTimerRef.current);
+			clearTimeout(voteTimerRef.current);
 			socket.removeEventListener("open", onOpen);
 			socket.removeEventListener("message", onMessage);
 			socket.removeEventListener("close", onOffline);
@@ -632,6 +675,41 @@ export function useLunchRoom(
 		markPending();
 		return true;
 	}
+	function vote(drawId: string, choice: "up" | "down") {
+		const current = snapshotRef.current;
+		const self = selfRef.current;
+		const draw = current?.draw;
+		if (
+			!self ||
+			self.isHost ||
+			!current ||
+			!draw ||
+			draw.id !== drawId ||
+			(current.status !== "waiting" && current.status !== "drawing") ||
+			serverNow() < draw.startedAt + draw.durationMs ||
+			current.history.some((entry) => entry.id === drawId) ||
+			draw.votes?.some((entry) => entry.participantId === self.id) ||
+			voteRequestRef.current
+		)
+			return false;
+		const requestId = actionId();
+		if (!send({ type: "vote", id: requestId, drawId, vote: choice }))
+			return false;
+		voteRequestRef.current = { id: requestId, drawId };
+		setVotePendingDrawId(drawId);
+		clearTimeout(voteTimerRef.current);
+		voteTimerRef.current = setTimeout(() => {
+			if (voteRequestRef.current?.id !== requestId) return;
+			voteRequestRef.current = null;
+			setVotePendingDrawId(null);
+			setErrorState({
+				kind: "action",
+				message:
+					"투표 확인이 지연되고 있습니다. 연결 후 투표 상태를 확인해 주세요.",
+			});
+		}, 15000);
+		return true;
+	}
 	function reconnect() {
 		if (terminalRef.current) return;
 		setErrorState(null);
@@ -657,12 +735,14 @@ export function useLunchRoom(
 		error: currentScope ? (errorState?.message ?? "") : "",
 		startPending,
 		candidatesPending,
+		votePendingDrawId,
 		clockOffset,
 		serverNow,
 		rename,
 		sendChat,
 		startDraw,
 		updateCandidates,
+		vote,
 		reconnect,
 		clearError,
 	};

@@ -1,0 +1,228 @@
+.room-draw-feedback {
+	container-name: room-feedback;
+	container-type: inline-size;
+	inline-size: 100%;
+	min-inline-size: 0;
+	margin-block-start: 16px;
+	padding-block-start: 12px;
+	border-block-start: 1px solid var(--line);
+	color: var(--ink);
+}
+
+.room-feedback-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin-block-end: 8px;
+}
+
+.room-feedback-heading h4 {
+	margin: 0;
+	font-size: 14px;
+	font-weight: 750;
+	line-height: 1.5;
+}
+
+.room-feedback-heading > span {
+	font-size: 11px;
+	line-height: 1.5;
+	color: var(--muted);
+	font-variant-numeric: tabular-nums;
+}
+
+.room-feedback-actions {
+	display: grid;
+	min-inline-size: 0;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.room-feedback-actions button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	min-inline-size: 0;
+	min-block-size: 40px;
+	padding: 8px 10px;
+	border: 1px solid #9eac86;
+	border-radius: 8px;
+	background: #fff;
+	color: #3f5e25;
+	font-size: 13px;
+	font-weight: 700;
+	line-height: 1.4;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.room-feedback-actions button:disabled {
+	cursor: default;
+	border-color: #c9d0bd;
+	background: #f7f8f3;
+	color: #646b5e;
+}
+
+.room-feedback-actions button[data-selected="true"] {
+	border-color: #718d3e;
+	background: #edf5d3;
+	color: #334b1c;
+}
+
+.room-feedback-actions button:focus-visible {
+	outline: 3px solid #527427;
+	outline-offset: 3px;
+}
+
+.room-feedback-note {
+	margin: 6px 0 0;
+	font-size: 11px;
+	line-height: 1.6;
+	color: var(--muted);
+}
+
+.room-feedback-timing-note {
+	margin: 6px 0 0;
+	font-size: 11px;
+	line-height: 1.5;
+	color: var(--muted);
+}
+
+.room-feedback-status {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-block-start: 6px;
+	font-size: 12px;
+	line-height: 1.6;
+	color: #3f5e25;
+}
+
+.room-feedback-status[data-error="true"] {
+	color: #a13322;
+}
+
+.room-feedback-lists {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px;
+	margin-block-start: 10px;
+}
+
+.room-feedback-list {
+	min-inline-size: 0;
+	padding: 8px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--paper);
+}
+
+.room-feedback-list h5 {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	margin: 0;
+	font-size: 12px;
+	font-weight: 700;
+	line-height: 1.5;
+}
+
+.room-feedback-list h5 strong {
+	margin-inline-start: auto;
+	font-size: 13px;
+	font-variant-numeric: tabular-nums;
+}
+
+.room-feedback-list ul {
+	display: grid;
+	gap: 5px;
+	margin: 7px 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.room-feedback-list li {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) max-content;
+	align-items: start;
+	gap: 8px;
+	font-size: 12px;
+	line-height: 1.5;
+}
+
+.room-feedback-voter {
+	min-inline-size: 0;
+	overflow-wrap: anywhere;
+}
+
+.room-feedback-medal {
+	display: inline-block;
+	margin-inline-end: 3px;
+	font-size: 13px;
+	line-height: 1;
+	vertical-align: -1px;
+}
+
+.room-feedback-voter small {
+	display: inline-block;
+	margin-inline-start: 4px;
+	padding-inline: 3px;
+	border-radius: 3px;
+	background: #e5edda;
+	color: #3f5e25;
+	font-size: 10px;
+	line-height: 1.5;
+}
+
+.room-feedback-delay {
+	color: var(--muted);
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.room-feedback-list > p {
+	margin: 7px 0 0;
+	font-size: 11px;
+	line-height: 1.5;
+	color: var(--muted);
+}
+
+@container room-feedback (max-width: 340px) {
+	.room-feedback-lists {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
+@media (hover: hover) {
+	.room-feedback-actions button:not(:disabled):hover {
+		background: #f0f5e4;
+		border-color: #718d3e;
+	}
+}
+
+@keyframes room-feedback-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.room-feedback-actions button {
+		transition:
+			scale 150ms ease-out,
+			background-color 150ms ease-out,
+			border-color 150ms ease-out;
+	}
+
+	.room-feedback-actions button:not(:disabled):active {
+		scale: 0.96;
+	}
+
+	.room-feedback-spinner {
+		animation: room-feedback-spin 850ms linear infinite;
+	}
+}

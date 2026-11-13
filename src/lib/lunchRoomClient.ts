@@ -62,32 +62,44 @@ export function readLunchRoomHost(roomId: string): string | undefined {
 	if (validToken(cached)) return cached;
 }
 
-/** A private reconnect proof, scoped to this tab's session and never an invite URL. */
+/** A private per-room proof shared by this browser's tabs, never an invite URL. */
 export function readOrCreateLunchRoomGuestToken(roomId: string): string {
 	if (!isLunchRoomId(roomId)) throw new Error("Invalid lunch room ID");
-	const cached = guests.get(roomId);
-	if (cached) return cached;
+	const key = guestKey(roomId);
 	try {
-		const stored = window.sessionStorage.getItem(guestKey(roomId));
+		const stored = window.localStorage.getItem(key);
 		if (validToken(stored)) {
 			guests.set(roomId, stored);
+			try {
+				window.sessionStorage.setItem(key, stored);
+			} catch {
+				// The shared proof remains available if session storage is blocked.
+			}
 			return stored;
 		}
 	} catch {
-		// Memory retains identity across socket reconnects when storage is blocked.
+		// Memory and an older session proof still support reconnects.
 	}
-	const bytes = new Uint8Array(32);
-	crypto.getRandomValues(bytes);
-	const token = Array.from(bytes, (byte) =>
-		byte.toString(16).padStart(2, "0"),
-	).join("");
-	guests.set(roomId, token);
-	try {
-		window.sessionStorage.setItem(guestKey(roomId), token);
-	} catch {
-		// Reloads may use a new identity when session storage is unavailable.
+	let proof = guests.get(roomId);
+	if (!validToken(proof)) {
+		try {
+			const stored = window.sessionStorage.getItem(key);
+			if (validToken(stored)) proof = stored;
+		} catch {
+			// Generate an in-memory proof if neither storage API is accessible.
+		}
 	}
-	return token;
+	if (!validToken(proof)) {
+		const bytes = new Uint8Array(32);
+		crypto.getRandomValues(bytes);
+		proof = Array.from(bytes, (byte) =>
+			byte.toString(16).padStart(2, "0"),
+		).join("");
+	}
+	guests.set(roomId, proof);
+	// Migrate a legacy session proof when no valid shared proof exists yet.
+	save(key, proof);
+	return proof;
 }
 
 export function saveLunchRoomName(name: string): void {

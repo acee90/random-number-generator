@@ -2,8 +2,8 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useLunchRoom } from "../src/hooks/useLunchRoom";
-import { sampleLunchPlaces } from "../src/lib/lunch";
-import type { RoomSnapshot } from "../src/lib/lunchRoom";
+import { getWheelRotation, sampleLunchPlaces } from "../src/lib/lunch";
+import type { RoomDraw, RoomSnapshot } from "../src/lib/lunchRoom";
 
 interface TestSocket extends EventTarget {
 	readyState: number;
@@ -100,6 +100,172 @@ function sent(type: string) {
 function interact(type: string) {
 	act(() => window.dispatchEvent(new Event(type)));
 }
+
+function feedbackDraw(): RoomDraw {
+	return {
+		id: "feedback-draw",
+		candidates: [...sampleLunchPlaces.slice(0, 2)],
+		winnerIndex: 0,
+		source: "quantum",
+		timestamp: Date.now() - 11500,
+		startedAt: Date.now() - 10000,
+		durationMs: 7200,
+		fromRotation: 0,
+		toRotation: getWheelRotation(0, 0, 2),
+		listVersion: 1,
+		votes: [],
+	};
+}
+
+describe("irreversible current-result feedback", () => {
+	it("sends one vote and waits for its own authoritative ballot despite unrelated updates", () => {
+		mocks.readHost.mockReturnValue(undefined);
+		const current = snapshot({ draw: feedbackDraw() });
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(false, current);
+		act(() => {
+			expect(result.current.vote("feedback-draw", "up")).toBe(true);
+			expect(result.current.vote("feedback-draw", "down")).toBe(false);
+		});
+		expect(sent("vote")).toEqual([
+			{
+				type: "vote",
+				id: expect.any(String),
+				drawId: "feedback-draw",
+				vote: "up",
+			},
+		]);
+		expect(result.current.votePendingDrawId).toBe("feedback-draw");
+		receive({ type: "snapshot", snapshot: current, serverTime: Date.now() });
+		receive({
+			type: "error",
+			code: "CHAT_TOO_FAST",
+			message: "채팅 대기",
+			requestId: "another-request",
+		});
+		expect(result.current.votePendingDrawId).toBe("feedback-draw");
+		const vote = {
+			participantId: "guest-client",
+			name: "민수",
+			vote: "up" as const,
+			timestamp: Date.now(),
+			reactionMs: 2800,
+		};
+		receive({
+			type: "snapshot",
+			snapshot: { ...current, draw: { ...current.draw, votes: [vote] } },
+			serverTime: Date.now(),
+		});
+		expect(result.current.votePendingDrawId).toBeNull();
+		act(() => expect(result.current.vote("feedback-draw", "down")).toBe(false));
+		expect(sent("vote")).toHaveLength(1);
+	});
+
+	it("refuses host, unfinished and archived results but has no short voting deadline", () => {
+		const draw = feedbackDraw();
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(true, snapshot({ draw }));
+		act(() => expect(result.current.vote(draw.id, "up")).toBe(false));
+		receive({
+			type: "snapshot",
+			snapshot: snapshot({
+				draw: { ...draw, startedAt: Date.now(), timestamp: Date.now() - 1500 },
+				status: "drawing",
+			}),
+			serverTime: Date.now(),
+			self: { id: "guest-client", isHost: false },
+		});
+		act(() => expect(result.current.vote(draw.id, "up")).toBe(false));
+		receive({
+			type: "snapshot",
+			snapshot: snapshot({ draw, history: [draw] }),
+			serverTime: Date.now(),
+		});
+		act(() => expect(result.current.vote(draw.id, "up")).toBe(false));
+		act(() => vi.advanceTimersByTime(120000));
+		receive({
+			type: "snapshot",
+			snapshot: snapshot({ draw }),
+			serverTime: Date.now(),
+		});
+		act(() => expect(result.current.vote(draw.id, "down")).toBe(true));
+		expect(sent("vote")).toHaveLength(1);
+	});
+
+	it("clears only a matching vote rejection and closes pending feedback when next draw starts", () => {
+		mocks.readHost.mockReturnValue(undefined);
+		const draw = feedbackDraw();
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(false, snapshot({ draw }));
+		act(() => result.current.vote(draw.id, "up"));
+		const requestId = sent("vote")[0].id;
+		receive({
+			type: "error",
+			code: "VOTE_REJECTED",
+			message: "투표 확인 실패",
+			requestId,
+		});
+		expect(result.current.votePendingDrawId).toBeNull();
+		act(() => expect(result.current.vote(draw.id, "up")).toBe(true));
+		receive({
+			type: "snapshot",
+			snapshot: snapshot({ draw: null, history: [draw], status: "fetching" }),
+			serverTime: Date.now(),
+		});
+		expect(result.current.votePendingDrawId).toBeNull();
+		act(() => expect(result.current.vote(draw.id, "down")).toBe(false));
+		expect(sent("vote")).toHaveLength(2);
+	});
+
+	it("does not replay votes after disconnect and respects the restored immutable choice", () => {
+		mocks.readHost.mockReturnValue(undefined);
+		const draw = feedbackDraw();
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(false, snapshot({ draw }));
+		act(() => result.current.vote(draw.id, "down"));
+		act(() => {
+			socket().readyState = 3;
+			socket().dispatchEvent(new Event("close"));
+		});
+		expect(result.current.votePendingDrawId).toBeNull();
+		act(() => expect(result.current.vote(draw.id, "up")).toBe(false));
+		joined(
+			false,
+			snapshot({
+				draw: {
+					...draw,
+					votes: [
+						{
+							participantId: "guest-client",
+							name: "민수",
+							vote: "down",
+							timestamp: Date.now(),
+							reactionMs: 2800,
+						},
+					],
+				},
+			}),
+		);
+		act(() => expect(result.current.vote(draw.id, "up")).toBe(false));
+		expect(sent("vote")).toHaveLength(1);
+	});
+
+	it("handles an unconfirmed request without auto-submitting another vote", () => {
+		mocks.readHost.mockReturnValue(undefined);
+		const draw = feedbackDraw();
+		const { result, unmount } = renderHook(() => useLunchRoom(roomId));
+		joined(false, snapshot({ draw }));
+		act(() => result.current.vote(draw.id, "up"));
+		act(() => vi.advanceTimersByTime(15000));
+		expect(result.current.votePendingDrawId).toBeNull();
+		expect(result.current.error).toContain("투표 확인이 지연");
+		expect(sent("vote")).toHaveLength(1);
+		act(() => result.current.vote(draw.id, "up"));
+		unmount();
+		act(() => vi.advanceTimersByTime(15000));
+		expect(sent("vote")).toHaveLength(2);
+	});
+});
 
 beforeEach(() => {
 	vi.useFakeTimers();

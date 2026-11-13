@@ -95,6 +95,108 @@ function updateRoom(view: ReturnType<typeof render>, next: Partial<RoomState>) {
 	view.rerender(<LunchRoomPage roomId={roomId} />);
 }
 
+describe("current result feedback and frozen history", () => {
+	it("exposes guest voting only after reveal and preserves the acknowledged selection", async () => {
+		const current = { ...draw(baseTime - 7000), votes: [] };
+		room.snapshot = snapshot({ draw: current, status: "drawing" });
+		const view = render(<LunchRoomPage roomId={roomId} />);
+		expect(screen.queryByRole("button", { name: "좋아요 투표" })).toBeNull();
+		await act(async () => vi.advanceTimersByTime(200));
+		fireEvent.click(screen.getByRole("button", { name: "좋아요 투표" }));
+		expect(room.vote).toHaveBeenCalledExactlyOnceWith(current.id, "up");
+		updateRoom(view, { votePendingDrawId: current.id });
+		expect(
+			screen
+				.getByRole("button", { name: "아쉬워요 투표" })
+				.matches(":disabled"),
+		).toBe(true);
+		updateRoom(view, {
+			votePendingDrawId: null,
+			snapshot: snapshot({
+				draw: {
+					...current,
+					votes: [
+						{
+							participantId: "guest-client",
+							name: "참가자",
+							vote: "up",
+							timestamp: Date.now(),
+							reactionMs: 0,
+						},
+					],
+				},
+			}),
+		});
+		expect(
+			screen
+				.getByRole("button", { name: "좋아요 투표" })
+				.getAttribute("aria-pressed"),
+		).toBe("true");
+		expect(
+			screen
+				.getByRole("button", { name: "아쉬워요 투표" })
+				.matches(":disabled"),
+		).toBe(true);
+		fireEvent.click(screen.getByRole("button", { name: "아쉬워요 투표" }));
+		expect(room.vote).toHaveBeenCalledTimes(1);
+	});
+
+	it("keeps current feedback available when the host changes candidates before the next draw", () => {
+		const current = { ...draw(baseTime - 8000), votes: [] };
+		room.snapshot = snapshot({ draw: current });
+		const view = render(<LunchRoomPage roomId={roomId} />);
+		updateRoom(view, {
+			snapshot: snapshot({
+				draw: current,
+				listVersion: 2,
+				candidates: sampleLunchPlaces.slice(2, 4),
+			}),
+		});
+		expect(
+			screen.getByRole("button", { name: "좋아요 투표" }).matches(":disabled"),
+		).toBe(false);
+		expect(
+			document.querySelector(".lunch-wheel-rotor text")?.textContent,
+		).toContain("3 ");
+		fireEvent.click(screen.getByRole("button", { name: "아쉬워요 투표" }));
+		expect(room.vote).toHaveBeenCalledExactlyOnceWith(current.id, "down");
+	});
+
+	it("shows fixed ballots in history with no vote action and freezes the opened copy", () => {
+		const archived = {
+			...draw(baseTime - 8000),
+			votes: [
+				{
+					participantId: "guest-client",
+					name: "확정이름",
+					vote: "up" as const,
+					timestamp: baseTime,
+					reactionMs: 800,
+				},
+			],
+		};
+		room.snapshot = snapshot({ history: [archived] });
+		const view = render(<LunchRoomPage roomId={roomId} />);
+		fireEvent.click(screen.getByRole("button", { name: "결과" }));
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: `${sampleLunchPlaces[1].name} 상세 기록 열기`,
+			}),
+		);
+		const dialog = screen.getByRole("dialog");
+		expect(
+			within(dialog).queryByRole("button", { name: "좋아요 투표" }),
+		).toBeNull();
+		expect(within(dialog).getByText("확정된 투표 기록입니다.")).toBeTruthy();
+		expect(within(dialog).getByText("확정이름")).toBeTruthy();
+		archived.votes[0].name = "바뀐이름";
+		updateRoom(view, { snapshot: snapshot({ history: [archived] }) });
+		expect(within(dialog).getByText("확정이름")).toBeTruthy();
+		expect(within(dialog).queryByText("바뀐이름")).toBeNull();
+		expect(room.vote).not.toHaveBeenCalled();
+	});
+});
+
 beforeEach(() => {
 	vi.useFakeTimers();
 	vi.setSystemTime(baseTime);
@@ -139,12 +241,14 @@ beforeEach(() => {
 		error: "",
 		startPending: false,
 		candidatesPending: false,
+		votePendingDrawId: null,
 		clockOffset: 0,
 		serverNow: () => Date.now(),
 		rename: vi.fn(() => true),
 		sendChat: vi.fn(() => true),
 		startDraw: vi.fn(() => true),
 		updateCandidates: vi.fn(() => true),
+		vote: vi.fn(() => true),
 		reconnect: vi.fn(),
 		clearError: vi.fn(),
 	};
