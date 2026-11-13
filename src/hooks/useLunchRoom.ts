@@ -10,6 +10,7 @@ import {
 	type ClientMessage,
 	clampLunchRoomNickname,
 	isLunchRoomId,
+	isRoomDrawVoter,
 	lunchRoomLimits,
 	normalizeLunchRoomNickname,
 	parseClientMessage,
@@ -72,6 +73,7 @@ export function useLunchRoom(
 	const [nickname, setNickname] = useState("");
 	const [errorState, setErrorState] = useState<RoomError | null>(null);
 	const [startPending, setStartPending] = useState(false);
+	const [nextPending, setNextPending] = useState(false);
 	const [candidatesPending, setCandidatesPending] = useState(false);
 	const [votePendingDrawId, setVotePendingDrawId] = useState<string | null>(
 		null,
@@ -90,6 +92,7 @@ export function useLunchRoom(
 	const hostTokenRef = useRef<string | undefined>(undefined);
 	const guestTokenRef = useRef<string | undefined>(undefined);
 	const startRequestRef = useRef<string | null>(null);
+	const nextRequestRef = useRef<{ id: string; drawId: string } | null>(null);
 	const candidatesRequestRef = useRef<number | null>(null);
 	const voteRequestRef = useRef<{ id: string; drawId: string } | null>(null);
 	const voteTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
@@ -145,6 +148,8 @@ export function useLunchRoom(
 		setSelf(null);
 		setConnection(requireEntry && !entry ? "waiting" : "connecting");
 		setStartPending(false);
+		nextRequestRef.current = null;
+		setNextPending(false);
 		setCandidatesPending(false);
 		setVotePendingDrawId(null);
 		voteRequestRef.current = null;
@@ -269,6 +274,8 @@ export function useLunchRoom(
 			startRequestRef.current = null;
 			candidatesRequestRef.current = null;
 			setStartPending(false);
+			nextRequestRef.current = null;
+			setNextPending(false);
 			setCandidatesPending(false);
 			clearVotePending();
 		}
@@ -383,11 +390,16 @@ export function useLunchRoom(
 					message.requestId === voteRequestRef.current.id
 				) {
 					clearVotePending();
-				} else {
+				} else if (
+					!nextRequestRef.current ||
+					message.requestId === nextRequestRef.current.id
+				) {
 					clearTimeout(actionTimerRef.current);
 					startRequestRef.current = null;
 					candidatesRequestRef.current = null;
 					setStartPending(false);
+					nextRequestRef.current = null;
+					setNextPending(false);
 					setCandidatesPending(false);
 				}
 				setErrorState({ kind: "action", message: message.message });
@@ -479,7 +491,18 @@ export function useLunchRoom(
 				candidatesRequestRef.current = null;
 				setCandidatesPending(false);
 			}
-			if (!startRequestRef.current && candidatesRequestRef.current === null)
+			if (
+				nextRequestRef.current &&
+				message.snapshot.draw?.id !== nextRequestRef.current.drawId
+			) {
+				nextRequestRef.current = null;
+				setNextPending(false);
+			}
+			if (
+				!startRequestRef.current &&
+				!nextRequestRef.current &&
+				candidatesRequestRef.current === null
+			)
 				clearTimeout(actionTimerRef.current);
 			if (
 				message.snapshot.status === "closed" ||
@@ -683,6 +706,8 @@ export function useLunchRoom(
 			startRequestRef.current = null;
 			candidatesRequestRef.current = null;
 			setStartPending(false);
+			nextRequestRef.current = null;
+			setNextPending(false);
 			setCandidatesPending(false);
 			setErrorState({
 				kind: "action",
@@ -697,6 +722,7 @@ export function useLunchRoom(
 			!selfRef.current?.isHost ||
 			!current ||
 			startRequestRef.current ||
+			nextRequestRef.current ||
 			candidatesRequestRef.current !== null ||
 			current.status === "fetching" ||
 			(current.draw &&
@@ -716,6 +742,7 @@ export function useLunchRoom(
 			!selfRef.current?.isHost ||
 			!current ||
 			startRequestRef.current ||
+			nextRequestRef.current ||
 			candidatesRequestRef.current !== null ||
 			current.status === "fetching" ||
 			(current.draw &&
@@ -725,6 +752,28 @@ export function useLunchRoom(
 		if (!send({ type: "candidates", ids })) return false;
 		candidatesRequestRef.current = current.listVersion;
 		setCandidatesPending(true);
+		markPending();
+		return true;
+	}
+	function nextRound(drawId: string) {
+		const current = snapshotRef.current;
+		const draw = current?.draw;
+		if (
+			!selfRef.current?.isHost ||
+			!current ||
+			!draw ||
+			draw.id !== drawId ||
+			(current.status !== "waiting" && current.status !== "drawing") ||
+			serverNow() < draw.startedAt + draw.durationMs ||
+			startRequestRef.current ||
+			nextRequestRef.current ||
+			candidatesRequestRef.current !== null
+		)
+			return false;
+		const id = actionId();
+		if (!send({ type: "next", id, drawId })) return false;
+		nextRequestRef.current = { id, drawId };
+		setNextPending(true);
 		markPending();
 		return true;
 	}
@@ -738,6 +787,7 @@ export function useLunchRoom(
 			!current ||
 			!draw ||
 			draw.id !== drawId ||
+			!isRoomDrawVoter(draw, self.id) ||
 			(current.status !== "waiting" && current.status !== "drawing") ||
 			serverNow() < draw.startedAt + draw.durationMs ||
 			current.history.some((entry) => entry.id === drawId) ||
@@ -787,6 +837,7 @@ export function useLunchRoom(
 		nickname,
 		error: currentScope ? (errorState?.message ?? "") : "",
 		startPending,
+		nextPending,
 		candidatesPending,
 		votePendingDrawId,
 		clockOffset,
@@ -794,6 +845,7 @@ export function useLunchRoom(
 		rename,
 		sendChat,
 		startDraw,
+		nextRound,
 		updateCandidates,
 		vote,
 		reconnect,

@@ -37,7 +37,7 @@ export function roomDrawCopyText(draw: RoomDraw) {
 					"확정 투표:",
 					...draw.votes.map(
 						(vote) =>
-							`- ${vote.name}: ${vote.vote === "up" ? "좋아요" : "아쉬워요"} (+${vote.reactionMs}ms · ${new Date(vote.timestamp).toISOString()})`,
+							`- ${vote.name}: ${vote.vote === "up" ? "좋아요" : "싫어요"} (+${vote.reactionMs}ms · ${new Date(vote.timestamp).toISOString()})`,
 					),
 				]),
 		"",

@@ -1,4 +1,6 @@
 // Re-export API functions for use in components
+
+export { getSourceDisplayName } from "../lib/randomSource";
 export {
 	forceRefillPool,
 	generateLotteryNumbers,
@@ -12,21 +14,3 @@ export {
 	type RandomResult,
 	type RandomSource,
 } from "./randomApi";
-
-/**
- * Get human-readable source name
- */
-export function getSourceDisplayName(
-	source: "quantum" | "atmospheric" | "csprng" | "mixed",
-): string {
-	switch (source) {
-		case "quantum":
-			return "ANU Quantum (양자 난수)";
-		case "atmospheric":
-			return "Random.org (대기 노이즈)";
-		case "csprng":
-			return "Web Crypto (CSPRNG)";
-		case "mixed":
-			return "혼합 난수 원천";
-	}
-}

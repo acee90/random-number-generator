@@ -16,7 +16,11 @@
 :root {
 	--ink: #272b24;
 	--muted: #646b5e;
-	--line: #dde2d4;
+	--line: #d8decd;
+	--section-line: #a9b992;
+	--surface: #edf2e3;
+	--control-radius: 4px;
+	--panel-radius: 8px;
 	--lime: #d6f266;
 	--paper: #f7f7f2;
 	color-scheme: light;
@@ -38,7 +42,8 @@ body {
 }
 button,
 input,
-select {
+select,
+textarea {
 	font: inherit;
 }
 button,
@@ -92,7 +97,7 @@ a {
 	display: grid;
 	place-items: center;
 	background: var(--lime);
-	border-radius: 10px;
+	border-radius: var(--control-radius);
 	color: #293119;
 }
 .wordmark-light {
@@ -135,10 +140,11 @@ a {
 .tool-nav {
 	display: grid;
 	grid-template-columns: repeat(3, minmax(0, 1fr));
-	gap: 6px;
-	padding: 6px;
-	background: #e9ede0;
-	border-radius: 13px;
+	gap: 0;
+	padding: 0;
+	border: 1px solid var(--section-line);
+	background: var(--surface);
+	border-radius: var(--panel-radius);
 	margin-bottom: 22px;
 }
 .tool-tab {
@@ -147,16 +153,27 @@ a {
 	justify-content: center;
 	gap: 12px;
 	min-height: 56px;
-	border: 1px solid transparent;
+	border: 0;
 	background: transparent;
 	color: #526044;
 	padding: 10px 16px;
-	border-radius: 9px;
+	border-radius: 0;
 	font-size: 18px;
 	font-weight: 650;
 	transition:
 		background-color 120ms,
 		color 120ms;
+}
+.tool-tab + .tool-tab {
+	border-inline-start: 1px solid var(--line);
+}
+.tool-tab:first-child {
+	border-start-start-radius: 7px;
+	border-end-start-radius: 7px;
+}
+.tool-tab:last-child {
+	border-start-end-radius: 7px;
+	border-end-end-radius: 7px;
 }
 .tool-tab svg {
 	width: 21px;
@@ -165,7 +182,7 @@ a {
 .tool-tab.is-active {
 	background: #2d3227;
 	color: #fff;
-	box-shadow: 0 2px 4px #1113;
+	box-shadow: none;
 }
 .tab-number {
 	font-size: 12px;
@@ -182,11 +199,10 @@ a {
 .generator {
 	display: grid;
 	grid-template-columns: 400px minmax(0, 1fr);
-	border: 1px solid #d8decd;
-	border-radius: 16px;
+	border: 1px solid var(--section-line);
+	border-radius: var(--panel-radius);
 	overflow: hidden;
-	background: #fff;
-	box-shadow: 0 5px 20px #32391c04;
+	background: transparent;
 }
 .controls {
 	padding: 26px 28px;
@@ -246,7 +262,7 @@ a {
 	min-width: 0;
 	min-height: 60px;
 	border: 1px solid #8b967d;
-	border-radius: 8px;
+	border-radius: var(--control-radius);
 	background: #fff;
 	font-size: 25px;
 	font-weight: 600;
@@ -273,7 +289,7 @@ a {
 }
 .count-input input {
 	border: 1px solid #8b967d;
-	border-radius: 7px;
+	border-radius: var(--control-radius);
 	width: 85px;
 	min-height: 44px;
 	padding: 6px;
@@ -293,7 +309,7 @@ a {
 	appearance: none;
 	width: 100%;
 	height: 7px;
-	border-radius: 10px;
+	border-radius: var(--control-radius);
 	margin: 23px 0 10px;
 	background: linear-gradient(
 		to right,
@@ -369,8 +385,8 @@ a {
 	margin-top: 25px;
 	background: var(--lime);
 	color: #263619;
-	border: 1px solid #c7df59;
-	border-radius: 9px;
+	border: 2px solid var(--ink);
+	border-radius: 6px;
 	min-height: 64px;
 	display: flex;
 	justify-content: space-between;
@@ -406,7 +422,7 @@ a {
 	line-height: 1.7;
 	padding: 12px 14px;
 	border: 1px solid #ebc8be;
-	border-radius: 8px;
+	border-radius: var(--control-radius);
 	background: #fff6f3;
 	margin: 20px 0 0;
 }
@@ -420,11 +436,7 @@ a {
 .result-panel {
 	border-left: 1px solid var(--line);
 	padding: 26px 30px 22px;
-	background-color: #f6f8ef;
-	background-image:
-		linear-gradient(#dce2cf45 1px, transparent 1px),
-		linear-gradient(90deg, #dce2cf45 1px, transparent 1px);
-	background-size: 30px 30px;
+	background: #f6f8ef;
 	display: flex;
 	flex-direction: column;
 	min-width: 0;
@@ -480,7 +492,7 @@ a {
 	justify-content: center;
 	width: 86px;
 	height: 86px;
-	border-radius: 22px;
+	border-radius: 6px;
 	background: #ebf0df;
 	color: #667c4c;
 	position: relative;
@@ -563,7 +575,7 @@ a {
 	background: #fff;
 	border: 1px solid #d0ddbf;
 	padding: 12px 17px;
-	border-radius: 9px;
+	border-radius: var(--control-radius);
 	max-width: 100%;
 }
 .result-actions {
@@ -589,13 +601,14 @@ a {
 	padding: 11px 22px;
 	background: #fff;
 	color: #3f5e25;
-	border-radius: 8px;
+	border-radius: var(--control-radius);
 }
 .lottery-rules {
-	background: #f7f9f1;
-	border: 1px solid #dce5ce;
-	border-radius: 10px;
-	padding: 20px;
+	background: transparent;
+	border: 0;
+	border-bottom: 1px solid var(--line);
+	border-radius: 0;
+	padding: 0 0 20px;
 	margin-bottom: 26px;
 }
 .lottery-rules > span {
@@ -628,7 +641,7 @@ a {
 	font-size: 25px;
 	font-weight: 650;
 	border: 1px solid #9aab86;
-	border-radius: 8px;
+	border-radius: var(--control-radius);
 	background: #fff;
 }
 .game-options button > span {
@@ -639,9 +652,9 @@ a {
 	color: #5a7048;
 }
 .game-options button.selected {
-	background: #edf7d7;
-	border-color: #708a3b;
-	box-shadow: 0 0 0 1px #708a3b;
+	background: #e1f49e;
+	border-color: #3f5e25;
+	box-shadow: inset 0 3px 0 #3f5e25;
 }
 .group-select-label {
 	display: block;
@@ -659,7 +672,7 @@ a {
 	padding: 15px 40px 15px 14px;
 	min-height: 56px;
 	border: 1px solid #8b9c77;
-	border-radius: 8px;
+	border-radius: var(--control-radius);
 	background: #fff;
 	font-size: 17px;
 	color: var(--ink);
@@ -750,7 +763,7 @@ a {
 	border: 1px solid #c2d1af;
 	display: grid;
 	place-items: center;
-	border-radius: 7px;
+	border-radius: var(--control-radius);
 	font-size: 34px;
 	font-weight: 600;
 	color: #344e22;
@@ -802,9 +815,9 @@ a {
 	align-items: start;
 	text-align: start;
 	padding: 21px;
-	border: 1px solid #d2dcc4;
-	background: #fff;
-	border-radius: 10px;
+	border: 1px solid var(--section-line);
+	background: transparent;
+	border-radius: var(--panel-radius);
 	color: var(--ink);
 	gap: 10px;
 }
@@ -834,8 +847,8 @@ a {
 }
 .example-card.is-applied {
 	border-color: #728e3f;
-	background: #f2f8e6;
-	box-shadow: 0 0 0 1px #728e3f;
+	background: #e1f49e;
+	box-shadow: inset 0 3px 0 #3f5e25;
 }
 .example-card:disabled {
 	opacity: 0.65;
@@ -881,7 +894,7 @@ a {
 	gap: 19px;
 	padding: 25px;
 	border: 1px dashed #b9c9a2;
-	border-radius: 10px;
+	border-radius: var(--control-radius);
 }
 .history-dash {
 	color: #789754;
@@ -907,9 +920,9 @@ a {
 	flex-shrink: 0;
 }
 .history-list {
-	border: 1px solid #d4dec6;
-	border-radius: 10px;
-	background: #ffffff75;
+	border: 1px solid var(--section-line);
+	border-radius: var(--panel-radius);
+	background: transparent;
 }
 .history-item {
 	position: relative;
@@ -962,7 +975,7 @@ a {
 	height: 44px;
 	padding: 0;
 	border: 1px solid #b4c69c;
-	border-radius: 8px;
+	border-radius: var(--control-radius);
 	background: #fff;
 	color: #526f35;
 }
@@ -1190,7 +1203,7 @@ a {
 	.brand-icon {
 		width: 32px;
 		height: 32px;
-		border-radius: 9px;
+		border-radius: var(--control-radius);
 	}
 	.page-heading {
 		padding: 23px 0;
@@ -1203,8 +1216,8 @@ a {
 		max-width: 360px;
 	}
 	.tool-nav {
-		gap: 4px;
-		padding: 5px;
+		gap: 0;
+		padding: 0;
 		margin-bottom: 18px;
 	}
 	.tool-tab {
@@ -1471,7 +1484,7 @@ html {
 	gap: 7px;
 	min-height: 44px;
 	border: 1px solid #b3c699;
-	border-radius: 7px;
+	border-radius: var(--control-radius);
 	padding: 9px 12px;
 	color: #456829;
 	background: #fff;
@@ -1507,7 +1520,7 @@ html {
 .all-groups-note {
 	margin: 0 0 18px;
 	background: #f0f6e2;
-	border-radius: 7px;
+	border-radius: var(--control-radius);
 	padding: 11px 13px;
 }
 .game-options:disabled button {
@@ -1923,7 +1936,7 @@ html {
 	font: inherit;
 	color: inherit;
 	border: 1px solid #b7caa0;
-	border-radius: 9px;
+	border-radius: var(--control-radius);
 	background: #fff;
 	padding: 10px 18px;
 	max-width: 100%;

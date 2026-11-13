@@ -113,11 +113,80 @@ function feedbackDraw(): RoomDraw {
 		fromRotation: 0,
 		toRotation: getWheelRotation(0, 0, 2),
 		listVersion: 1,
+		participants: [{ id: "guest-client", name: "참가자", isHost: false }],
 		votes: [],
 	};
 }
 
 describe("irreversible current-result feedback", () => {
+	it("does not send a ballot for a late join even when the result is revealed", () => {
+		mocks.readHost.mockReturnValue(undefined);
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(false, snapshot({ draw: { ...feedbackDraw(), participants: [] } }));
+		act(() => expect(result.current.vote("feedback-draw", "up")).toBe(false));
+		expect(sent("vote")).toHaveLength(0);
+	});
+	it("closes only the current completed result, waits for acknowledgement, and does not start another draw", () => {
+		const draw = feedbackDraw();
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(true, snapshot({ draw }));
+		act(() => {
+			expect(result.current.nextRound(draw.id)).toBe(true);
+			expect(result.current.nextRound(draw.id)).toBe(false);
+			expect(result.current.startDraw()).toBe(false);
+		});
+		expect(result.current.nextPending).toBe(true);
+		expect(sent("next")).toEqual([
+			{ type: "next", id: expect.any(String), drawId: draw.id },
+		]);
+		receive({
+			type: "error",
+			code: "CHAT_RATE",
+			message: "잠시 후 전송해 주세요.",
+			requestId: "unrelated-chat",
+		});
+		expect(result.current.nextPending).toBe(true);
+		receive({
+			type: "snapshot",
+			snapshot: snapshot({ draw }),
+			serverTime: Date.now(),
+		});
+		expect(result.current.nextPending).toBe(true);
+		receive({
+			type: "snapshot",
+			snapshot: snapshot({ draw: null, history: [draw] }),
+			serverTime: Date.now(),
+		});
+		expect(result.current.nextPending).toBe(false);
+		expect(sent("start")).toHaveLength(0);
+		act(() => expect(result.current.startDraw()).toBe(true));
+	});
+	it("allows the host to close at reveal even while the last snapshot still says drawing", () => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		const draw = feedbackDraw();
+		joined(true, snapshot({ draw, status: "drawing" }));
+		act(() => expect(result.current.nextRound(draw.id)).toBe(true));
+		expect(sent("next")).toHaveLength(1);
+	});
+
+	it("clears an unconfirmed close on timeout and on matching rejection", () => {
+		const draw = feedbackDraw();
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(true, snapshot({ draw }));
+		act(() => result.current.nextRound(draw.id));
+		receive({
+			type: "error",
+			code: "VOTE_NOT_READY",
+			message: "추첨 종료 후 다시 시도해 주세요.",
+			requestId: sent("next")[0].id,
+		});
+		expect(result.current.nextPending).toBe(false);
+		act(() => result.current.nextRound(draw.id));
+		act(() => vi.advanceTimersByTime(15000));
+		expect(result.current.nextPending).toBe(false);
+		expect(sent("next")).toHaveLength(2);
+	});
+
 	it("sends one vote and waits for its own authoritative ballot despite unrelated updates", () => {
 		mocks.readHost.mockReturnValue(undefined);
 		const current = snapshot({ draw: feedbackDraw() });

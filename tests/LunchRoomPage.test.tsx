@@ -87,6 +87,7 @@ function draw(startedAt = baseTime + 1500): RoomDraw {
 		fromRotation: 0,
 		toRotation: getWheelRotation(0, 1, 2),
 		listVersion: 1,
+		participants: snapshot().participants,
 	};
 }
 function updateRoom(view: ReturnType<typeof render>, next: Partial<RoomState>) {
@@ -106,9 +107,7 @@ describe("current result feedback and frozen history", () => {
 		expect(room.vote).toHaveBeenCalledExactlyOnceWith(current.id, "up");
 		updateRoom(view, { votePendingDrawId: current.id });
 		expect(
-			screen
-				.getByRole("button", { name: "아쉬워요 투표" })
-				.matches(":disabled"),
+			screen.getByRole("button", { name: "싫어요 투표" }).matches(":disabled"),
 		).toBe(true);
 		updateRoom(view, {
 			votePendingDrawId: null,
@@ -133,11 +132,9 @@ describe("current result feedback and frozen history", () => {
 				.getAttribute("aria-pressed"),
 		).toBe("true");
 		expect(
-			screen
-				.getByRole("button", { name: "아쉬워요 투표" })
-				.matches(":disabled"),
+			screen.getByRole("button", { name: "싫어요 투표" }).matches(":disabled"),
 		).toBe(true);
-		fireEvent.click(screen.getByRole("button", { name: "아쉬워요 투표" }));
+		fireEvent.click(screen.getByRole("button", { name: "싫어요 투표" }));
 		expect(room.vote).toHaveBeenCalledTimes(1);
 	});
 
@@ -158,8 +155,69 @@ describe("current result feedback and frozen history", () => {
 		expect(
 			document.querySelector(".lunch-wheel-rotor text")?.textContent,
 		).toContain("3 ");
-		fireEvent.click(screen.getByRole("button", { name: "아쉬워요 투표" }));
+		fireEvent.click(screen.getByRole("button", { name: "싫어요 투표" }));
 		expect(room.vote).toHaveBeenCalledExactlyOnceWith(current.id, "down");
+	});
+
+	it("keeps the result focused on the menu and voting, with no copy or metadata controls", () => {
+		room.snapshot = snapshot({ draw: draw(baseTime - 8000) });
+		render(<LunchRoomPage roomId={roomId} />);
+		expect(screen.queryByText("추첨 정보")).toBeNull();
+		expect(screen.queryByRole("button", { name: "결과 복사" })).toBeNull();
+		expect(document.querySelector(".room-result-tools")).toBeNull();
+		expect(
+			screen.getByRole("button", { name: "좋아요 투표" }).matches(":disabled"),
+		).toBe(false);
+	});
+
+	it("keeps late guests read-only and never offers host navigation", () => {
+		room.snapshot = snapshot({
+			draw: {
+				...draw(baseTime - 8000),
+				participants: [{ id: "host-client", name: "방장", isHost: true }],
+			},
+		});
+		render(<LunchRoomPage roomId={roomId} />);
+		expect(
+			screen.getByRole("button", { name: "좋아요 투표" }).matches(":disabled"),
+		).toBe(true);
+		expect(screen.getByText(/추첨 시작 후 입장해/)).toBeTruthy();
+		expect(
+			screen.queryByRole("button", {
+				name: /룰렛 다시 보기|투표 종료하고 다음 게임|한 번 더 추첨하기/,
+			}),
+		).toBeNull();
+		expect(
+			screen.getByRole("region", { name: "실시간 투표 현황" }).parentElement
+				?.className,
+		).toBe("room-result-layout");
+	});
+	it("lets the host close voting for everyone, then focuses the next draw without auto-starting", () => {
+		room.self = { id: "host-client", isHost: true };
+		const current = draw(baseTime - 8000);
+		room.snapshot = snapshot({ draw: current });
+		const view = render(<LunchRoomPage roomId={roomId} />);
+		expect(screen.queryByRole("button", { name: "룰렛 다시 보기" })).toBeNull();
+		fireEvent.click(
+			screen.getByRole("button", { name: "투표 종료하고 다음 게임" }),
+		);
+		expect(room.nextRound).toHaveBeenCalledExactlyOnceWith(current.id);
+		expect(room.startDraw).not.toHaveBeenCalled();
+		updateRoom(view, { nextPending: true });
+		expect(
+			screen
+				.getByRole("button", { name: "투표 종료 중…" })
+				.matches(":disabled"),
+		).toBe(true);
+		updateRoom(view, {
+			nextPending: false,
+			snapshot: snapshot({ draw: null, history: [current] }),
+		});
+		expect(
+			screen.queryByRole("region", { name: "실시간 투표 현황" }),
+		).toBeNull();
+		expect(document.activeElement?.id).toContain("-start");
+		expect(room.startDraw).not.toHaveBeenCalled();
 	});
 
 	it("shows fixed ballots in history with no vote action and freezes the opened copy", () => {
@@ -240,6 +298,7 @@ beforeEach(() => {
 		enter: vi.fn(() => true),
 		error: "",
 		startPending: false,
+		nextPending: false,
 		candidatesPending: false,
 		votePendingDrawId: null,
 		clockOffset: 0,
@@ -247,6 +306,7 @@ beforeEach(() => {
 		rename: vi.fn(() => true),
 		sendChat: vi.fn(() => true),
 		startDraw: vi.fn(() => true),
+		nextRound: vi.fn(() => true),
 		updateCandidates: vi.fn(() => true),
 		vote: vi.fn(() => true),
 		reconnect: vi.fn(),
@@ -270,6 +330,86 @@ afterEach(() => {
 			animationDescriptor,
 		);
 	else Reflect.deleteProperty(HTMLElement.prototype, "animate");
+});
+
+describe("the live room visual viewport", () => {
+	it("tracks keyboard-height changes, falls back while zoomed and releases its resize listener on unmount", () => {
+		const viewport = Object.assign(new EventTarget(), {
+			height: 800,
+			scale: 1,
+		});
+		const addListener = vi.spyOn(viewport, "addEventListener");
+		const removeListener = vi.spyOn(viewport, "removeEventListener");
+		vi.stubGlobal("visualViewport", viewport);
+		const view = render(<LunchRoomPage roomId={roomId} />);
+		const root = view.container.querySelector<HTMLDivElement>(".lunch-room");
+		expect(root?.classList.contains("room-live")).toBe(true);
+		expect(root?.dataset.compactViewport).toBeUndefined();
+		expect(root?.style.getPropertyValue("--room-viewport-height")).toBe(
+			"800px",
+		);
+		viewport.height = 420;
+		act(() => viewport.dispatchEvent(new Event("resize")));
+		expect(root?.style.getPropertyValue("--room-viewport-height")).toBe(
+			"420px",
+		);
+		expect(root?.dataset.compactViewport).toBe("true");
+		viewport.scale = 2;
+		act(() => viewport.dispatchEvent(new Event("resize")));
+		expect(root?.style.getPropertyValue("--room-viewport-height")).toBe("");
+		expect(root?.dataset.compactViewport).toBeUndefined();
+		viewport.scale = 1;
+		viewport.height = 480;
+		act(() => viewport.dispatchEvent(new Event("resize")));
+		expect(root?.style.getPropertyValue("--room-viewport-height")).toBe(
+			"480px",
+		);
+		expect(root?.dataset.compactViewport).toBe("true");
+		viewport.height = 800;
+		act(() => viewport.dispatchEvent(new Event("resize")));
+		expect(root?.dataset.compactViewport).toBeUndefined();
+		const listener = addListener.mock.calls.find(
+			([type]) => type === "resize",
+		)?.[1];
+		expect(listener).toBeTypeOf("function");
+		view.unmount();
+		expect(removeListener).toHaveBeenCalledWith("resize", listener);
+		expect(root?.style.getPropertyValue("--room-viewport-height")).toBe("");
+		expect(root?.dataset.compactViewport).toBeUndefined();
+	});
+
+	it("keeps entry and closed screens unconstrained while attaching the live viewport after entry", () => {
+		const viewport = Object.assign(new EventTarget(), {
+			height: 640,
+			scale: 1,
+		});
+		vi.stubGlobal("visualViewport", viewport);
+		room.waitingForEntry = true;
+		const view = render(<LunchRoomPage roomId={roomId} />);
+		expect(view.container.querySelector(".room-live")).toBeNull();
+		expect(
+			view.container
+				.querySelector<HTMLDivElement>(".lunch-room")
+				?.style.getPropertyValue("--room-viewport-height"),
+		).toBe("");
+		updateRoom(view, { waitingForEntry: false });
+		expect(view.container.querySelector(".room-live")).not.toBeNull();
+		expect(
+			view.container
+				.querySelector<HTMLDivElement>(".lunch-room")
+				?.style.getPropertyValue("--room-viewport-height"),
+		).toBe("640px");
+		updateRoom(view, {
+			connection: "closed",
+			snapshot: snapshot({ status: "closed" }),
+		});
+		expect(view.container.querySelector(".room-live")).toBeNull();
+		expect(
+			view.container
+				.querySelector<HTMLDivElement>(".lunch-room")
+				?.style.getPropertyValue("--room-viewport-height"),
+		).toBe("");
+	});
 });
 
 describe("synchronized lunch room UI", () => {
@@ -480,7 +620,7 @@ describe("synchronized lunch room UI", () => {
 			name: sampleLunchPlaces[1].name,
 		});
 		expect(
-			within(result).getByText(/2곳 중 추첨 · 출처: quantum/),
+			within(result).getByRole("heading", { name: sampleLunchPlaces[1].name }),
 		).toBeTruthy();
 		expect(
 			within(result).queryByRole("button", { name: "한 번 더 추첨하기" }),
@@ -708,7 +848,7 @@ describe("synchronized lunch room UI", () => {
 				.map((button) => button.textContent?.trim()),
 		).toEqual(["룰렛", "결과 0"]);
 		const candidates = screen.getByRole("region", { name: "추첨 후보" });
-		const wheel = screen.getByRole("region", { name: "함께 보는 룰렛" });
+		const wheel = screen.getByRole("region", { name: "룰렛" });
 		expect(
 			within(wheel)
 				.getByRole("button", { name: "방장이 추첨을 시작할 때까지 대기" })
@@ -1289,7 +1429,7 @@ describe("synchronized lunch room UI", () => {
 
 	it("labels missing legacy participants and derived uniform probabilities honestly", async () => {
 		room.snapshot = snapshot({
-			history: [draw(baseTime - 8000)],
+			history: [{ ...draw(baseTime - 8000), participants: undefined }],
 			participants: [
 				{ id: "present-user", name: "현재 사용자 이름", isHost: false },
 			],

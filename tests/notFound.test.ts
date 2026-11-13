@@ -7,6 +7,7 @@ import {
 	createRouter,
 	RouterProvider,
 } from "@tanstack/react-router";
+import { getSsrStatus } from "@tanstack/react-router/ssr/server";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -29,7 +30,7 @@ describe("missing page recovery", () => {
 		});
 		await router.load();
 
-		expect(router.state.statusCode).toBe(404);
+		expect(getSsrStatus(router)).toBe(404);
 		const html = renderToStaticMarkup(
 			createElement(RouterProvider, { router }),
 		);

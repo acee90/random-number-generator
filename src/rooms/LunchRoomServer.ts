@@ -5,6 +5,7 @@ import {
 	clampLunchRoomNickname,
 	hasInvalidLunchRoomJoinNickname,
 	isLunchRoomId,
+	isRoomDrawVoter,
 	lunchRoomLimits,
 	normalizeLunchRoomNickname,
 	parseClientMessage,
@@ -66,7 +67,8 @@ const chatIntervalMs = 750;
 const maxPendingConnections = 30;
 const maxProcessedStarts = 100;
 const maxGuestTokenMappings =
-	lunchRoomLimits.maxMembers * (lunchRoomLimits.maxHistory + 2);
+	lunchRoomLimits.maxMembers * (lunchRoomLimits.maxHistory + 2) +
+	lunchRoomLimits.maxParticipants;
 const hashPattern = /^[0-9a-f]{64}$/i;
 const opaqueIdPattern = /^[A-Za-z0-9_-]{1,80}$/;
 const tokenPattern = /^[A-Za-z0-9_-]{16,256}$/;
@@ -369,7 +371,9 @@ export class LunchRoomServer extends Server<RoomEnv> {
 					connection,
 					"JOIN_REQUIRED",
 					"이름을 입력하고 방에 입장해 주세요.",
-					message.type === "vote" ? message.id : undefined,
+					message.type === "vote" || message.type === "next"
+						? message.id
+						: undefined,
 				);
 				return;
 			}
@@ -395,6 +399,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 					await this.vote(connection, message);
 					break;
 				case "start":
+				case "next":
 				case "candidates":
 					if (
 						!state.participant.isHost ||
@@ -404,12 +409,16 @@ export class LunchRoomServer extends Server<RoomEnv> {
 							connection,
 							"HOST_REQUIRED",
 							"방장만 추첨 조건을 바꾸거나 시작할 수 있습니다.",
-							message.type === "start" ? message.id : undefined,
+							message.type === "start" || message.type === "next"
+								? message.id
+								: undefined,
 						);
 						return;
 					}
 					if (message.type === "start")
 						await this.beginDraw(connection, message.id);
+					else if (message.type === "next")
+						await this.nextRound(connection, message);
 					else await this.changeCandidates(connection, message.ids);
 					break;
 			}
@@ -688,6 +697,15 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			this.sendSnapshot(connection);
 			return;
 		}
+		if (!isRoomDrawVoter(draw, participant.id)) {
+			this.sendError(
+				connection,
+				"VOTE_NOT_ELIGIBLE",
+				"추첨 시작 후 입장해 이번 결과에는 투표할 수 없습니다. 다음 추첨부터 참여해 주세요.",
+				message.id,
+			);
+			return;
+		}
 		if (votes.length >= lunchRoomLimits.maxMembers) {
 			this.sendError(
 				connection,
@@ -710,6 +728,46 @@ export class LunchRoomServer extends Server<RoomEnv> {
 				},
 			],
 		};
+		this.recordActivity(connection);
+		await this.save();
+		await this.scheduleAlarm();
+		this.publish();
+	}
+
+	private async nextRound(
+		connection: Connection<SocketState>,
+		message: Extract<ClientMessage, { type: "next" }>,
+	) {
+		if (!this.room) return;
+		// A repeated or delayed request must never close a newer round.
+		const alreadyArchived = this.room.snapshot.history.some(
+			(draw) => draw.id === message.drawId,
+		);
+		if (alreadyArchived && this.room.snapshot.draw?.id !== message.drawId) {
+			this.sendSnapshot(connection);
+			return;
+		}
+		const draw = this.room.snapshot.draw;
+		if (
+			!draw ||
+			draw.id !== message.drawId ||
+			this.room.snapshot.status !== "waiting" ||
+			Date.now() < draw.startedAt + draw.durationMs
+		) {
+			this.sendError(
+				connection,
+				"VOTE_NOT_READY",
+				"현재 추첨이 끝난 뒤 투표를 종료해 주세요.",
+				message.id,
+			);
+			return;
+		}
+		if (!alreadyArchived)
+			this.room.snapshot.history = [
+				structuredClone(draw),
+				...this.room.snapshot.history,
+			].slice(0, lunchRoomLimits.maxHistory);
+		this.room.snapshot.draw = null;
 		this.recordActivity(connection);
 		await this.save();
 		await this.scheduleAlarm();
@@ -921,14 +979,17 @@ export class LunchRoomServer extends Server<RoomEnv> {
 				Number(right.isHost) - Number(left.isHost) ||
 				left.id.localeCompare(right.id),
 		);
-		const retainedVoters = new Set(
-			[this.room.snapshot.draw, ...this.room.snapshot.history].flatMap(
+		const retainedParticipants = new Set([
+			...(this.room.snapshot.draw?.participants?.map(
+				(participant) => participant.id,
+			) ?? []),
+			...[this.room.snapshot.draw, ...this.room.snapshot.history].flatMap(
 				(draw) => draw?.votes?.map((vote) => vote.participantId) ?? [],
 			),
-		);
+		]);
 		this.room.guestTokenIds = Object.fromEntries(
 			Object.entries(this.room.guestTokenIds).filter(
-				([, id]) => members.has(id) || retainedVoters.has(id),
+				([, id]) => members.has(id) || retainedParticipants.has(id),
 			),
 		);
 		this.room.presentParticipantIds = this.room.presentParticipantIds.filter(

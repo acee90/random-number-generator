@@ -4,10 +4,10 @@
 	flex: 1;
 	min-inline-size: 0;
 	min-block-size: 0;
-	padding: 20px;
-	border: 1px solid #d8decd;
-	border-radius: 16px;
-	background: #fff;
+	padding: 16px;
+	border: 1px solid var(--section-line);
+	border-radius: var(--panel-radius);
+	background: transparent;
 	overflow: hidden;
 }
 
@@ -45,7 +45,7 @@
 	min-block-size: 44px;
 	padding: 8px 12px;
 	border: 1px solid #8b967d;
-	border-radius: 8px;
+	border-radius: var(--control-radius);
 	background: #fff;
 	color: #3f5e25;
 	font-size: 13px;
@@ -58,7 +58,7 @@
 	flex-shrink: 0;
 	padding: 10px 12px;
 	border: 1px solid #8b967d;
-	border-radius: 8px;
+	border-radius: var(--control-radius);
 	background: #f6f8ef;
 	font-size: 13px;
 	line-height: 1.6;
@@ -70,7 +70,7 @@
 	display: flex;
 	flex-direction: column;
 	flex: 1;
-	gap: 12px;
+	gap: 0;
 	min-inline-size: 0;
 	min-block-size: 0;
 	list-style: none;
@@ -79,16 +79,17 @@
 	overflow-y: auto;
 	overscroll-behavior: contain;
 	scrollbar-gutter: stable;
-	border-radius: 8px;
+	border-radius: var(--control-radius);
 }
 
 .lunch-history-item {
 	flex-shrink: 0;
 	min-inline-size: 0;
 	padding: 16px;
-	border: 1px solid #d8decd;
-	border-radius: 12px;
-	background: #f7f9f1;
+	border: 0;
+	border-block-end: 1px solid var(--line);
+	border-radius: 0;
+	background: transparent;
 	overflow-wrap: anywhere;
 }
 

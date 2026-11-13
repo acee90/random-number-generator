@@ -5,13 +5,13 @@
 }
 .jeommechu-home main {
 	flex: 1;
-	padding-block: clamp(28px, 6vh, 68px) 32px;
+	padding-block: clamp(24px, 4vh, 40px) 28px;
 }
 .lunch-home-grid {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) minmax(0, 440px);
 	align-items: start;
-	gap: clamp(28px, 7vw, 100px);
+	gap: clamp(28px, 5vw, 72px);
 	max-inline-size: 1040px;
 	margin-inline: auto;
 }
@@ -40,10 +40,10 @@
 }
 .lunch-home-steps {
 	display: grid;
-	gap: 22px;
+	gap: 16px;
 	list-style: none;
 	padding: 0;
-	margin: 36px 0 0;
+	margin: 28px 0 0;
 }
 .lunch-home-steps li {
 	display: flex;
@@ -72,15 +72,15 @@
 	min-inline-size: 0;
 }
 .lunch-create-inline {
-	border: 1px solid #d8decd;
-	border-radius: 16px;
-	background: #fff;
-	padding: 28px;
+	border: 1px solid var(--section-line);
+	border-radius: var(--panel-radius);
+	background: transparent;
+	padding: 24px;
 }
 .lunch-create-inline h2 {
 	font-size: 23px;
 	line-height: 1.4;
-	margin: 0 0 24px;
+	margin: 0 0 20px;
 	font-weight: 700;
 }
 .lunch-create-inline .lunch-create-form {
@@ -128,7 +128,7 @@
 	color: #415f27;
 	text-decoration: underline;
 	text-underline-offset: 4px;
-	min-block-size: 40px;
+	min-block-size: 44px;
 }
 .lunch-home-footer {
 	display: flex;

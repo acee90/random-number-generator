@@ -36,7 +36,7 @@
 	min-width: 0;
 	padding: 12px 14px;
 	border: 1px solid #8b967d;
-	border-radius: 8px;
+	border-radius: var(--control-radius);
 	background: #fff;
 	color: var(--ink);
 	font: inherit;

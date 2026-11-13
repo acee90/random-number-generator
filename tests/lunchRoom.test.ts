@@ -81,6 +81,18 @@ describe("room draw vote protocol", () => {
 		reactionMs: 1450,
 	};
 
+	it("requires both a request ID and the exact draw ID to close voting", () => {
+		expect(
+			client({ type: "next", id: "next-1", drawId: "draw-1", winnerIndex: 3 }),
+		).toEqual({ type: "next", id: "next-1", drawId: "draw-1" });
+		for (const invalid of [
+			{ type: "next", id: "next-1" },
+			{ type: "next", drawId: "draw-1" },
+			{ type: "next", id: "next-1", drawId: "../draw" },
+		])
+			expect(client(invalid)).toBeNull();
+	});
+
 	it("accepts only an identified up/down request and discards client-supplied voter metadata", () => {
 		for (const choice of ["up", "down"])
 			expect(

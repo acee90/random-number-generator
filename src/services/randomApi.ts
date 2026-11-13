@@ -25,7 +25,7 @@ export interface RandomResult {
  * 요청별 새 난수 취득 → 실패시 CSPRNG. 검증 오류는 그대로 반환합니다.
  */
 export const generateRandomNumbers = createServerFn({ method: "POST" })
-	.inputValidator(validateRandomRequest)
+	.validator(validateRandomRequest)
 	.handler(async ({ data }): Promise<RandomResult> => {
 		const { min, max, count, unique } = data;
 
@@ -41,7 +41,7 @@ export interface LotteryResult {
 }
 
 export const generateLotteryNumbers = createServerFn({ method: "POST" })
-	.inputValidator(validateLotteryRequest)
+	.validator(validateLotteryRequest)
 	.handler(async ({ data }): Promise<LotteryResult> => {
 		const samplerCount =
 			data.kind === "lotto" && data.strategy === "spread"
