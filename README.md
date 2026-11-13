@@ -58,6 +58,12 @@ To build this application for production:
 npm run build
 ```
 
+## Analytics
+
+Google Tag Manager container `GTM-PH7KTBC8` is installed in the shared document head for all routes. It loads only in production builds (`npm run build`, including local production previews); `npm run dev` does not load it.
+
+To collect GA4 data for `https://jeommechu.dev`, configure a Google tag with the GA4 measurement ID in this GTM container and publish it. The container installation alone does not configure a GA4 destination. After deploying the site, verify the published tag with Tag Assistant and GA4 Realtime.
+
 ## Testing
 
 This project uses [Vitest](https://vitest.dev/) for testing. You can run the tests with:
