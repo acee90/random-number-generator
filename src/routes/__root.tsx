@@ -111,6 +111,23 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 	return (
 		<html lang="ko">
 			<head>
+				{import.meta.env.PROD && (
+					<>
+						<script
+							async
+							src="https://www.googletagmanager.com/gtm.js?id=GTM-PH7KTBC8"
+						/>
+						<script
+							// Static Google Tag Manager bootstrap; contains no user input.
+							// biome-ignore lint/security/noDangerouslySetInnerHtml: Required for the inline GTM bootstrap.
+							dangerouslySetInnerHTML={{
+								__html: `window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());`,
+							}}
+						/>
+					</>
+				)}
 				<HeadContent />
 			</head>
 			<body>
