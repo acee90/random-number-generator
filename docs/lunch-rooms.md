@@ -101,3 +101,5 @@ npm run build
 ```
 
 기존 GitHub 연결 Workers 배포 또는 `npm run deploy`로 Worker와 Durable Object migration을 함께 배포한다. Wrangler CLI 직접 배포에는 해당 Cloudflare 계정 인증이 필요하다. 로컬 방과 배포한 방은 서로 다른 저장소이며 URL도 공유되지 않는다.
+
+처음 `lunch-rooms-v1`을 적용할 때 Cloudflare의 브랜치 미리보기 명령인 `wrangler versions upload`는 미적용 Durable Object migration 오류로 실패할 수 있다. 먼저 검증한 버전을 `wrangler deploy`로 정식 배포해 새 SQLite 클래스를 만든 뒤 미리보기 빌드를 다시 실행한다. 이미 빌드한 결과를 그대로 배포할 때는 `npx wrangler deploy --config dist/server/wrangler.json --keep-vars`를 사용한다. 이후 migration 변경이 없는 버전은 기존 미리보기 업로드를 사용할 수 있다. 새 migration을 추가할 때마다 이 순서를 확인한다.
