@@ -3,19 +3,16 @@ import {
 	ChevronUp,
 	Copy,
 	Crown,
-	MessageCircle,
 	Pause,
 	Pencil,
 	Play,
 	Send,
-	Shuffle,
 	Users,
 	Wifi,
 	WifiOff,
 	X,
 } from "lucide-react";
 import {
-	type RefObject,
 	useCallback,
 	useEffect,
 	useId,
@@ -33,10 +30,11 @@ import {
 import RoomDrawDialog, {
 	roomDrawCopyText,
 } from "@/components/features/RoomDrawDialog";
-import RoomDrawFeedback from "@/components/features/RoomDrawFeedback";
+import RoomDrawResult from "@/components/features/RoomDrawResult";
 import RoomEntryGate from "@/components/features/RoomEntryGate";
 import SiteHeader from "@/components/layout/SiteHeader";
 import { useLunchRoom } from "@/hooks/useLunchRoom";
+import { useRoomTimeline } from "@/hooks/useRoomTimeline";
 import {
 	type LunchCategory,
 	lunchCategories,
@@ -59,9 +57,10 @@ import {
 } from "@/lib/roomCandidateSelection";
 import { getSourceDisplayName } from "@/services/randomService";
 import "./lunch-room.css";
+import "./lunch-room-mobile.css";
 
 type RoomView = "wheel" | "history";
-type CopyKind = "invite" | "result" | `history:${string}`;
+type CopyKind = "invite" | `history:${string}`;
 const presenceLabels = {
 	online: "온라인",
 	away: "자리비움",
@@ -83,95 +82,6 @@ function sameMessageGroup(left?: ChatMessage, right?: ChatMessage) {
 	);
 }
 
-function useRoomTimeline(
-	draw: RoomDraw | null,
-	clockOffset: number,
-	rotorRef: RefObject<HTMLDivElement | null>,
-	motionOff: boolean,
-) {
-	const [completedId, setCompletedId] = useState<string | null>(null);
-	const completedRef = useRef<string | null>(null);
-	const drawId = draw?.id;
-	const startedAt = draw?.startedAt;
-	const durationMs = draw?.durationMs;
-	const toRotation = draw?.toRotation;
-	useEffect(() => {
-		if (
-			!drawId ||
-			startedAt === undefined ||
-			durationMs === undefined ||
-			toRotation === undefined
-		) {
-			setCompletedId(null);
-			return;
-		}
-		if (completedRef.current === drawId) {
-			setCompletedId(drawId);
-			return;
-		}
-		let active = true;
-		let timer: ReturnType<typeof setTimeout> | undefined;
-		let animation: Animation | undefined;
-		const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-		function align() {
-			if (!active || startedAt === undefined || durationMs === undefined)
-				return;
-			clearTimeout(timer);
-			const elapsed = Date.now() + clockOffset - startedAt;
-			if (elapsed >= durationMs) {
-				if (animation) {
-					animation.currentTime = durationMs;
-					animation.pause();
-				}
-				completedRef.current = drawId ?? null;
-				setCompletedId(drawId ?? null);
-				return;
-			}
-			setCompletedId(null);
-			if (animation) animation.currentTime = elapsed;
-			timer = setTimeout(align, Math.max(1, durationMs - elapsed));
-		}
-		if (
-			!motionOff &&
-			!media.matches &&
-			typeof rotorRef.current?.animate === "function" &&
-			Date.now() + clockOffset < startedAt + durationMs
-		) {
-			animation = rotorRef.current.animate(
-				[
-					{ transform: "rotate(0deg)" },
-					{ transform: `rotate(${toRotation}deg)` },
-				],
-				{
-					duration: durationMs,
-					easing: "cubic-bezier(.12,.72,.16,1)",
-					fill: "both",
-				},
-			);
-		}
-		align();
-		function onVisibility() {
-			if (document.visibilityState === "visible") align();
-		}
-		document.addEventListener("visibilitychange", onVisibility);
-		return () => {
-			active = false;
-			clearTimeout(timer);
-			animation?.cancel();
-			document.removeEventListener("visibilitychange", onVisibility);
-		};
-	}, [
-		drawId,
-		startedAt,
-		durationMs,
-		toRotation,
-		clockOffset,
-		rotorRef,
-		motionOff,
-	]);
-	return Boolean(draw && completedId === draw.id);
-}
-
 export default function LunchRoomPage({
 	roomId,
 	asGuest = false,
@@ -182,7 +92,6 @@ export default function LunchRoomPage({
 	const id = useId();
 	const room = useLunchRoom(roomId, asGuest, { requireEntry: true });
 	const [view, setView] = useState<RoomView>("wheel");
-	const [mobileChat, setMobileChat] = useState(false);
 	const [message, setMessage] = useState("");
 	const [nameDraft, setNameDraft] = useState("");
 	const [nameError, setNameError] = useState("");
@@ -198,7 +107,6 @@ export default function LunchRoomPage({
 	const [candidateError, setCandidateError] = useState("");
 	const [motionOff, setMotionOff] = useState(false);
 	const [reducedMotion, setReducedMotion] = useState(false);
-	const [dismissedId, setDismissedId] = useState<string | null>(null);
 	const [unread, setUnread] = useState(0);
 	const [copied, setCopied] = useState<CopyKind | null>(null);
 	const [copyHelp, setCopyHelp] = useState<{
@@ -207,6 +115,7 @@ export default function LunchRoomPage({
 	} | null>(null);
 	const [inviteUrl, setInviteUrl] = useState("");
 	const [selectedDraw, setSelectedDraw] = useState<RoomDraw | null>(null);
+	const roomViewportRef = useRef<HTMLDivElement>(null);
 	const primaryColumnRef = useRef<HTMLDivElement>(null);
 	const selectedDrawTriggerRef = useRef<HTMLButtonElement>(null);
 	const rotorRef = useRef<HTMLDivElement>(null);
@@ -237,7 +146,6 @@ export default function LunchRoomPage({
 	const copyAttemptRef = useRef(0);
 	const copyReturnRef = useRef<HTMLButtonElement | null>(null);
 	const restoreCopyFocusRef = useRef(false);
-	const previousMobileChatRef = useRef(false);
 	const focusResultRef = useRef(false);
 	const expectedVersionRef = useRef<number | null>(null);
 	const submittedCandidateIdsRef = useRef<string | null>(null);
@@ -266,11 +174,9 @@ export default function LunchRoomPage({
 		rotorRef,
 		motionOff || reducedMotion,
 	);
-	const showResult = Boolean(
-		displayedDraw && finished && dismissedId !== displayedDraw.id,
-	);
+	const showResult = Boolean(displayedDraw && finished);
 	const spinning = Boolean(displayedDraw && !finished);
-	const busy = fetching || spinning;
+	const busy = fetching || spinning || room.nextPending;
 	const connected = room.connection === "connected";
 	const isHost = connected && room.self?.isHost === true;
 	const places =
@@ -348,6 +254,40 @@ export default function LunchRoomPage({
 		.filter((entry) => room.serverNow() >= entry.startedAt + entry.durationMs)
 		.slice(0, lunchRoomLimits.maxHistory);
 	const closed = room.connection === "closed";
+	useEffect(() => {
+		const root = roomViewportRef.current;
+		const viewport = window.visualViewport;
+		if (
+			!root ||
+			!viewport ||
+			closed ||
+			room.waitingForEntry ||
+			room.entryPending
+		)
+			return;
+		function updateViewportHeight() {
+			if (viewport?.scale === 1) {
+				root?.style.setProperty(
+					"--room-viewport-height",
+					`${viewport.height}px`,
+				);
+				if (root) {
+					if (viewport.height < 500) root.dataset.compactViewport = "true";
+					else delete root.dataset.compactViewport;
+				}
+			} else {
+				root?.style.removeProperty("--room-viewport-height");
+				if (root) delete root.dataset.compactViewport;
+			}
+		}
+		updateViewportHeight();
+		viewport.addEventListener("resize", updateViewportHeight);
+		return () => {
+			viewport.removeEventListener("resize", updateViewportHeight);
+			root.style.removeProperty("--room-viewport-height");
+			delete root.dataset.compactViewport;
+		};
+	}, [closed, room.waitingForEntry, room.entryPending]);
 	const setCandidateIncluded = useCallback(
 		(placeId: string, included: boolean) => {
 			setCandidateSelection((previous) =>
@@ -537,17 +477,24 @@ export default function LunchRoomPage({
 			showResult &&
 			!selectedDraw &&
 			focusResultRef.current &&
-			view === "wheel" &&
-			!mobileChat
+			view === "wheel"
 		) {
 			resultTitleRef.current?.focus();
 			focusResultRef.current = false;
 		}
-	}, [showResult, view, mobileChat, selectedDraw]);
+	}, [showResult, view, selectedDraw]);
+	const focusNextRoundRef = useRef(false);
 	useEffect(() => {
-		if (displayedDraw?.id === dismissedId && view === "wheel")
+		if (
+			focusNextRoundRef.current &&
+			!draw &&
+			!room.nextPending &&
+			view === "wheel"
+		) {
+			focusNextRoundRef.current = false;
 			drawButtonRef.current?.focus();
-	}, [dismissedId, displayedDraw?.id, view]);
+		}
+	}, [draw, room.nextPending, view]);
 	useEffect(() => {
 		if (view === "history") historyTitleRef.current?.focus();
 	}, [view]);
@@ -577,16 +524,34 @@ export default function LunchRoomPage({
 		} else if (added > 0) setUnread((count) => count + added);
 	}, [messages]);
 	useEffect(() => {
-		if (mobileChat && nearBottomRef.current && chatListRef.current)
-			chatListRef.current.scrollTop = chatListRef.current.scrollHeight;
-	}, [mobileChat]);
-
+		const list = chatListRef.current;
+		if (
+			!list ||
+			closed ||
+			room.waitingForEntry ||
+			room.entryPending ||
+			typeof ResizeObserver === "undefined"
+		)
+			return;
+		const observer = new ResizeObserver(() => {
+			if (!nearBottomRef.current) return;
+			list.scrollTop = list.scrollHeight;
+			setUnread(0);
+		});
+		observer.observe(list);
+		return () => observer.disconnect();
+	}, [closed, room.waitingForEntry, room.entryPending]);
 	function changeView(next: RoomView) {
 		setSelectedDraw(null);
 		focusResultRef.current = false;
 		copyAttemptRef.current++;
 		setCopyHelp(null);
 		setView(next);
+		if (primaryColumnRef.current) primaryColumnRef.current.scrollTop = 0;
+	}
+	function keepChatFocus() {
+		focusResultRef.current = false;
+		focusNextRoundRef.current = false;
 	}
 	function openRecord(draw: RoomDraw, trigger: HTMLButtonElement) {
 		focusResultRef.current = false;
@@ -662,8 +627,15 @@ export default function LunchRoomPage({
 		setCopyHelp(null);
 		setCopied(null);
 		setView("wheel");
-		setMobileChat(false);
 		focusResultRef.current = true;
+	}
+	function nextRound() {
+		if (displayedDraw && room.nextRound(displayedDraw.id)) {
+			focusNextRoundRef.current = true;
+			copyAttemptRef.current++;
+			setCopyHelp(null);
+			setCopied(null);
+		}
 	}
 	function submitChat() {
 		if (room.sendChat(message)) {
@@ -686,14 +658,11 @@ export default function LunchRoomPage({
 			setCopied(kind);
 			if (copyHelp) {
 				restoreCopyFocusRef.current = true;
-				setMobileChat(previousMobileChatRef.current);
 			} else copyReturnRef.current?.focus();
 			setCopyHelp(null);
 		} catch {
 			if (attempt !== copyAttemptRef.current) return;
-			if (!copyHelp) previousMobileChatRef.current = mobileChat;
 			setCopyHelp({ text, kind });
-			setMobileChat(false);
 		}
 	}
 	const status =
@@ -714,9 +683,6 @@ export default function LunchRoomPage({
 									: hostOnline
 										? "방장이 추첨을 시작하면 함께 룰렛을 봅니다."
 										: "방장이 오프라인입니다. 방장이 돌아오면 추첨을 시작할 수 있습니다.";
-	const resultCopy = winner
-		? `음식점: ${winner.name}\n분류: ${winner.category}`
-		: "";
 
 	if (!closed && (room.waitingForEntry || room.entryPending))
 		return (
@@ -737,13 +703,13 @@ export default function LunchRoomPage({
 
 	return (
 		<div
-			className={`random-lab lunch-room ${mobileChat ? "room-mobile-chat" : "room-mobile-draw"}`}
+			ref={roomViewportRef}
+			className={`random-lab lunch-room${closed ? "" : " room-live"}`}
 		>
 			<SiteHeader active="lunch" />
 			<main id="main-content" className="room-main">
 				<div className="room-heading">
 					<div>
-						<p className="room-eyebrow">함께 보는 점심 추첨</p>
 						<h1>
 							{closed ? "점심 추첨방" : (snapshot?.title ?? "점심 추첨방")}
 						</h1>
@@ -858,29 +824,14 @@ export default function LunchRoomPage({
 						>
 							{room.error}
 						</p>
-						<nav className="room-mobile-switch" aria-label="모바일 추첨방 화면">
-							<button
-								type="button"
-								aria-pressed={!mobileChat}
-								onClick={() => setMobileChat(false)}
-							>
-								<Shuffle size={16} aria-hidden="true" /> 추첨 화면
-							</button>
-							<button
-								type="button"
-								aria-pressed={mobileChat}
-								onClick={() => {
-									focusResultRef.current = false;
-									setMobileChat(true);
-								}}
-							>
-								<MessageCircle size={16} aria-hidden="true" /> 채팅
-								{unread ? ` ${unread}` : ""}
-							</button>
-						</nav>
 						<div className="room-layout">
+							{/* biome-ignore lint/a11y/useSemanticElements: This existing div ref is shared with the record dialog. */}
 							<div
 								className="room-primary-column"
+								role="region"
+								aria-label="추첨과 후보 목록"
+								// biome-ignore lint/a11y/noNoninteractiveTabindex: The named content pane scrolls independently and needs keyboard access.
+								tabIndex={0}
 								ref={primaryColumnRef}
 								inert={Boolean(selectedDraw)}
 							>
@@ -889,9 +840,7 @@ export default function LunchRoomPage({
 										<h2>
 											{copyHelp.kind === "invite"
 												? "초대 링크 직접 복사"
-												: copyHelp.kind === "result"
-													? "결과 직접 복사"
-													: "기록 직접 복사"}
+												: "기록 직접 복사"}
 										</h2>
 										<CopyFallback
 											text={copyHelp.text}
@@ -899,7 +848,6 @@ export default function LunchRoomPage({
 											onClose={() => {
 												copyAttemptRef.current++;
 												restoreCopyFocusRef.current = true;
-												setMobileChat(previousMobileChatRef.current);
 												setCopyHelp(null);
 											}}
 										/>
@@ -931,7 +879,7 @@ export default function LunchRoomPage({
 									aria-labelledby={`${id}-wheel`}
 								>
 									<div className="room-panel-heading">
-										<h2 id={`${id}-wheel`}>함께 보는 룰렛</h2>
+										<h2 id={`${id}-wheel`}>룰렛</h2>
 										<span>{places.length}곳 · 같은 확률</span>
 									</div>
 									<div className="room-wheel-stage">
@@ -971,90 +919,30 @@ export default function LunchRoomPage({
 										</div>
 										{showResult && winner && displayedDraw && (
 											<div className="room-result-overlay">
-												<section
-													className="room-result"
-													aria-labelledby={`${id}-winner`}
-												>
-													<p className="room-eyebrow">이번 방의 추첨 결과</p>
-													<h3
-														id={`${id}-winner`}
-														ref={resultTitleRef}
-														tabIndex={-1}
-													>
-														{winner.name}
-													</h3>
-													<p>{winner.category}</p>
-													<div className="room-result-source">
-														{displayedDraw.candidates.length}곳 중 추첨 ·{" "}
-														{getSourceDisplayName(displayedDraw.source)}
-													</div>
-													<time
-														dateTime={new Date(
-															displayedDraw.timestamp,
-														).toISOString()}
-													>
-														{new Date(
-															displayedDraw.timestamp,
-														).toLocaleTimeString("ko-KR", {
-															hour: "2-digit",
-															minute: "2-digit",
-														})}{" "}
-														추첨
-													</time>
-													<button
-														type="button"
-														className="room-outline-button"
-														onClick={(event) =>
-															void copy(
-																resultCopy,
-																"result",
-																event.currentTarget,
-															)
-														}
-													>
-														{copied === "result" ? (
-															<Check size={17} aria-hidden="true" />
-														) : (
-															<Copy size={17} aria-hidden="true" />
-														)}
-														{copied === "result" ? "복사됨" : "결과 복사"}
-													</button>
-													<RoomDrawFeedback
-														draw={displayedDraw}
-														selfId={room.self?.id}
-														isHost={room.self?.isHost === true}
-														connected={connected}
-														pending={
-															room.votePendingDrawId === displayedDraw.id
-														}
-														onVote={room.vote}
-														readOnly={drawArchived}
-													/>
-													<div className="room-result-actions">
-														{isHost && (
-															<button
-																type="button"
-																className="generate-button"
-																disabled={!canStart}
-																onClick={start}
-															>
-																<Shuffle size={18} aria-hidden="true" /> 한 번
-																더 추첨하기
-															</button>
-														)}
-														<button
-															type="button"
-															className="room-outline-button"
-															onClick={() => setDismissedId(displayedDraw.id)}
-														>
-															룰렛 다시 보기
-														</button>
-													</div>
-												</section>
+												<RoomDrawResult
+													key={displayedDraw.id}
+													draw={displayedDraw}
+													selfId={room.self?.id}
+													isHost={room.self?.isHost === true}
+													connected={connected}
+													pending={room.votePendingDrawId === displayedDraw.id}
+													readOnly={drawArchived}
+													nextPending={room.nextPending}
+													canNext={
+														connected && !busy && !room.candidatesPending
+													}
+													onNext={nextRound}
+													onVote={room.vote}
+													titleRef={resultTitleRef}
+													titleId={`${id}-winner`}
+												/>
 											</div>
 										)}
 									</div>
-									<output className="room-draw-status" aria-live="polite">
+									<output
+										className={showResult ? "sr-only" : "room-draw-status"}
+										aria-live="polite"
+									>
 										{status}
 									</output>
 									{spinning && !reducedMotion && (
@@ -1148,7 +1036,7 @@ export default function LunchRoomPage({
 																			(vote) => vote.vote === "up",
 																		).length
 																	}{" "}
-																	· 아쉬워요{" "}
+																	· 싫어요{" "}
 																	{
 																		entry.votes.filter(
 																			(vote) => vote.vote === "down",
@@ -1359,7 +1247,12 @@ export default function LunchRoomPage({
 									)}
 								</section>
 							</div>
-							<aside className="room-chat-panel" aria-labelledby={`${id}-chat`}>
+							<aside
+								className="room-chat-panel"
+								aria-labelledby={`${id}-chat`}
+								onFocusCapture={keepChatFocus}
+								onPointerDownCapture={keepChatFocus}
+							>
 								<div className="room-chat-header">
 									<h2 id={`${id}-chat`}>채팅</h2>
 									<button
@@ -1453,6 +1346,8 @@ export default function LunchRoomPage({
 									aria-label="방 채팅 메시지"
 									aria-live="polite"
 									aria-relevant="additions"
+									// biome-ignore lint/a11y/noNoninteractiveTabindex: The chat log scrolls independently and needs keyboard access.
+									tabIndex={0}
 									onScroll={(event) => {
 										const list = event.currentTarget;
 										nearBottomRef.current =

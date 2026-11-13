@@ -72,7 +72,11 @@ describe("route error recovery", () => {
 			name: "추첨 도구를 다시 사용할 수 있습니다",
 		});
 		expect(loader).toHaveBeenCalledTimes(2);
-		await waitFor(() => expect(router.state.statusCode).toBe(200));
+		await waitFor(() =>
+			expect(
+				router.state.matches.every((match) => match.status === "success"),
+			).toBe(true),
+		);
 	});
 
 	it("resets a child render error boundary when retrying", async () => {

@@ -579,11 +579,15 @@ async function run(config) {
 		const replay = await vote(guest, first.id, "down");
 		ensure(replay.code === "VOTE_ALREADY_CAST", "VOTE_REPLAY_ACCEPTED");
 		const lateVote = await vote(late, first.id, "down");
-		ensure(lateVote.type === "snapshot", "LATE_PARTICIPANT_VOTE_REJECTED");
+		ensure(
+			lateVote.code === "VOTE_NOT_ELIGIBLE",
+			"LATE_PARTICIPANT_VOTE_ACCEPTED",
+		);
+		pass("late-participant-cannot-vote-in-current-round");
 		const voted = await waitSnapshot(
 			host,
 			(snapshot) =>
-				snapshot.draw?.id === first.id && snapshot.draw.votes?.length === 2,
+				snapshot.draw?.id === first.id && snapshot.draw.votes?.length === 1,
 		);
 		ensure(
 			voted.draw.votes.find((entry) => entry.participantId === guestIdentity)
@@ -601,6 +605,34 @@ async function run(config) {
 			JSON.stringify(host.snapshot.draw) === frozen,
 			"CURRENT_DRAW_METADATA_MUTATED",
 		);
+		const guestNext = await request(
+			guest,
+			{ type: "next", id: uuid(), drawId: first.id },
+			() => false,
+		);
+		ensure(guestNext.code === "HOST_REQUIRED", "GUEST_CLOSED_VOTING");
+		const matchesClosed = (snapshot) =>
+			snapshot.status === "waiting" &&
+			snapshot.draw === null &&
+			snapshot.history.some((entry) => entry.id === first.id);
+		const [closedReply] = await Promise.all([
+			request(
+				host,
+				{ type: "next", id: uuid(), drawId: first.id },
+				matchesClosed,
+			),
+			waitSnapshot(guest, matchesClosed),
+			waitSnapshot(late, matchesClosed),
+		]);
+		ensure(closedReply.type === "snapshot", "HOST_CLOSE_REJECTED");
+		ensure(
+			JSON.stringify(
+				closedReply.snapshot.history.find((entry) => entry.id === first.id),
+			) === frozen,
+			"CLOSE_DID_NOT_FREEZE_DRAW",
+		);
+		pass("host-closes-voting-and-prepares-next-round-for-everyone");
+
 		const second = await start(host, guest);
 		const archived = second.snapshot.history.find(
 			(entry) => entry.id === first.id,
@@ -620,13 +652,19 @@ async function run(config) {
 			) === frozen,
 			"ARCHIVED_DRAW_MUTATED",
 		);
-		pass("next-start-freezes-votes-probabilities-participants-and-metadata");
+		pass("closed-votes-probabilities-participants-survive-next-start");
 		pass("history-vote-closed-and-record-immutable");
 		const [secondCompleted] = await Promise.all([
 			complete(host, second.id),
 			complete(guest, second.id),
 		]);
 		drawSources.push(secondCompleted.draw.source);
+		const nowEligible = await vote(late, second.id, "down");
+		ensure(
+			nowEligible.type === "snapshot",
+			"NEXT_ROUND_PARTICIPANT_CANNOT_VOTE",
+		);
+		pass("previously-late-participant-can-vote-in-next-round");
 		ensure(
 			JSON.stringify(
 				host.snapshot.history.find((entry) => entry.id === first.id),

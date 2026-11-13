@@ -7,9 +7,9 @@
 .room-entry-card {
 	inline-size: min(100%, 440px);
 	padding: 28px;
-	border: 1px solid #d4dcc8;
-	border-radius: 16px;
-	background: #fff;
+	border: 1px solid var(--section-line);
+	border-radius: var(--panel-radius);
+	background: transparent;
 }
 
 .room-entry-icon {
@@ -18,7 +18,7 @@
 	inline-size: 48px;
 	block-size: 48px;
 	margin-block-end: 20px;
-	border-radius: 12px;
+	border-radius: 6px;
 	background: #edf2e3;
 	color: #3f5e25;
 }
@@ -75,7 +75,7 @@
 	min-block-size: 52px;
 	padding: 12px;
 	border: 1px solid #879578;
-	border-radius: 8px;
+	border-radius: var(--control-radius);
 	background: #fff;
 	color: var(--ink);
 	font-size: 17px;
@@ -130,7 +130,7 @@
 
 .room-entry-recheck {
 	flex-shrink: 0;
-	min-block-size: 32px;
+	min-block-size: 44px;
 	padding: 4px 6px;
 	font-size: 12px;
 	font-weight: 650;
@@ -147,8 +147,8 @@
 	min-block-size: 52px;
 	margin-block-start: 12px;
 	padding: 12px 16px;
-	border: 1px solid #b6d24b;
-	border-radius: 8px;
+	border: 2px solid var(--ink);
+	border-radius: 6px;
 	background: #d6f266;
 	color: #272d23;
 	font-size: 16px;

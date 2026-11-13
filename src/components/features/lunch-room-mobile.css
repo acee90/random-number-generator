@@ -1,0 +1,389 @@
+/* Keep the game and conversation visible together on a narrow screen. */
+@media (max-width: 900px) {
+	.random-lab.lunch-room.room-live {
+		position: fixed;
+		inset: 0 0 auto;
+		display: flex;
+		flex-direction: column;
+		block-size: var(--room-viewport-height, 100dvh);
+		min-block-size: 0;
+		inline-size: 100%;
+		padding: 0 12px max(8px, env(safe-area-inset-bottom));
+		overflow: clip;
+	}
+	.lunch-room.room-live .site-header {
+		min-block-size: 48px;
+		padding-block: 0;
+	}
+	.lunch-room.room-live .site-header-brand {
+		gap: 8px;
+		font-size: 20px;
+	}
+	.lunch-room.room-live .site-header-symbol {
+		inline-size: 28px;
+		block-size: 28px;
+		border-radius: 6px;
+	}
+	.lunch-room.room-live .site-header-symbol svg {
+		inline-size: 18px;
+		block-size: 18px;
+	}
+	.lunch-room.room-live .site-header-nav {
+		padding: 0;
+		background: transparent;
+	}
+	.lunch-room.room-live .site-header-item {
+		min-block-size: 44px;
+		padding: 6px 10px;
+		font-size: 12px;
+	}
+	.lunch-room.room-live .room-main {
+		display: flex;
+		flex: 1;
+		flex-direction: column;
+		min-block-size: 0;
+		padding-block-start: 6px;
+	}
+	.lunch-room.room-live .room-heading {
+		flex-shrink: 0;
+		align-items: center;
+		gap: 8px;
+		margin-block-end: 2px;
+	}
+	.lunch-room.room-live .room-heading h1 {
+		font-size: 18px;
+		line-height: 1.25;
+	}
+	.lunch-room.room-live .room-heading > .room-outline-button {
+		min-block-size: 44px;
+		font-size: 11px;
+	}
+	.lunch-room.room-live .room-connection {
+		flex-shrink: 0;
+		gap: 4px 8px;
+		margin-block-end: 2px;
+		font-size: 11px;
+		line-height: 1.4;
+	}
+	.lunch-room.room-live .room-host-badge {
+		padding: 2px 4px;
+		font-size: 10px;
+		line-height: 1.2;
+	}
+	.lunch-room.room-live .room-connection .text-button {
+		min-block-size: 44px;
+	}
+	.lunch-room.room-live .room-lifetime {
+		flex-shrink: 0;
+		gap: 2px 8px;
+		margin-block-end: 6px;
+		font-size: 11px;
+		line-height: 1.4;
+	}
+	.lunch-room.room-live .room-lifetime p {
+		display: none;
+	}
+	.lunch-room.room-live .room-host-offline,
+	.lunch-room.room-live .room-main > .room-error {
+		flex-shrink: 0;
+		margin-block: 0 6px;
+		padding-block: 4px;
+		font-size: 12px;
+	}
+	.lunch-room.room-live .room-layout {
+		display: grid;
+		flex: 1;
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: minmax(0, 1.35fr) minmax(0, 1fr);
+		align-items: stretch;
+		gap: 8px;
+		min-block-size: 0;
+	}
+	.lunch-room.room-live .room-primary-column {
+		container-type: size;
+		min-block-size: 0;
+		overflow-x: hidden;
+		overflow-y: auto;
+		overscroll-behavior: contain;
+		scrollbar-width: thin;
+		scrollbar-gutter: stable;
+	}
+	.lunch-room.room-live .room-primary-column:focus-visible,
+	.lunch-room.room-live .room-chat-list:focus-visible {
+		outline: 2px solid #527427;
+		outline-offset: -2px;
+	}
+	.lunch-room.room-live .room-primary-tabs {
+		position: sticky;
+		inset-block-start: 0;
+		z-index: 6;
+		margin-block-end: 0;
+	}
+	.lunch-room.room-live .room-primary-tabs button {
+		min-block-size: 44px;
+	}
+	.lunch-room.room-live .room-candidate-toolbar {
+		position: static;
+	}
+	.lunch-room.room-live .room-candidate-list :is(label, input),
+	.lunch-room.room-live .room-readonly-candidates li {
+		scroll-margin-block-start: 60px;
+	}
+	.lunch-room.room-live .room-draw-panel,
+	.lunch-room.room-live .room-history-panel,
+	.lunch-room.room-live .room-candidates-panel {
+		padding: 8px;
+	}
+	.lunch-room.room-live .room-panel-heading {
+		margin-block-end: 6px;
+		padding-block-end: 6px;
+	}
+	.lunch-room.room-live .room-panel-heading h2 {
+		font-size: 15px;
+	}
+	.lunch-room.room-live .room-panel-heading > span {
+		font-size: 11px;
+	}
+	.lunch-room.room-live .room-wheel-stage {
+		--room-wheel-height: clamp(144px, calc(100cqb - 144px), 340px);
+		min-block-size: 144px;
+	}
+	.lunch-room.room-live .room-wheel-stage:has(> .room-result-overlay) {
+		min-block-size: 0;
+	}
+	.lunch-room.room-live .room-wheel-area.is-covered {
+		visibility: hidden;
+	}
+	.lunch-room.room-live .room-result-overlay {
+		min-block-size: 0;
+		padding: 0;
+		background: var(--paper);
+	}
+	.lunch-room.room-live .room-result-layout {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 0;
+		max-inline-size: none;
+		overflow-anchor: none;
+	}
+	.lunch-room.room-live .room-result-layout > .room-result,
+	.lunch-room.room-live .room-draw-feedback[data-mode="results"] {
+		padding: 8px;
+		border: 0;
+		border-radius: 0;
+		background: transparent;
+		box-shadow: none;
+	}
+	.lunch-room.room-live .room-result > .room-eyebrow,
+	.lunch-room.room-live .room-draw-status,
+	.lunch-room.room-live
+		.room-draw-feedback[data-mode="actions"]
+		.room-feedback-heading {
+		position: absolute;
+		inline-size: 1px;
+		block-size: 1px;
+		min-block-size: 0;
+		padding: 0;
+		margin: -1px;
+		clip-path: inset(50%);
+		overflow: hidden;
+		white-space: nowrap;
+	}
+	.lunch-room.room-live .room-result h3 {
+		margin: 0 0 4px;
+		font-size: 22px;
+		line-height: 1.25;
+	}
+	.lunch-room.room-live .room-result > p:not(.room-eyebrow) {
+		font-size: 13px;
+		line-height: 1.5;
+	}
+	.lunch-room.room-live .room-draw-feedback[data-mode="actions"] {
+		margin-block-start: 8px;
+		padding-block-start: 8px;
+	}
+	.lunch-room.room-live
+		.room-draw-feedback[data-mode="actions"][data-own-choice] {
+		margin-block-start: 0;
+		padding-block-start: 0;
+		border-block-start-width: 0;
+	}
+	.lunch-room.room-live
+		.room-draw-feedback[data-mode="actions"]
+		.room-feedback-actions
+		button {
+		flex-direction: row;
+		gap: 6px;
+		min-block-size: 72px;
+		padding: 22px 6px 10px;
+		font-size: 17px;
+	}
+	.lunch-room.room-live .room-feedback-choice-icon {
+		inline-size: 24px;
+		block-size: 24px;
+	}
+	.lunch-room.room-live .room-feedback-selected-label {
+		inset-block-start: 4px;
+		font-size: 11px;
+	}
+	.lunch-room.room-live .room-result-actions {
+		margin-block-start: 8px;
+	}
+	.lunch-room.room-live .room-result-actions .generate-button {
+		min-block-size: 48px;
+		padding: 8px;
+		font-size: 14px;
+	}
+	.lunch-room.room-live .room-draw-feedback[data-mode="results"] {
+		border-block-start: 1px solid var(--line);
+	}
+	.lunch-room.room-live .room-feedback-heading {
+		margin-block-end: 4px;
+	}
+	.lunch-room.room-live .room-feedback-heading h4 {
+		font-size: 14px;
+	}
+	.lunch-room.room-live .room-feedback-heading > span {
+		font-size: 11px;
+	}
+	.lunch-room.room-live
+		.room-draw-feedback[data-mode="results"]
+		.room-feedback-lists {
+		gap: 0;
+		margin-block-start: 8px;
+	}
+	.lunch-room.room-live
+		.room-draw-feedback[data-mode="results"]
+		.room-feedback-list {
+		padding: 8px 6px;
+	}
+	.lunch-room.room-live
+		.room-draw-feedback[data-mode="results"]
+		.room-feedback-tally {
+		display: grid;
+		grid-template-columns: 18px max-content max-content;
+		justify-content: center;
+		align-items: center;
+		gap: 4px;
+		margin-block-end: 6px;
+		font-size: 12px;
+	}
+	.lunch-room.room-live .room-feedback-tally > span {
+		grid-area: auto;
+	}
+	.lunch-room.room-live .room-feedback-tally-icon svg {
+		inline-size: 18px;
+		block-size: 18px;
+	}
+	.lunch-room.room-live
+		.room-draw-feedback[data-mode="results"]
+		.room-feedback-tally
+		strong {
+		font-size: 24px;
+	}
+	.lunch-room.room-live
+		.room-draw-feedback[data-mode="results"]
+		.room-feedback-list
+		ul,
+	.lunch-room.room-live .room-history-list {
+		max-block-size: none;
+		overflow: visible;
+	}
+	.lunch-room.room-live .room-feedback-list ul {
+		gap: 0;
+		margin-block-start: 6px;
+	}
+	.lunch-room.room-live .room-feedback-list li {
+		min-block-size: 28px;
+		gap: 4px;
+		font-size: 12px;
+	}
+	.lunch-room.room-live .room-feedback-list li + li {
+		padding-block-start: 4px;
+	}
+	.lunch-room.room-live .room-feedback-list .room-feedback-delay {
+		font-size: 11px;
+	}
+	.lunch-room.room-live .room-motion-button {
+		min-block-size: 44px;
+		font-size: 12px;
+	}
+	.lunch-room.room-live .room-chat-panel {
+		position: relative;
+		inset-block-start: auto;
+		block-size: auto;
+		min-block-size: 0;
+		padding: 0;
+	}
+	.lunch-room.room-live .room-chat-header {
+		min-block-size: 44px;
+		padding-block: 0;
+	}
+	.lunch-room.room-live .room-chat-header h2 {
+		font-size: 14px;
+	}
+	.lunch-room.room-live .room-chat-members-button,
+	.lunch-room.room-live .room-chat-icon-button,
+	.lunch-room.room-live .room-send-button {
+		min-inline-size: 44px;
+		min-block-size: 44px;
+	}
+	.lunch-room.room-live .room-chat-list {
+		min-block-size: 0;
+		padding-block: 4px;
+	}
+	.lunch-room.room-live .room-chat-list li.room-chat-bubble {
+		margin-block-start: 4px;
+	}
+	.lunch-room.room-live .room-message-content {
+		padding: 4px 6px;
+		font-size: 13px;
+	}
+	.lunch-room.room-live .room-chat-form {
+		margin: 0;
+		padding: 6px 8px;
+	}
+	.lunch-room.room-live .room-composer-row textarea {
+		min-block-size: 44px;
+		font-size: 16px;
+	}
+	.lunch-room.room-live .room-chat-footer {
+		min-block-size: 44px;
+		padding: 0 4px;
+	}
+	.lunch-room.room-live .room-profile-trigger {
+		min-block-size: 44px;
+		padding-block: 4px;
+	}
+	.lunch-room.room-live:where([data-compact-viewport]) .room-layout {
+		grid-template-rows: minmax(0, 0.75fr) minmax(0, 1.25fr);
+	}
+	.lunch-room.room-live[data-compact-viewport]
+		.room-chat-panel:has(.room-chat-form:focus-within)
+		.room-chat-footer {
+		display: none;
+	}
+	.lunch-room.room-live[data-compact-viewport]
+		:is(.site-header, .room-lifetime) {
+		display: none;
+	}
+	.lunch-room.room-live:where([data-compact-viewport]):where(
+			:has(.room-chat-form:focus-within)
+		)
+		.room-layout {
+		grid-template-rows: minmax(0, 0.95fr) minmax(0, 1.05fr);
+	}
+}
+@media (max-width: 900px) and (max-height: 600px) {
+	.lunch-room.room-live:where(:not([data-compact-viewport])) .room-layout {
+		grid-template-rows: minmax(0, 0.75fr) minmax(0, 1.25fr);
+	}
+	.lunch-room.room-live .room-lifetime {
+		margin-block-end: 4px;
+	}
+}
+@media (min-width: 640px) and (max-width: 900px) and (max-height: 600px) {
+	.lunch-room.room-live .room-layout {
+		grid-template-columns: minmax(0, 1.2fr) minmax(240px, 0.8fr);
+		grid-template-rows: minmax(0, 1fr);
+	}
+}

@@ -4,9 +4,9 @@
 	justify-content: center;
 	gap: 6px;
 	flex-shrink: 0;
-	min-height: 40px;
+	min-height: 44px;
 	border: 1px solid #9eac86;
-	border-radius: 8px;
+	border-radius: var(--control-radius);
 	background: #edf2e3;
 	padding: 8px 12px;
 	font-size: 14px;
@@ -26,12 +26,12 @@
 	width: min(460px, calc(100vw - 32px));
 	max-height: calc(100dvh - 32px);
 	overflow: auto;
-	border: 1px solid #ccd5bd;
-	border-radius: 16px;
+	border: 1px solid var(--section-line);
+	border-radius: var(--panel-radius);
 	background: #fff;
 	color: #272d23;
 	padding: 28px;
-	box-shadow: 0 20px 70px #1a241b30;
+	box-shadow: 0 12px 36px rgb(26 36 27 / 16%);
 }
 .lunch-create-dialog h2 {
 	margin: 0 28px 10px 0;
@@ -50,8 +50,8 @@
 	right: 12px;
 	display: grid;
 	place-items: center;
-	width: 36px;
-	height: 36px;
+	width: 44px;
+	height: 44px;
 	border-radius: 6px;
 }
 .lunch-create-form {
@@ -68,7 +68,7 @@
 	width: 100%;
 	min-height: 48px;
 	border: 1px solid #879578;
-	border-radius: 8px;
+	border-radius: var(--control-radius);
 	padding: 10px 12px;
 	margin-bottom: 8px;
 	font-size: 16px;
@@ -78,9 +78,9 @@
 	align-items: center;
 	justify-content: center;
 	gap: 8px;
-	min-height: 48px;
-	border: 1px solid #b6d24b;
-	border-radius: 8px;
+	min-height: 52px;
+	border: 2px solid var(--ink);
+	border-radius: 6px;
 	background: #d6f266;
 	font-weight: 700;
 }

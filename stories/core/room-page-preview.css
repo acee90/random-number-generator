@@ -1,0 +1,45 @@
+/* Only Storybook controls live here; the page uses production styles unchanged. */
+.sb-core:has(.sb-room-page-preview) {
+	max-inline-size: none;
+	padding: 0;
+}
+.sb-room-page-preview > .sb-style-surface {
+	padding: 0;
+	border: 0;
+}
+.sb-room-page-preview .sb-room-page-tools {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px 16px;
+	max-inline-size: 1320px;
+	margin-inline: auto;
+	padding: 12px 24px;
+	border-block-end: 1px solid var(--line);
+}
+.sb-room-page-preview .sb-room-page-tools p {
+	margin: 0;
+	font-size: 13px;
+	line-height: 1.6;
+	color: var(--muted);
+}
+.sb-room-page-preview .sb-style-controls {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+.sb-room-page-preview .sb-style-controls button {
+	flex: 0 1 auto;
+	padding-inline: 8px;
+	font-size: 13px;
+}
+@media (max-width: 600px) {
+	.sb-room-page-preview .sb-room-page-tools {
+		padding: 12px;
+	}
+}
+@media (max-width: 900px) {
+	.sb-room-page-preview .sb-room-page-tools {
+		display: none;
+	}
+}

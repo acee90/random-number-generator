@@ -42,9 +42,8 @@
 	height: var(--drawing-slot-height);
 	overflow: hidden;
 	border: 1px solid #a9b992;
-	border-radius: 12px;
+	border-radius: var(--control-radius);
 	background: #fff;
-	box-shadow: 0 3px 0 #dde6ce;
 	font-size: clamp(34px, 10cqw, 64px);
 	font-weight: 650;
 	font-variant-numeric: tabular-nums;

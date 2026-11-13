@@ -90,6 +90,19 @@ export interface RoomSnapshot {
 	status: "waiting" | "fetching" | "drawing" | "closed";
 }
 
+export function isRoomDrawVoter(
+	draw: RoomDraw,
+	participantId?: string,
+): boolean {
+	return Boolean(
+		participantId &&
+			draw.participants?.some(
+				(participant) =>
+					participant.id === participantId && !participant.isHost,
+			),
+	);
+}
+
 export interface CreateRoomInput {
 	title: string;
 	hostName: string;
@@ -107,6 +120,7 @@ export type ClientMessage =
 	| { type: "activity" }
 	| { type: "chat"; id: string; text: string }
 	| { type: "start"; id: string }
+	| { type: "next"; id: string; drawId: string }
 	| { type: "vote"; id: string; drawId: string; vote: "up" | "down" }
 	| { type: "candidates"; ids: string[] }
 	| { type: "ping"; clientTime: number };
@@ -297,6 +311,10 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
 		}
 		case "start":
 			return isId(value.id) ? { type: "start", id: value.id } : null;
+		case "next":
+			return isId(value.id) && isId(value.drawId)
+				? { type: "next", id: value.id, drawId: value.drawId }
+				: null;
 		case "vote":
 			return isId(value.id) &&
 				isId(value.drawId) &&

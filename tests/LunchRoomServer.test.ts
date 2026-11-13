@@ -1485,6 +1485,144 @@ describe("LunchRoomServer irreversible current-result votes", () => {
 		);
 	}
 
+	it.each([
+		true,
+		false,
+	])("rejects new identities joining after the draw request (already finished: %s), including after restoration", async (finished) => {
+		const { server, context, host, draw } = await votingRoom(finished);
+		const lateProof = "late-arrival-proof-token";
+		const late = await connect(
+			server,
+			context,
+			"늦은참가자",
+			undefined,
+			undefined,
+			lateProof,
+		);
+		if (!finished) {
+			vi.advanceTimersByTime(8700);
+			await server.onAlarm();
+		}
+		await send(server, late, {
+			type: "vote",
+			id: "late-vote",
+			drawId: draw.id,
+			vote: "up",
+		});
+		expect(voteErrors(late, "late-vote")).toMatchObject([
+			{ code: "VOTE_NOT_ELIGIBLE" },
+		]);
+		expect(latestSnapshot(host).snapshot.draw?.votes).toEqual([]);
+		const restored = createServer(context);
+		await restored.onStart();
+		const returned = await connect(
+			restored,
+			context,
+			"늦은참가자",
+			undefined,
+			undefined,
+			lateProof,
+		);
+		await send(restored, returned, {
+			type: "vote",
+			id: "late-restored",
+			drawId: draw.id,
+			vote: "down",
+		});
+		expect(voteErrors(returned, "late-restored")).toMatchObject([
+			{ code: "VOTE_NOT_ELIGIBLE" },
+		]);
+	});
+	it("only lets the host close completed voting, persists it for all clients, and ignores stale repeats", async () => {
+		const { server, context, host, guest, draw } = await votingRoom(false);
+		await send(server, guest, {
+			type: "next",
+			id: "forged-next",
+			drawId: draw.id,
+		});
+		expect(voteErrors(guest, "forged-next")).toMatchObject([
+			{ code: "HOST_REQUIRED" },
+		]);
+		await send(server, host, {
+			type: "next",
+			id: "early-next",
+			drawId: draw.id,
+		});
+		expect(voteErrors(host, "early-next")).toMatchObject([
+			{ code: "VOTE_NOT_READY" },
+		]);
+		vi.advanceTimersByTime(8700);
+		await server.onAlarm();
+		await send(server, guest, {
+			type: "vote",
+			id: "before-close",
+			drawId: draw.id,
+			vote: "up",
+		});
+		const frozen = structuredClone(latestSnapshot(host).snapshot.draw);
+		await send(server, host, {
+			type: "next",
+			id: "close-voting",
+			drawId: draw.id,
+		});
+		for (const client of [host, guest])
+			expect(latestSnapshot(client).snapshot).toMatchObject({
+				draw: null,
+				status: "waiting",
+				history: [frozen],
+			});
+		await send(server, guest, {
+			type: "vote",
+			id: "after-close",
+			drawId: draw.id,
+			vote: "down",
+		});
+		expect(voteErrors(guest, "after-close")).toMatchObject([
+			{ code: "VOTE_CLOSED" },
+		]);
+		const restored = createServer(context);
+		await restored.onStart();
+		await send(restored, host, { type: "start", id: "new-after-close" });
+		await context.drain();
+		await send(restored, host, {
+			type: "next",
+			id: "close-voting",
+			drawId: draw.id,
+		});
+		expect(latestSnapshot(host).snapshot.draw?.id).toBe("new-after-close");
+		expect(latestSnapshot(host).snapshot.history).toEqual([frozen]);
+	});
+	it.each([
+		"vote-first",
+		"close-first",
+	])("serializes closing and a racing ballot: %s", async (order) => {
+		const { server, context, host, guest, draw } = await votingRoom();
+		const ballot = () =>
+			send(server, guest, {
+				type: "vote",
+				id: "racing-vote",
+				drawId: draw.id,
+				vote: "up",
+			});
+		const close = () =>
+			send(server, host, { type: "next", id: "racing-next", drawId: draw.id });
+		await Promise.all(
+			order === "vote-first" ? [ballot(), close()] : [close(), ballot()],
+		);
+		expect(latestSnapshot(host).snapshot.draw).toBeNull();
+		expect(latestSnapshot(host).snapshot.history[0].votes).toHaveLength(
+			order === "vote-first" ? 1 : 0,
+		);
+		const frozen = structuredClone(latestSnapshot(host).snapshot.history);
+		await send(server, host, {
+			type: "next",
+			id: "repeat-next",
+			drawId: draw.id,
+		});
+		await context.drain();
+		expect(latestSnapshot(host).snapshot.history).toEqual(frozen);
+	});
+
 	it("records authoritative guest identity and server reaction timing, then publishes the current result without modifying history", async () => {
 		const { server, context, host, guest, draw } = await votingRoom();
 		const beforeEvents = systemEvents(host);
@@ -1757,6 +1895,33 @@ describe("LunchRoomServer irreversible current-result votes", () => {
 		expect(latestSnapshot(host).snapshot.history).toEqual([frozen]);
 	});
 
+	it("prepares the next round when a legacy current result is already archived, preserving that record", async () => {
+		const { context, host, draw } = await votingRoom();
+		const saved = context.storage.values.get("lunch-room:v1") as {
+			snapshot: RoomSnapshot;
+		};
+		saved.snapshot.history = [structuredClone(draw)];
+		context.storage.values.set("lunch-room:v1", saved);
+		const restored = createServer(context);
+		await restored.onStart();
+		await send(restored, host, {
+			type: "next",
+			id: "legacy-next",
+			drawId: draw.id,
+		});
+		expect(latestSnapshot(host).snapshot).toMatchObject({
+			draw: null,
+			status: "waiting",
+			history: [draw],
+		});
+		await send(restored, host, {
+			type: "next",
+			id: "legacy-next-repeat",
+			drawId: draw.id,
+		});
+		expect(latestSnapshot(host).snapshot.history).toEqual([draw]);
+	});
+
 	it("does not reopen or alter legacy results already copied into history", async () => {
 		const { context, host, guest, draw } = await votingRoom();
 		const saved = structuredClone(
@@ -1781,53 +1946,14 @@ describe("LunchRoomServer irreversible current-result votes", () => {
 		expect(latestSnapshot(host).snapshot.history).toEqual([draw]);
 	});
 
-	it("caps each result at60 ballots and retains voter proofs through roster eviction and server reload", async () => {
-		const { server, context } = await room();
-		const host = await connect(server, context, "방장", hostToken);
-		await send(server, host, { type: "start", id: "many-votes-1" });
-		await context.drain();
-		vi.advanceTimersByTime(8700);
-		await server.onAlarm();
-		const voters: { id: string; token: string }[] = [];
+	it("retains an eligible nonvoter identity through roster eviction and server reload", async () => {
+		const { server, context, host, guest, draw } = await votingRoom();
+		const participantId = latestSnapshot(guest).self?.id;
+		guest.closed = true;
+		await server.onClose(socketConnection(guest));
 		for (let index = 0; index < 65; index++) {
 			vi.advanceTimersByTime(1);
-			const token = `retained-voter-proof-${index}`;
-			const guest = await connect(
-				server,
-				context,
-				`투표자${index}`,
-				undefined,
-				undefined,
-				token,
-			);
-			voters.push({ id: latestSnapshot(guest).self?.id ?? "", token });
-			if (index === 60) {
-				await send(server, guest, {
-					type: "vote",
-					id: "over-cap-choice",
-					drawId: "many-votes-1",
-					vote: "up",
-				});
-				expect(voteErrors(guest, "over-cap-choice")).toMatchObject([
-					{ code: "VOTE_LIMIT" },
-				]);
-				await send(server, host, { type: "start", id: "many-votes-2" });
-				await context.drain();
-				vi.advanceTimersByTime(8700);
-				await server.onAlarm();
-			}
-			await send(server, guest, {
-				type: "vote",
-				id: `choice-${index}`,
-				drawId: index < 60 ? "many-votes-1" : "many-votes-2",
-				vote: "up",
-			});
-			guest.closed = true;
-			await server.onClose(socketConnection(guest));
-		}
-		for (let index = 0; index < 65; index++) {
-			vi.advanceTimersByTime(1);
-			const guest = await connect(
+			const newcomer = await connect(
 				server,
 				context,
 				`대기자${index}`,
@@ -1835,24 +1961,14 @@ describe("LunchRoomServer irreversible current-result votes", () => {
 				undefined,
 				`nonvoter-guest-proof-${index}`,
 			);
-			guest.closed = true;
-			await server.onClose(socketConnection(guest));
+			newcomer.closed = true;
+			await server.onClose(socketConnection(newcomer));
 		}
-		const currentVoter = voters[64];
-		const before = latestSnapshot(host).snapshot;
-		expect(before.history[0].votes).toHaveLength(60);
-		expect(before.draw?.votes).toHaveLength(5);
-		expect(before.members?.some((entry) => entry.id === currentVoter.id)).toBe(
-			false,
-		);
-		const stored = context.storage.values.get("lunch-room:v1") as {
-			guestTokenIds: Record<string, string>;
-		};
-		expect(Object.values(stored.guestTokenIds)).toContain(currentVoter.id);
-		expect(Object.keys(stored.guestTokenIds).length).toBeGreaterThan(60);
-		expect(Object.keys(stored.guestTokenIds).length).toBeLessThanOrEqual(
-			lunchRoomLimits.maxMembers * (lunchRoomLimits.maxHistory + 2),
-		);
+		expect(
+			latestSnapshot(host).snapshot.members?.some(
+				(entry) => entry.id === participantId,
+			),
+		).toBe(false);
 		const restored = createServer(context);
 		await restored.onStart();
 		const returned = await connect(
@@ -1861,21 +1977,27 @@ describe("LunchRoomServer irreversible current-result votes", () => {
 			"돌아온참가자",
 			undefined,
 			undefined,
-			currentVoter.token,
+			guestProof,
 		);
-		expect(latestSnapshot(returned).self?.id).toBe(currentVoter.id);
+		expect(latestSnapshot(returned).self?.id).toBe(participantId);
+		await send(restored, returned, {
+			type: "vote",
+			id: "eligible-after-eviction",
+			drawId: draw.id,
+			vote: "up",
+		});
+		expect(latestSnapshot(returned).snapshot.draw?.votes).toMatchObject([
+			{ participantId, vote: "up" },
+		]);
 		await send(restored, returned, {
 			type: "vote",
 			id: "evicted-voter-repeat",
-			drawId: "many-votes-2",
+			drawId: draw.id,
 			vote: "down",
 		});
 		expect(voteErrors(returned, "evicted-voter-repeat")).toMatchObject([
 			{ code: "VOTE_ALREADY_CAST" },
 		]);
-		expect(latestSnapshot(host).snapshot.draw?.votes).toEqual(
-			before.draw?.votes,
-		);
 	});
 });
 

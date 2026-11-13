@@ -26,7 +26,7 @@
 	place-items: center;
 	inline-size: 36px;
 	block-size: 36px;
-	border-radius: 10px;
+	border-radius: 6px;
 	background: var(--lime);
 	color: #293119;
 }
@@ -38,12 +38,13 @@
 .site-header-nav {
 	display: flex;
 	align-items: center;
-	gap: 4px;
+	gap: 0;
 	min-inline-size: 0;
 	max-inline-size: 100%;
-	padding: 6px;
-	border-radius: 12px;
-	background: #e9ede0;
+	padding: 0;
+	border: 1px solid var(--section-line);
+	border-radius: 6px;
+	background: var(--surface);
 	overflow-x: auto;
 	scrollbar-width: thin;
 	scrollbar-color: #9ba78a transparent;
@@ -55,10 +56,10 @@
 	justify-content: center;
 	flex-shrink: 0;
 	gap: 7px;
-	min-block-size: 40px;
+	min-block-size: 44px;
 	padding: 8px 13px;
-	border: 1px solid transparent;
-	border-radius: 8px;
+	border: 0;
+	border-radius: 5px;
 	background: transparent;
 	color: #526044;
 	font-size: 14px;
