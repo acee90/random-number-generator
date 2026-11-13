@@ -7,6 +7,7 @@ import {
 	screen,
 	within,
 } from "@testing-library/react";
+import { Profiler } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LunchRoomPage from "../src/components/features/LunchRoomPage";
 import { useLunchRoom } from "../src/hooks/useLunchRoom";
@@ -168,6 +169,51 @@ afterEach(() => {
 });
 
 describe("synchronized lunch room UI", () => {
+	it("shows the approved host candidates already selected on the first room paint", () => {
+		room.self = { id: "host-client", isHost: true };
+		room.snapshot = snapshot({ candidates: [...sampleLunchPlaces] });
+		const paints: { count: number; checked: number }[] = [];
+		vi.mocked(useLunchRoom).mockReturnValue(room);
+		render(
+			<Profiler
+				id="first-room-paint"
+				onRender={() => {
+					const inputs = Array.from(
+						document.querySelectorAll<HTMLInputElement>(
+							".room-candidate-list input",
+						),
+					);
+					paints.push({
+						count: inputs.length,
+						checked: inputs.filter((input) => input.checked).length,
+					});
+				}}
+			>
+				<LunchRoomPage roomId={roomId} />
+			</Profiler>,
+		);
+		expect(paints[0]).toEqual({
+			count: sampleLunchPlaces.length,
+			checked: sampleLunchPlaces.length,
+		});
+	});
+
+	it("refreshes a readonly candidate's visible name and category even when its ID is unchanged", () => {
+		const view = render(<LunchRoomPage roomId={roomId} />);
+		const renamed = {
+			...sampleLunchPlaces[0],
+			name: "수정된 식당",
+			category: "한식" as const,
+		};
+		updateRoom(view, {
+			snapshot: snapshot({ candidates: [renamed, sampleLunchPlaces[1]] }),
+		});
+		const candidates = document.querySelector(".room-readonly-candidates");
+		expect(candidates?.textContent).toContain("수정된 식당");
+		expect(candidates?.textContent).toContain("한식");
+		expect(candidates?.textContent).not.toContain(sampleLunchPlaces[0].name);
+	});
+
 	it("asks for a nickname without rendering or joining the room before explicit entry", () => {
 		room = {
 			...room,

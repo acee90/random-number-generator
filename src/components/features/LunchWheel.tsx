@@ -1,11 +1,54 @@
 import { LoaderCircle, Shuffle } from "lucide-react";
-import type { RefObject } from "react";
+import { memo, type RefObject } from "react";
 import type { LunchPlace } from "@/lib/lunch";
 import "./lunch-picker.css";
 
 type Phase = "idle" | "fetching" | "spinning" | "done";
 
 const wheelColors = ["#d6f266", "#edf2e3", "#ffffff", "#dce6c9"];
+
+type WheelLabel = { id: string; text: string };
+
+const WheelFace = memo(
+	function WheelFace({ labels }: { labels: readonly WheelLabel[] }) {
+		const size = labels.length;
+		const labelFontSize =
+			size > 12 ? Math.min(14, (2 * Math.PI * 112) / size) : 18;
+		return (
+			<svg viewBox="0 0 400 400" focusable="false" aria-hidden="true">
+				{labels.map((label, index) => {
+					const angle = ((index + 0.5) * 360) / size;
+					const radians = ((angle - 90) * Math.PI) / 180;
+					const radius = 188;
+					const flipped = angle > 180;
+					// Avoid SVG hydration differences between math engines.
+					const x = Number((200 + Math.cos(radians) * radius).toFixed(4));
+					const y = Number((200 + Math.sin(radians) * radius).toFixed(4));
+					return (
+						<text
+							key={label.id}
+							x={x}
+							y={y}
+							textAnchor={flipped ? "start" : "end"}
+							dominantBaseline="central"
+							style={{ fontSize: labelFontSize }}
+							transform={`rotate(${angle - 90 + (flipped ? 180 : 0)}, ${x}, ${y})`}
+						>
+							{label.text}
+						</text>
+					);
+				})}
+			</svg>
+		);
+	},
+	(previous, next) =>
+		previous.labels.length === next.labels.length &&
+		previous.labels.every(
+			(label, index) =>
+				label.id === next.labels[index].id &&
+				label.text === next.labels[index].text,
+		),
+);
 
 export function LunchWheel({
 	candidates,
@@ -37,8 +80,10 @@ export function LunchWheel({
 	canDraw?: boolean;
 }) {
 	const size = candidates.length;
-	const dense = size > 12;
-	const labelFontSize = dense ? Math.min(14, (2 * Math.PI * 112) / size) : 18;
+	const labels = candidates.map((place, index) => ({
+		id: place.id,
+		text: `${candidateNumbers[index]} ${place.name.length > 5 ? `${place.name.slice(0, 4)}…` : place.name}`,
+	}));
 	const background = size
 		? `conic-gradient(${candidates
 				.map(
@@ -66,30 +111,7 @@ export function LunchWheel({
 							onComplete();
 					}}
 				>
-					<svg viewBox="0 0 400 400" focusable="false" aria-hidden="true">
-						{candidates.map((place, index) => {
-							const angle = ((index + 0.5) * 360) / size;
-							const radians = ((angle - 90) * Math.PI) / 180;
-							const radius = 188;
-							const flipped = angle > 180;
-							// Avoid SVG hydration differences between math engines.
-							const x = Number((200 + Math.cos(radians) * radius).toFixed(4));
-							const y = Number((200 + Math.sin(radians) * radius).toFixed(4));
-							return (
-								<text
-									key={place.id}
-									x={x}
-									y={y}
-									textAnchor={flipped ? "start" : "end"}
-									dominantBaseline="central"
-									style={{ fontSize: labelFontSize }}
-									transform={`rotate(${angle - 90 + (flipped ? 180 : 0)}, ${x}, ${y})`}
-								>
-									{`${candidateNumbers[index]} ${place.name.length > 5 ? `${place.name.slice(0, 4)}…` : place.name}`}
-								</text>
-							);
-						})}
-					</svg>
+					<WheelFace labels={labels} />
 				</div>
 			</div>
 			<button
