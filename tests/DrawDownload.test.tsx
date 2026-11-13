@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import DrawDownload from "../src/components/features/DrawDownload";
 import type { TextDraw } from "../src/lib/drawText";
 
-const createObjectURL = vi.fn((_blob: Blob) => "blob:randomlab-test");
+const createObjectURL = vi.fn((_blob: Blob) => "blob:jeommechu-test");
 const revokeObjectURL = vi.fn((_url: string) => {});
 const downloads: { filename: string; href: string; attached: boolean }[] = [];
 const draw: TextDraw = {
@@ -58,8 +58,8 @@ describe("draw downloads", () => {
 		save();
 		expect(downloads).toEqual([
 			{
-				filename: "randomlab-pension-20261111-000003.txt",
-				href: "blob:randomlab-test",
+				filename: "jeommechu-pension-20261111-000003.txt",
+				href: "blob:jeommechu-test",
 				attached: true,
 			},
 		]);
@@ -75,7 +75,7 @@ describe("draw downloads", () => {
 		view.unmount();
 		vi.runOnlyPendingTimers();
 		expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith(
-			"blob:randomlab-test",
+			"blob:jeommechu-test",
 		);
 	});
 
@@ -120,7 +120,7 @@ describe("draw downloads", () => {
 		expect(document.querySelectorAll("a[download]")).toHaveLength(0);
 		vi.runOnlyPendingTimers();
 		expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith(
-			"blob:randomlab-test",
+			"blob:jeommechu-test",
 		);
 	});
 

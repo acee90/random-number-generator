@@ -46,7 +46,7 @@ export function createDrawText(
 				});
 	return {
 		text: [
-			`랜덤랩 · ${toolNames[draw.kind]}`,
+			`점메추 · ${toolNames[draw.kind]}`,
 			`생성 시각: ${date} ${time} (Asia/Seoul)`,
 			`난수 출처: ${sourceLabel}`,
 			...(strategy ? [`추첨 방식: ${strategy}`] : []),
@@ -55,6 +55,6 @@ export function createDrawText(
 			...results,
 			"",
 		].join("\n"),
-		filename: `randomlab-${draw.kind}-${parts.year}${parts.month}${parts.day}-${parts.hour}${parts.minute}${parts.second}.txt`,
+		filename: `jeommechu-${draw.kind}-${parts.year}${parts.month}${parts.day}-${parts.hour}${parts.minute}${parts.second}.txt`,
 	};
 }

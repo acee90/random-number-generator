@@ -9,9 +9,22 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ToolsRouteImport } from './routes/tools'
+import { Route as SoloRouteImport } from './routes/solo'
 import { Route as LunchRouteImport } from './routes/lunch'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as LunchRoomRoomIdRouteImport } from './routes/lunch-room.$roomId'
 
+const ToolsRoute = ToolsRouteImport.update({
+  id: '/tools',
+  path: '/tools',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SoloRoute = SoloRouteImport.update({
+  id: '/solo',
+  path: '/solo',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LunchRoute = LunchRouteImport.update({
   id: '/lunch',
   path: '/lunch',
@@ -22,35 +35,66 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LunchRoomRoomIdRoute = LunchRoomRoomIdRouteImport.update({
+  id: '/lunch-room/$roomId',
+  path: '/lunch-room/$roomId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/lunch': typeof LunchRoute
+  '/solo': typeof SoloRoute
+  '/tools': typeof ToolsRoute
+  '/lunch-room/$roomId': typeof LunchRoomRoomIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/lunch': typeof LunchRoute
+  '/solo': typeof SoloRoute
+  '/tools': typeof ToolsRoute
+  '/lunch-room/$roomId': typeof LunchRoomRoomIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/lunch': typeof LunchRoute
+  '/solo': typeof SoloRoute
+  '/tools': typeof ToolsRoute
+  '/lunch-room/$roomId': typeof LunchRoomRoomIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/lunch'
+  fullPaths: '/' | '/lunch' | '/solo' | '/tools' | '/lunch-room/$roomId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/lunch'
-  id: '__root__' | '/' | '/lunch'
+  to: '/' | '/lunch' | '/solo' | '/tools' | '/lunch-room/$roomId'
+  id: '__root__' | '/' | '/lunch' | '/solo' | '/tools' | '/lunch-room/$roomId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LunchRoute: typeof LunchRoute
+  SoloRoute: typeof SoloRoute
+  ToolsRoute: typeof ToolsRoute
+  LunchRoomRoomIdRoute: typeof LunchRoomRoomIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/tools': {
+      id: '/tools'
+      path: '/tools'
+      fullPath: '/tools'
+      preLoaderRoute: typeof ToolsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/solo': {
+      id: '/solo'
+      path: '/solo'
+      fullPath: '/solo'
+      preLoaderRoute: typeof SoloRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/lunch': {
       id: '/lunch'
       path: '/lunch'
@@ -65,12 +109,22 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/lunch-room/$roomId': {
+      id: '/lunch-room/$roomId'
+      path: '/lunch-room/$roomId'
+      fullPath: '/lunch-room/$roomId'
+      preLoaderRoute: typeof LunchRoomRoomIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LunchRoute: LunchRoute,
+  SoloRoute: SoloRoute,
+  ToolsRoute: ToolsRoute,
+  LunchRoomRoomIdRoute: LunchRoomRoomIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

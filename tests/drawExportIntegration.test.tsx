@@ -73,13 +73,7 @@ it("saves the restored draw's conditions after the next-draw controls change", a
 	) {
 		filenames.push(this.download);
 	});
-	render(<RandomGenerator />);
-	fireEvent.click(
-		within(screen.getByRole("navigation", { name: "생성 도구" })).getByRole(
-			"button",
-			{ name: /로또 6\/45/ },
-		),
-	);
+	render(<RandomGenerator initialMode="lotto" />);
 	fireEvent.click(
 		within(screen.getByRole("group", { name: "추첨할 게임 수" })).getByRole(
 			"button",
@@ -90,7 +84,7 @@ it("saves the restored draw's conditions after the next-draw controls change", a
 	fireEvent.click(screen.getByText("텍스트로 저장", { exact: true }));
 	const blob = createObjectURL.mock.calls[0][0] as unknown as BufferBlob;
 	const text = await blob.text();
-	expect(filenames).toEqual(["randomlab-lotto-20261111-091500.txt"]);
+	expect(filenames).toEqual(["jeommechu-lotto-20261111-091500.txt"]);
 	expect(text).toContain("난수 출처: ANU Quantum (양자 난수)");
 	expect(text).toContain("추첨 방식: 번호 고정: 7 · 나머지 랜덤 · 제외: 4");
 	expect(text).toContain("1게임: 7, 11, 18, 23, 34, 45");

@@ -1,0 +1,149 @@
+.room-entry-main {
+	display: grid;
+	place-items: start center;
+	padding-block: clamp(32px, 8dvh, 88px) 40px;
+}
+
+.room-entry-card {
+	inline-size: min(100%, 440px);
+	padding: 28px;
+	border: 1px solid #d4dcc8;
+	border-radius: 16px;
+	background: #fff;
+}
+
+.room-entry-icon {
+	display: grid;
+	place-items: center;
+	inline-size: 48px;
+	block-size: 48px;
+	margin-block-end: 20px;
+	border-radius: 12px;
+	background: #edf2e3;
+	color: #3f5e25;
+}
+
+.room-entry-eyebrow {
+	margin: 0 0 6px;
+	font-size: 12px;
+	font-weight: 650;
+	color: #556247;
+}
+
+.room-entry-card h1 {
+	margin: 0;
+	font-size: clamp(24px, 4.5vw, 28px);
+	line-height: 1.4;
+	font-weight: 750;
+	letter-spacing: -0.03em;
+}
+
+.room-entry-description {
+	margin: 10px 0 28px;
+	font-size: 14px;
+	line-height: 1.6;
+	color: #556247;
+}
+
+.room-entry-form {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.room-entry-field-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.room-entry-field-heading label {
+	font-size: 14px;
+	font-weight: 700;
+}
+
+.room-entry-field-heading span {
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	color: #556247;
+}
+
+.room-entry-form input {
+	inline-size: 100%;
+	min-inline-size: 0;
+	min-block-size: 52px;
+	padding: 12px;
+	border: 1px solid #879578;
+	border-radius: 8px;
+	background: #fff;
+	color: var(--ink);
+	font-size: 17px;
+}
+
+.room-entry-form input[aria-invalid="true"] {
+	border-color: #a13322;
+}
+
+.room-entry-hint,
+.room-entry-error {
+	margin: 0;
+	font-size: 12px;
+	line-height: 1.6;
+}
+
+.room-entry-hint {
+	color: #556247;
+}
+
+.room-entry-error {
+	color: #a13322;
+}
+
+.room-entry-submit {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	inline-size: 100%;
+	min-block-size: 52px;
+	margin-block-start: 12px;
+	padding: 12px 16px;
+	border: 1px solid #b6d24b;
+	border-radius: 8px;
+	background: #d6f266;
+	color: #272d23;
+	font-size: 16px;
+	font-weight: 750;
+}
+
+.room-entry-submit:disabled {
+	cursor: default;
+	background: #edf2e3;
+	border-color: #c3cdb5;
+	color: #59634d;
+}
+
+.room-entry-back {
+	display: block;
+	margin-block-start: 20px;
+	text-align: center;
+	font-size: 13px;
+	line-height: 1.6;
+	color: #556247;
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+
+.room-entry-submit:focus-visible,
+.room-entry-form input:focus-visible,
+.room-entry-back:focus-visible {
+	outline: 3px solid #627c34;
+	outline-offset: 3px;
+}
+
+@media (max-width: 480px) {
+	.room-entry-card {
+		padding: 22px;
+	}
+}
