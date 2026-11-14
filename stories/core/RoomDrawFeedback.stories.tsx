@@ -104,19 +104,3 @@ export const Mobile: Story = {
 	globals: { viewport: { value: "phone", isRotated: false } },
 	render: (args) => <VotePlayground {...args} />,
 };
-export const Compare: Story = {
-	name: "나란히 폭 비교",
-	args: { draw: createPreviewDraw({ votes: previewVotes(7) }) },
-	render: (args) => (
-		<div className="sb-compare">
-			<section>
-				<h2>넓은 폭</h2>
-				<ResultFrame {...args} />
-			</section>
-			<section className="sb-phone">
-				<h2>390px 폭</h2>
-				<ResultFrame {...args} />
-			</section>
-		</div>
-	),
-};
