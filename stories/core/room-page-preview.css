@@ -1,11 +1,7 @@
-/* Preview controls only. The selected study is scoped to this Storybook surface. */
+/* Preview controls only. The page uses the real score sheet service styles. */
 .sb-core:has(.sb-room-page-preview) {
 	max-inline-size: none;
 	padding: 0;
-}
-.sb-room-page-preview > .sb-style-surface {
-	padding: 0;
-	border: 0;
 }
 .sb-room-page-preview .sb-room-page-tools {
 	display: flex;
@@ -23,35 +19,17 @@
 	line-height: 1.6;
 	color: var(--muted);
 }
-.sb-room-page-style-picker {
-	display: inline-flex;
-	align-items: center;
-	gap: 8px;
-	font-size: 13px;
-	font-weight: 650;
-}
-.sb-room-page-style-picker select {
-	min-block-size: 48px;
-	max-inline-size: 200px;
-	padding: 8px 32px 8px 12px;
-	border: 1px solid #a6b097;
-	border-radius: 6px;
-	background-color: var(--paper);
-	color: var(--ink);
-	font: inherit;
-}
-.sb-room-page-style-picker select:focus-visible {
-	outline: 3px solid #42572a;
-	outline-offset: 3px;
-}
-.sb-room-page-preview .sb-style-controls {
+.sb-room-page-preview .sb-toolbar {
 	margin: 0;
 	padding: 0;
 	border: 0;
 }
-.sb-room-page-preview .sb-style-controls button {
+.sb-room-page-preview .sb-toolbar button {
 	flex: 0 1 auto;
+	min-block-size: 48px;
 	padding-inline: 8px;
+	border-color: var(--section-line);
+	border-radius: var(--control-radius);
 	font-size: 13px;
 }
 @media (max-width: 600px) {
