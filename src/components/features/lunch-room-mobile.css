@@ -22,7 +22,7 @@
 	.lunch-room.room-live .site-header-symbol {
 		inline-size: 28px;
 		block-size: 28px;
-		border-radius: 6px;
+		border-radius: var(--control-radius);
 	}
 	.lunch-room.room-live .site-header-symbol svg {
 		inline-size: 18px;
@@ -130,13 +130,15 @@
 		scroll-margin-block-start: 60px;
 	}
 	.lunch-room.room-live .room-draw-panel,
-	.lunch-room.room-live .room-history-panel,
+	.lunch-room.room-live .room-history-panel {
+		padding: 0;
+	}
 	.lunch-room.room-live .room-candidates-panel {
 		padding: 8px;
 	}
 	.lunch-room.room-live .room-panel-heading {
-		margin-block-end: 6px;
-		padding-block-end: 6px;
+		margin-block-end: 0;
+		padding: 8px 10px;
 	}
 	.lunch-room.room-live .room-panel-heading h2 {
 		font-size: 15px;
@@ -157,7 +159,7 @@
 	.lunch-room.room-live .room-result-overlay {
 		min-block-size: 0;
 		padding: 0;
-		background: var(--paper);
+		background: #fff;
 	}
 	.lunch-room.room-live .room-result-layout {
 		grid-template-columns: minmax(0, 1fr);
@@ -167,7 +169,7 @@
 	}
 	.lunch-room.room-live .room-result-layout > .room-result,
 	.lunch-room.room-live .room-draw-feedback[data-mode="results"] {
-		padding: 8px;
+		padding: 10px;
 		border: 0;
 		border-radius: 0;
 		background: transparent;

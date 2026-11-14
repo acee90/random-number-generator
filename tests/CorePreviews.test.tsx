@@ -23,6 +23,7 @@ afterEach(() => {
 	cleanup();
 	vi.useRealTimers();
 	vi.unstubAllGlobals();
+	vi.restoreAllMocks();
 });
 const voteArgs = () => ({
 	draw: createPreviewDraw(),
@@ -152,18 +153,17 @@ describe("CORE component previews", () => {
 				.matches(":disabled"),
 		).toBe(true);
 	});
-	it("shares the result, injected voters and one-time own selection between both style proposals", () => {
+	it("keeps the shared round and own choice while switching studies, including two copies of the same study", () => {
 		vi.setSystemTime(new Date("2026-11-13T04:00:00Z"));
 		render(<CoreStylePreview {...styleArgs} />);
-		const lime = within(screen.getByRole("region", { name: "A · 라임 보드" }));
-		const line = within(screen.getByRole("region", { name: "B · 라인 보드" }));
-		expect(lime.getByRole("heading", { level: 3 }).textContent).toBe(
-			line.getByRole("heading", { level: 3 }).textContent,
-		);
+		const match = within(screen.getByRole("region", { name: "A · 매치보드" }));
+		const soft = within(screen.getByRole("region", { name: "B · 소프트패널" }));
+		const winner = match.getByRole("heading", { level: 3 }).textContent;
+		expect(winner).toBe(soft.getByRole("heading", { level: 3 }).textContent);
 		expect(screen.getAllByText("7명 참여")).toHaveLength(2);
 		fireEvent.click(screen.getByRole("button", { name: "싫어요 +1" }));
-		fireEvent.click(lime.getByRole("button", { name: "좋아요 투표" }));
-		for (const proposal of [lime, line]) {
+		fireEvent.click(match.getByRole("button", { name: "좋아요 투표" }));
+		for (const proposal of [match, soft]) {
 			expect(
 				proposal.getByRole("heading", { name: /좋아요\s*5/ }),
 			).toBeTruthy();
@@ -182,16 +182,72 @@ describe("CORE component previews", () => {
 			).toBe(true);
 		}
 		expect(
-			lime.getByRole("list", { name: "좋아요 투표한 참가자" }).textContent,
+			match.getByRole("list", { name: "좋아요 투표한 참가자" }).textContent,
 		).toBe(
-			line.getByRole("list", { name: "좋아요 투표한 참가자" }).textContent,
+			soft.getByRole("list", { name: "좋아요 투표한 참가자" }).textContent,
 		);
-		fireEvent.click(line.getByRole("button", { name: "싫어요 투표" }));
+		fireEvent.click(soft.getByRole("button", { name: "싫어요 투표" }));
 		expect(screen.getAllByText("9명 참여")).toHaveLength(2);
+
+		fireEvent.click(screen.getByRole("button", { name: "C · 스코어시트" }));
+		const singleScore = within(
+			screen.getByRole("region", { name: "C · 스코어시트" }),
+		);
+		expect(singleScore.getByRole("heading", { level: 3 }).textContent).toBe(
+			winner,
+		);
+		expect(singleScore.getByText("9명 참여")).toBeTruthy();
+		expect(
+			singleScore
+				.getByRole("button", { name: "좋아요 투표" })
+				.getAttribute("aria-pressed"),
+		).toBe("true");
+
+		fireEvent.click(screen.getByRole("button", { name: "나란히 비교" }));
+		const errors = vi.spyOn(console, "error");
+		fireEvent.change(screen.getByRole("combobox", { name: "왼쪽 시안" }), {
+			target: { value: "score" },
+		});
+		fireEvent.change(screen.getByRole("combobox", { name: "오른쪽 시안" }), {
+			target: { value: "score" },
+		});
+		const scoreCopies = screen
+			.getAllByRole("region", { name: "C · 스코어시트" })
+			.map((region) => within(region));
+		expect(scoreCopies).toHaveLength(2);
+		for (const proposal of scoreCopies) {
+			expect(proposal.getByRole("heading", { level: 3 }).textContent).toBe(
+				winner,
+			);
+			expect(proposal.getByText("9명 참여")).toBeTruthy();
+			expect(
+				proposal
+					.getByRole("button", { name: "좋아요 투표" })
+					.getAttribute("aria-pressed"),
+			).toBe("true");
+			expect(
+				proposal.getByRole("heading", { name: /좋아요\s*5/ }),
+			).toBeTruthy();
+			expect(
+				proposal.getByRole("heading", { name: /싫어요\s*4/ }),
+			).toBeTruthy();
+		}
+		fireEvent.click(screen.getByRole("button", { name: "좋아요 +1" }));
+		for (const proposal of scoreCopies) {
+			expect(proposal.getByText("10명 참여")).toBeTruthy();
+			expect(
+				proposal.getByRole("heading", { name: /좋아요\s*6/ }),
+			).toBeTruthy();
+		}
+		expect(
+			errors.mock.calls.filter(([message]) =>
+				String(message).includes("same key"),
+			),
+		).toHaveLength(0);
 		fireEvent.click(screen.getByRole("button", { name: "초기화" }));
 		expect(screen.getAllByText("7명 참여")).toHaveLength(2);
 		expect(document.querySelectorAll("[data-self='true']")).toHaveLength(0);
-		for (const proposal of [lime, line]) {
+		for (const proposal of scoreCopies) {
 			expect(
 				proposal
 					.getByRole("button", { name: "좋아요 투표" })

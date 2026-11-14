@@ -14,7 +14,15 @@ import {
 } from "./fixtures";
 import "./style-proposals.css";
 
-type StyleName = "lime" | "line";
+type StyleName = "lime" | "line" | "match" | "soft" | "score";
+const styleNames: Record<StyleName, string> = {
+	lime: "현재 서비스",
+	line: "이전 라인 시안",
+	match: "A · 매치보드",
+	soft: "B · 소프트패널",
+	score: "C · 스코어시트",
+};
+const newStyles = ["match", "soft", "score"] as const;
 export type CoreStylePreviewArgs = {
 	view: "compare" | StyleName;
 	candidateCount: number;
@@ -59,9 +67,7 @@ function StyleBoard({
 		draw?.candidates ?? sampleLunchPlaces.slice(0, candidateCount);
 	return (
 		<section className="sb-style-proposal" aria-labelledby={`${id}-style`}>
-			<h2 id={`${id}-style`}>
-				{style === "lime" ? "A · 라임 보드" : "B · 라인 보드"}
-			</h2>
+			<h2 id={`${id}-style`}>{styleNames[style]}</h2>
 			<div
 				className="sb-style-surface"
 				data-style={style}
@@ -128,7 +134,7 @@ function StyleBoard({
 	);
 }
 
-/** Two skins share one round; the service components keep their normal props. */
+/** Storybook skins share one round; production components keep their normal props. */
 export function CoreStylePreview({
 	view,
 	candidateCount,
@@ -136,6 +142,9 @@ export function CoreStylePreview({
 	motionOff: initialMotionOff,
 }: CoreStylePreviewArgs) {
 	const sequence = useRef(1);
+	const [currentView, setCurrentView] = useState(view);
+	const [leftStyle, setLeftStyle] = useState<StyleName>("match");
+	const [rightStyle, setRightStyle] = useState<StyleName>("soft");
 	const [draw, setDraw] = useState<RoomDraw | null>(() =>
 		createPreviewDraw({ count: candidateCount, votes: previewVotes(7) }),
 	);
@@ -228,13 +237,26 @@ export function CoreStylePreview({
 		);
 		return true;
 	}
-	const styles: StyleName[] = view === "compare" ? ["lime", "line"] : [view];
+	const styles: StyleName[] =
+		currentView === "compare" ? [leftStyle, rightStyle] : [currentView];
 	return (
-		<div className="sb-style-preview" data-view={view}>
+		<div className="sb-style-preview" data-view={currentView}>
 			<header className="sb-heading">
-				<h1>점메추 CORE 스타일 비교</h1>
-				<p>같은 배치 · 같은 추첨 · 같은 투표</p>
+				<h1>룰렛 · 투표 스타일</h1>
+				<p>시안을 바꿔도 추첨과 투표는 그대로 이어집니다.</p>
 			</header>
+			<nav className="sb-study-switch" aria-label="스타일 보기">
+				{(["compare", ...newStyles, "lime"] as const).map((name) => (
+					<button
+						key={name}
+						type="button"
+						aria-pressed={currentView === name}
+						onClick={() => setCurrentView(name)}
+					>
+						{name === "compare" ? "나란히 비교" : styleNames[name]}
+					</button>
+				))}
+			</nav>
 			<fieldset className="sb-toolbar sb-style-controls">
 				<legend className="sr-only">공통 미리보기 조작</legend>
 				<button
@@ -274,10 +296,36 @@ export function CoreStylePreview({
 					동작 줄이기
 				</label>
 			</fieldset>
+			{currentView === "compare" && (
+				<div className="sb-study-pair">
+					{(
+						[
+							["왼쪽 시안", leftStyle, setLeftStyle],
+							["오른쪽 시안", rightStyle, setRightStyle],
+						] as const
+					).map(([label, value, setValue]) => (
+						<label key={label}>
+							<span>{label}</span>
+							<select
+								value={value}
+								onChange={(event) =>
+									setValue(event.currentTarget.value as StyleName)
+								}
+							>
+								{[...newStyles, "lime" as const].map((name) => (
+									<option key={name} value={name}>
+										{styleNames[name]}
+									</option>
+								))}
+							</select>
+						</label>
+					))}
+				</div>
+			)}
 			<div className="sb-style-comparison">
-				{styles.map((style) => (
+				{styles.map((style, index) => (
 					<StyleBoard
-						key={style}
+						key={`${index}:${style}`}
 						style={style}
 						draw={draw}
 						fetching={fetching}

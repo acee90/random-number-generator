@@ -8,19 +8,19 @@
 	--color-primary-foreground: #fff;
 	--color-input: #d5d8ce;
 	--color-ring: #596c2c;
-	--radius-sm: 4px;
-	--radius-md: 8px;
-	--radius-lg: 12px;
-	--radius-xl: 16px;
+	--radius-sm: 2px;
+	--radius-md: 2px;
+	--radius-lg: 2px;
+	--radius-xl: 4px;
 }
 :root {
 	--ink: #272b24;
 	--muted: #646b5e;
 	--line: #d8decd;
-	--section-line: #a9b992;
+	--section-line: #68715e;
 	--surface: #edf2e3;
-	--control-radius: 4px;
-	--panel-radius: 8px;
+	--control-radius: 2px;
+	--panel-radius: 2px;
 	--lime: #d6f266;
 	--paper: #f7f7f2;
 	color-scheme: light;
@@ -168,21 +168,21 @@ a {
 	border-inline-start: 1px solid var(--line);
 }
 .tool-tab:first-child {
-	border-start-start-radius: 7px;
-	border-end-start-radius: 7px;
+	border-start-start-radius: 1px;
+	border-end-start-radius: 1px;
 }
 .tool-tab:last-child {
-	border-start-end-radius: 7px;
-	border-end-end-radius: 7px;
+	border-start-end-radius: 1px;
+	border-end-end-radius: 1px;
 }
 .tool-tab svg {
 	width: 21px;
 	height: 21px;
 }
 .tool-tab.is-active {
-	background: #2d3227;
-	color: #fff;
-	box-shadow: none;
+	background: var(--lime);
+	color: var(--ink);
+	box-shadow: inset 0 -3px 0 var(--ink);
 }
 .tab-number {
 	font-size: 12px;
@@ -202,7 +202,7 @@ a {
 	border: 1px solid var(--section-line);
 	border-radius: var(--panel-radius);
 	overflow: hidden;
-	background: transparent;
+	background: #fff;
 }
 .controls {
 	padding: 26px 28px;
@@ -385,8 +385,9 @@ a {
 	margin-top: 25px;
 	background: var(--lime);
 	color: #263619;
-	border: 2px solid var(--ink);
-	border-radius: 6px;
+	border: 1px solid var(--ink);
+	border-block-end-width: 4px;
+	border-radius: var(--control-radius);
 	min-height: 64px;
 	display: flex;
 	justify-content: space-between;
@@ -436,7 +437,7 @@ a {
 .result-panel {
 	border-left: 1px solid var(--line);
 	padding: 26px 30px 22px;
-	background: #f6f8ef;
+	background: #fff;
 	display: flex;
 	flex-direction: column;
 	min-width: 0;
@@ -445,6 +446,9 @@ a {
 	scroll-margin-top: 16px;
 }
 .result-toolbar {
+	padding: 10px 12px;
+	border-block-end: 2px solid var(--ink);
+	background: var(--lime);
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
@@ -462,7 +466,7 @@ a {
 	font-size: 14px;
 	font-weight: 550;
 	padding: 6px 11px;
-	border-radius: 6px;
+	border-radius: var(--control-radius);
 	background: #e9efd9;
 	color: #546c39;
 }
@@ -492,7 +496,7 @@ a {
 	justify-content: center;
 	width: 86px;
 	height: 86px;
-	border-radius: 6px;
+	border-radius: var(--control-radius);
 	background: #ebf0df;
 	color: #667c4c;
 	position: relative;
@@ -560,7 +564,7 @@ a {
 .single-number {
 	font-size: clamp(56px, 8.5vw, 118px);
 	letter-spacing: -5px;
-	font-weight: 650;
+	font-weight: 800;
 	line-height: 1.25;
 	padding: 30px 8px;
 	color: #344e20;
@@ -878,7 +882,7 @@ a {
 	color: #607c43;
 }
 .history-count {
-	border-radius: 5px;
+	border-radius: var(--control-radius);
 	background: #e4ecd6;
 	padding: 4px 8px;
 	font-size: 12px;
@@ -1014,7 +1018,7 @@ a {
 	padding: 12px 20px;
 	background: var(--ink);
 	color: #fff;
-	border-radius: 6px;
+	border-radius: var(--control-radius);
 }
 .skip-link:focus {
 	top: 12px;
@@ -1530,7 +1534,7 @@ html {
 .strategy-card {
 	padding: 23px;
 	border: 1px solid #d1dcc2;
-	border-radius: 11px;
+	border-radius: var(--control-radius);
 	background: #fff;
 }
 .strategy-label {
@@ -1958,7 +1962,7 @@ html {
 	align-items: center;
 	gap: 3px;
 	padding: 3px 6px;
-	border-radius: 5px;
+	border-radius: var(--control-radius);
 	background: #3d5d27;
 	color: #fff;
 	font-size: 11px;
@@ -2034,7 +2038,7 @@ html {
 	inset-inline-start: 50%;
 	transform: translateX(-50%);
 	padding: 2px 6px;
-	border-radius: 5px;
+	border-radius: var(--control-radius);
 	color: #fff;
 	background: #365a23;
 	font-size: 10px;

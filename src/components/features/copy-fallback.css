@@ -1,6 +1,8 @@
 .copy-fallback {
 	width: 100%;
 	min-width: 0;
+	padding-block-start: 12px;
+	border-block-start: 1px solid var(--section-line);
 }
 
 .copy-fallback-heading {
@@ -11,7 +13,7 @@
 }
 
 .copy-fallback-heading strong {
-	font-weight: 650;
+	font-weight: 800;
 }
 
 .copy-fallback-heading .text-button {
@@ -26,7 +28,7 @@
 
 .copy-fallback label {
 	display: block;
-	font-weight: 600;
+	font-weight: 700;
 	margin: 12px 0 8px;
 }
 
@@ -35,7 +37,7 @@
 	width: 100%;
 	min-width: 0;
 	padding: 12px 14px;
-	border: 1px solid #8b967d;
+	border: 1px solid var(--section-line);
 	border-radius: var(--control-radius);
 	background: #fff;
 	color: var(--ink);

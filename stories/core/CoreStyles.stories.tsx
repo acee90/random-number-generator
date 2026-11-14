@@ -32,21 +32,48 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Compare: Story = { name: "두 시안 나란히" };
+export const MatchBoard: Story = {
+	name: "A · 매치보드",
+	args: { view: "match" },
+};
+export const SoftPanel: Story = {
+	name: "B · 소프트패널",
+	args: { view: "soft" },
+};
+export const ScoreSheet: Story = {
+	name: "C · 스코어시트",
+	args: { view: "score" },
+};
 export const Lime: Story = {
-	name: "A · 라임 보드",
+	name: "현재 서비스 · 스코어시트",
 	args: { view: "lime" },
 };
 export const Line: Story = {
-	name: "B · 라인 보드",
+	name: "이전 시안 · 라인",
 	args: { view: "line" },
 };
 export const MobileLime: Story = {
-	name: "모바일 A · 라임 보드",
+	name: "모바일 현재 서비스",
 	args: { view: "lime" },
 	globals: { viewport: { value: "phone", isRotated: false } },
 };
 export const MobileLine: Story = {
-	name: "모바일 B · 라인 보드",
+	name: "모바일 이전 라인",
 	args: { view: "line" },
+	globals: { viewport: { value: "phone", isRotated: false } },
+};
+export const MobileMatchBoard: Story = {
+	name: "모바일 A · 매치보드",
+	args: { view: "match" },
+	globals: { viewport: { value: "phone", isRotated: false } },
+};
+export const MobileSoftPanel: Story = {
+	name: "모바일 B · 소프트패널",
+	args: { view: "soft" },
+	globals: { viewport: { value: "phone", isRotated: false } },
+};
+export const MobileScoreSheet: Story = {
+	name: "모바일 C · 스코어시트",
+	args: { view: "score" },
 	globals: { viewport: { value: "phone", isRotated: false } },
 };
