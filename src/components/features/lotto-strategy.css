@@ -18,7 +18,7 @@
 	padding: 0;
 	margin-bottom: 14px;
 	font-size: 16px;
-	font-weight: 650;
+	font-weight: 800;
 	color: var(--ink, #272b24);
 }
 
@@ -34,16 +34,16 @@
 	gap: 12px;
 	min-width: 0;
 	padding: 19px;
-	border: 1px solid #a4b590;
+	border: 1px solid var(--section-line);
+	border-block-end-width: 4px;
 	border-radius: var(--panel-radius);
 	background: #fff;
 	cursor: pointer;
 }
 
 .lotto-mode-card.is-selected {
-	border-color: #69873c;
-	background: #e1f49e;
-	box-shadow: inset 0 3px 0 #3f5e25;
+	border-color: var(--ink);
+	background: var(--lime);
 }
 
 .lotto-mode-card[data-disabled="true"] {
@@ -75,17 +75,17 @@
 
 .lotto-mode-title svg {
 	flex-shrink: 0;
-	color: #526f34;
+	color: #40532d;
 }
 
 .lotto-mode-title strong {
-	font-weight: 650;
+	font-weight: 800;
 }
 
 .lotto-mode-description {
 	font-size: 13px;
 	line-height: 1.85;
-	color: #5b6e4d;
+	color: #40532d;
 }
 
 .lotto-strategy-summary {
@@ -101,21 +101,23 @@
 }
 
 .lotto-strategy-summary strong {
-	font-weight: 650;
+	font-weight: 800;
 }
 
 .lotto-fixed-fieldset {
 	margin-top: 25px;
 	padding: 22px;
-	border: 1px solid #d2ddc3;
+	border: 1px solid var(--section-line);
 	border-radius: var(--panel-radius);
-	background: transparent;
+	background: #fff;
 }
 
 .lotto-fixed-fieldset > legend {
 	margin-bottom: 0;
-	padding: 0 7px;
-	margin-inline-start: -7px;
+	padding: 4px 8px;
+	margin-inline-start: -8px;
+	border: 1px solid var(--section-line);
+	background: var(--lime);
 }
 
 .lotto-fixed-heading {
@@ -140,12 +142,13 @@
 	gap: 6px;
 	min-height: 44px;
 	padding: 7px 10px;
-	border: 1px solid #b4c69e;
+	border: 1px solid var(--section-line);
+	border-block-end-width: 3px;
 	border-radius: var(--control-radius);
 	background: #fff;
 	font-size: 12px;
-	font-weight: 550;
-	color: #4c6b30;
+	font-weight: 750;
+	color: var(--ink);
 }
 
 .lotto-fixed-clear:disabled {
@@ -163,7 +166,7 @@
 
 .lotto-fixed-count {
 	font-size: 13px;
-	font-weight: 650;
+	font-weight: 800;
 	font-variant-numeric: tabular-nums;
 	color: #48672e;
 }
@@ -186,11 +189,11 @@
 	gap: 7px;
 	min-height: 44px;
 	padding: 6px 10px;
-	border: 1px solid #b3c77d;
+	border: 1px solid #73885b;
 	border-radius: var(--control-radius);
-	background: #e6f4b9;
+	background: #edf4df;
 	font-size: 14px;
-	font-weight: 650;
+	font-weight: 800;
 	font-variant-numeric: tabular-nums;
 	color: #344b21;
 }
@@ -219,7 +222,7 @@
 	min-width: 0;
 	min-height: 44px;
 	padding: 9px 10px;
-	border: 1px solid #8b9b79;
+	border: 1px solid var(--section-line);
 	border-radius: var(--control-radius);
 	background: #fff;
 	font-size: 16px;
@@ -284,20 +287,20 @@
 	min-width: 0;
 	min-height: 48px;
 	padding: 9px 4px;
-	border: 1px solid #8b9b79;
+	border: 1px solid var(--section-line);
+	border-block-end-width: 3px;
 	border-radius: var(--control-radius);
 	background: #fff;
 	font-size: 18px;
-	font-weight: 600;
+	font-weight: 800;
 	font-variant-numeric: tabular-nums;
 	color: #304426;
 }
 
 .lotto-number-choice.is-selected {
-	border-color: #4e682c;
+	border-color: var(--ink);
 	background: var(--lime, #d6f266);
-	box-shadow: inset 0 0 0 1px #4e682c;
-	font-weight: 750;
+	font-weight: 850;
 	color: #25391a;
 }
 
@@ -359,9 +362,9 @@
 
 .lotto-excluded-details {
 	margin-top: 25px;
-	border: 1px solid #cbb9b1;
+	border: 1px solid var(--section-line);
 	border-radius: var(--panel-radius);
-	background: #fdfaf8;
+	background: #fff;
 }
 
 .lotto-excluded-details > summary {
@@ -371,6 +374,7 @@
 	min-height: 64px;
 	padding: 17px 22px;
 	border-radius: var(--panel-radius);
+	background: #fcf1e9;
 	list-style: none;
 	cursor: pointer;
 }
@@ -389,7 +393,7 @@
 	align-items: center;
 	gap: 9px;
 	font-size: 16px;
-	font-weight: 650;
+	font-weight: 800;
 	color: #613f34;
 }
 
@@ -450,8 +454,7 @@
 .lotto-excluded-choice.is-excluded {
 	border-color: #9e5947;
 	background: #f6ded4;
-	box-shadow: inset 0 0 0 1px #9e5947;
-	font-weight: 750;
+	font-weight: 850;
 	color: #7a3526;
 }
 

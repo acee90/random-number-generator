@@ -11,7 +11,8 @@
 .lunch-home-board {
 	min-inline-size: 0;
 	border: 2px solid var(--ink);
-	border-radius: 8px;
+	border-radius: var(--panel-radius, 2px);
+	background: #fff;
 }
 .lunch-home-start {
 	display: grid;
@@ -19,7 +20,7 @@
 	align-items: center;
 	gap: 48px;
 	padding: clamp(28px, 4vw, 48px);
-	border-radius: 6px 6px 0 0;
+	border-radius: 0;
 	background: var(--lime);
 }
 .lunch-home-intro {
@@ -53,12 +54,13 @@
 	gap: 16px;
 	min-block-size: 72px;
 	padding: 16px 22px;
-	border: 2px solid var(--ink);
-	border-radius: 4px;
+	border: 1px solid var(--ink);
+	border-block-end-width: 4px;
+	border-radius: var(--control-radius, 2px);
 	background: var(--ink);
 	color: #fff;
 	font-size: 21px;
-	font-weight: 750;
+	font-weight: 800;
 	line-height: 1.4;
 }
 .lunch-home-create > span {
@@ -99,6 +101,7 @@
 	gap: 48px;
 	padding: 12px clamp(28px, 4vw, 48px);
 	border-block-start: 2px solid var(--ink);
+	background: #fff;
 }
 .lunch-home-solo {
 	display: flex;
@@ -152,7 +155,7 @@
 	flex-wrap: wrap;
 	gap: 12px;
 	padding-block: 20px;
-	border-block-start: 1px solid var(--line);
+	border-block-start: 1px solid var(--section-line, #68715e);
 	font-size: 11px;
 	color: var(--muted);
 }

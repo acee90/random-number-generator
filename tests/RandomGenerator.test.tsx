@@ -684,15 +684,17 @@ describe("latest result restoration", () => {
 		expect(within(currentResult()).getByText("이번 추첨 결과")).toBeTruthy();
 		expect(within(currentResult()).queryByText("마지막 추첨 결과")).toBeNull();
 		expect(olderResultText()).toBe("42, 99");
-		const persisted = JSON.parse(
-			localStorage.getItem("randomlab.history") ?? "[]",
-		);
-		expect(persisted[0]).toMatchObject({
-			rows: [{ numbers: [88] }],
-			source: "csprng",
+		await waitFor(() => {
+			const persisted = JSON.parse(
+				localStorage.getItem("randomlab.history") ?? "[]",
+			);
+			expect(persisted[0]).toMatchObject({
+				rows: [{ numbers: [88] }],
+				source: "csprng",
+			});
+			expect(persisted[0].timestamp).toBeGreaterThan(savedResultTime);
+			expect(persisted[1]).toEqual(saved);
 		});
-		expect(persisted[0].timestamp).toBeGreaterThan(savedResultTime);
-		expect(persisted[1]).toEqual(saved);
 	});
 
 	it("keeps the restored current result while clearing and undoing older history", () => {
