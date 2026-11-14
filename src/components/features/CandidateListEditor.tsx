@@ -16,6 +16,9 @@ export type CandidateListEditorProps = {
 	onImportTemplate: () => void;
 	onImportExcel: () => void;
 	error?: string;
+	submitLabel?: string;
+	pending?: boolean;
+	disabled?: boolean;
 };
 
 type EditorErrors = {
@@ -62,6 +65,9 @@ export function CandidateListEditor({
 	onImportTemplate,
 	onImportExcel,
 	error,
+	submitLabel = "저장하고 사용",
+	pending = false,
+	disabled = false,
 }: CandidateListEditorProps) {
 	const id = useId();
 	const [submitAttempt, setSubmitAttempt] = useState(0);
@@ -139,6 +145,7 @@ export function CandidateListEditor({
 
 	function submit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
+		if (pending || disabled) return;
 		const result = validateDraft(normalized);
 		setSubmitAttempt((attempt) => attempt + 1);
 		if (result.name) {
@@ -166,200 +173,213 @@ export function CandidateListEditor({
 		<form
 			className="candidate-editor"
 			aria-label="후보 목록 편집"
+			aria-busy={pending}
 			noValidate
 			onSubmit={submit}
 		>
-			<div className="candidate-editor-name">
-				<label htmlFor={`${id}-list-name`}>목록 이름</label>
-				<input
-					ref={nameRef}
-					id={`${id}-list-name`}
-					name="candidate-list-name"
-					type="text"
-					autoComplete="off"
-					maxLength={candidateDraftLimits.name}
-					value={draft.name}
-					aria-invalid={Boolean(errors.name)}
-					aria-describedby={errors.name ? `${id}-name-error` : undefined}
-					onChange={(event) =>
-						onChange({ ...draft, name: event.currentTarget.value })
-					}
-				/>
-				{errors.name && (
-					<p className="candidate-editor-error" id={`${id}-name-error`}>
-						{errors.name}
-					</p>
-				)}
-			</div>
-			<div className="candidate-editor-tools">
-				<h2
-					ref={itemsHeadingRef}
-					tabIndex={-1}
-					aria-describedby={errors.items ? `${id}-items-error` : undefined}
-				>
-					후보 편집
-				</h2>
-				<div>
-					<button type="button" onClick={onImportTemplate}>
-						<ListPlus size={18} aria-hidden="true" />
-						템플릿에서 추가
-					</button>
-					<button type="button" onClick={onImportExcel}>
-						<FileSpreadsheet size={18} aria-hidden="true" />
-						엑셀에서 추가
-					</button>
-				</div>
-			</div>
-			<p
-				id={`${id}-items-error`}
-				className="candidate-editor-error"
-				role="alert"
+			<fieldset
+				className="candidate-editor-fields"
+				aria-label="후보 목록 편집 항목"
+				disabled={pending || disabled}
 			>
-				{errors.items}
-			</p>
-			<div className="candidate-editor-columns" aria-hidden="true">
-				<span>포함</span>
-				<span>후보 이름</span>
-				<span>분류 (선택)</span>
-				<span />
-			</div>
-			<ol className="candidate-editor-list" aria-label="후보 편집 목록">
-				{draft.items.map((item, index) => (
-					<li
-						key={item.id}
-						className="candidate-editor-row"
-						data-included={item.included}
+				<div className="candidate-editor-name">
+					<label htmlFor={`${id}-list-name`}>목록 이름</label>
+					<input
+						ref={nameRef}
+						id={`${id}-list-name`}
+						name="candidate-list-name"
+						type="text"
+						autoComplete="off"
+						maxLength={candidateDraftLimits.name}
+						value={draft.name}
+						aria-invalid={Boolean(errors.name)}
+						aria-describedby={errors.name ? `${id}-name-error` : undefined}
+						onChange={(event) =>
+							onChange({ ...draft, name: event.currentTarget.value })
+						}
+					/>
+					{errors.name && (
+						<p className="candidate-editor-error" id={`${id}-name-error`}>
+							{errors.name}
+						</p>
+					)}
+				</div>
+				<div className="candidate-editor-tools">
+					<h2
+						ref={itemsHeadingRef}
+						tabIndex={-1}
+						aria-describedby={errors.items ? `${id}-items-error` : undefined}
 					>
-						<label className="candidate-editor-included">
-							<input
-								type="checkbox"
-								checked={item.included}
-								onChange={(event) =>
-									updateItem(item.id, { included: event.currentTarget.checked })
-								}
-								aria-label={`${index + 1}번째 후보 포함`}
-							/>
-							<span aria-hidden="true">{index + 1}</span>
-						</label>
-						<div className="candidate-editor-field candidate-editor-item-name">
-							<label
-								className="candidate-editor-field-label"
-								htmlFor={`${id}-item-${index}`}
-							>
-								<span className="sr-only">{index + 1}번째 </span>후보 이름
-							</label>
-							<input
-								ref={(element) => {
-									if (element) itemRefs.current.set(item.id, element);
-									else itemRefs.current.delete(item.id);
-								}}
-								id={`${id}-item-${index}`}
-								name={`candidate-name-${index}`}
-								type="text"
-								autoComplete="off"
-								maxLength={candidateDraftLimits.itemName}
-								value={item.name}
-								aria-invalid={errors.itemNames.has(item.id)}
-								aria-describedby={
-									errors.itemNames.has(item.id)
-										? `${id}-item-${index}-error`
-										: undefined
-								}
-								onChange={(event) =>
-									updateItem(item.id, { name: event.currentTarget.value })
-								}
-							/>
-							{errors.itemNames.has(item.id) && (
-								<span
-									className="candidate-editor-error"
-									id={`${id}-item-${index}-error`}
-								>
-									{errors.itemNames.get(item.id)}
-								</span>
-							)}
-						</div>
-						<div className="candidate-editor-field candidate-editor-category">
-							<label
-								className="candidate-editor-field-label"
-								htmlFor={`${id}-category-${index}`}
-							>
-								<span className="sr-only">{index + 1}번째 </span>분류 (선택)
-							</label>
-							<input
-								ref={(element) => {
-									if (element) categoryRefs.current.set(item.id, element);
-									else categoryRefs.current.delete(item.id);
-								}}
-								id={`${id}-category-${index}`}
-								name={`candidate-category-${index}`}
-								type="text"
-								autoComplete="off"
-								maxLength={candidateDraftLimits.category}
-								value={item.category}
-								aria-invalid={errors.categories.has(item.id)}
-								aria-describedby={
-									errors.categories.has(item.id)
-										? `${id}-category-${index}-error`
-										: undefined
-								}
-								onChange={(event) =>
-									updateItem(item.id, { category: event.currentTarget.value })
-								}
-							/>
-							{errors.categories.has(item.id) && (
-								<span
-									className="candidate-editor-error"
-									id={`${id}-category-${index}-error`}
-								>
-									{errors.categories.get(item.id)}
-								</span>
-							)}
-						</div>
-						<button
-							className="candidate-editor-delete"
-							type="button"
-							onClick={() => removeItem(index)}
-							aria-label={`${index + 1}번째 후보 삭제`}
-						>
-							<Trash2 size={18} aria-hidden="true" />
+						후보 편집
+					</h2>
+					<div>
+						<button type="button" onClick={onImportTemplate}>
+							<ListPlus size={18} aria-hidden="true" />
+							템플릿에서 추가
 						</button>
-					</li>
-				))}
-			</ol>
-			{draft.items.length === 0 && (
-				<p className="candidate-editor-empty">후보를 추가해 주세요.</p>
-			)}
-			<button
-				className="candidate-editor-add"
-				type="button"
-				ref={addRef}
-				disabled={draft.items.length >= candidateDraftLimits.items}
-				onClick={addItem}
-			>
-				<Plus size={20} aria-hidden="true" />
-				후보 추가
-			</button>
-			<p
-				ref={errorRef}
-				tabIndex={-1}
-				className="candidate-editor-error"
-				role="alert"
-			>
-				{error}
-			</p>
-			<footer className="candidate-editor-footer">
-				<p>
-					포함 <strong>{includedCount}</strong> / 전체 {draft.items.length}
-				</p>
-				<div>
-					<button type="button" onClick={onCancel}>
-						취소
-					</button>
-					<button className="candidate-editor-save" type="submit">
-						저장하고 사용
-					</button>
+						<button type="button" onClick={onImportExcel}>
+							<FileSpreadsheet size={18} aria-hidden="true" />
+							엑셀에서 추가
+						</button>
+					</div>
 				</div>
-			</footer>
+				<p
+					id={`${id}-items-error`}
+					className="candidate-editor-error"
+					role="alert"
+				>
+					{errors.items}
+				</p>
+				<div className="candidate-editor-columns" aria-hidden="true">
+					<span>포함</span>
+					<span>후보 이름</span>
+					<span>분류 (선택)</span>
+					<span />
+				</div>
+				<ol className="candidate-editor-list" aria-label="후보 편집 목록">
+					{draft.items.map((item, index) => (
+						<li
+							key={item.id}
+							className="candidate-editor-row"
+							data-included={item.included}
+						>
+							<label className="candidate-editor-included">
+								<input
+									type="checkbox"
+									checked={item.included}
+									onChange={(event) =>
+										updateItem(item.id, {
+											included: event.currentTarget.checked,
+										})
+									}
+									aria-label={`${index + 1}번째 후보 포함`}
+								/>
+								<span aria-hidden="true">{index + 1}</span>
+							</label>
+							<div className="candidate-editor-field candidate-editor-item-name">
+								<label
+									className="candidate-editor-field-label"
+									htmlFor={`${id}-item-${index}`}
+								>
+									<span className="sr-only">{index + 1}번째 </span>후보 이름
+								</label>
+								<input
+									ref={(element) => {
+										if (element) itemRefs.current.set(item.id, element);
+										else itemRefs.current.delete(item.id);
+									}}
+									id={`${id}-item-${index}`}
+									name={`candidate-name-${index}`}
+									type="text"
+									autoComplete="off"
+									maxLength={candidateDraftLimits.itemName}
+									value={item.name}
+									aria-invalid={errors.itemNames.has(item.id)}
+									aria-describedby={
+										errors.itemNames.has(item.id)
+											? `${id}-item-${index}-error`
+											: undefined
+									}
+									onChange={(event) =>
+										updateItem(item.id, { name: event.currentTarget.value })
+									}
+								/>
+								{errors.itemNames.has(item.id) && (
+									<span
+										className="candidate-editor-error"
+										id={`${id}-item-${index}-error`}
+									>
+										{errors.itemNames.get(item.id)}
+									</span>
+								)}
+							</div>
+							<div className="candidate-editor-field candidate-editor-category">
+								<label
+									className="candidate-editor-field-label"
+									htmlFor={`${id}-category-${index}`}
+								>
+									<span className="sr-only">{index + 1}번째 </span>분류 (선택)
+								</label>
+								<input
+									ref={(element) => {
+										if (element) categoryRefs.current.set(item.id, element);
+										else categoryRefs.current.delete(item.id);
+									}}
+									id={`${id}-category-${index}`}
+									name={`candidate-category-${index}`}
+									type="text"
+									autoComplete="off"
+									maxLength={candidateDraftLimits.category}
+									value={item.category}
+									aria-invalid={errors.categories.has(item.id)}
+									aria-describedby={
+										errors.categories.has(item.id)
+											? `${id}-category-${index}-error`
+											: undefined
+									}
+									onChange={(event) =>
+										updateItem(item.id, { category: event.currentTarget.value })
+									}
+								/>
+								{errors.categories.has(item.id) && (
+									<span
+										className="candidate-editor-error"
+										id={`${id}-category-${index}-error`}
+									>
+										{errors.categories.get(item.id)}
+									</span>
+								)}
+							</div>
+							<button
+								className="candidate-editor-delete"
+								type="button"
+								onClick={() => removeItem(index)}
+								aria-label={`${index + 1}번째 후보 삭제`}
+							>
+								<Trash2 size={18} aria-hidden="true" />
+							</button>
+						</li>
+					))}
+				</ol>
+				{draft.items.length === 0 && (
+					<p className="candidate-editor-empty">후보를 추가해 주세요.</p>
+				)}
+				<button
+					className="candidate-editor-add"
+					type="button"
+					ref={addRef}
+					disabled={draft.items.length >= candidateDraftLimits.items}
+					onClick={addItem}
+				>
+					<Plus size={20} aria-hidden="true" />
+					후보 추가
+				</button>
+				<p
+					ref={errorRef}
+					tabIndex={-1}
+					className="candidate-editor-error"
+					role="alert"
+				>
+					{error}
+				</p>
+				<footer className="candidate-editor-footer">
+					<p>
+						포함 <strong>{includedCount}</strong> / 전체 {draft.items.length}
+					</p>
+					<div>
+						<button type="button" onClick={onCancel}>
+							취소
+						</button>
+						<button
+							className="candidate-editor-save"
+							type="submit"
+							aria-busy={pending}
+						>
+							{submitLabel}
+						</button>
+					</div>
+				</footer>
+			</fieldset>
 		</form>
 	);
 }

@@ -3,6 +3,12 @@
 	color: var(--ink);
 	background: #fff;
 }
+.candidate-editor-fields {
+	min-inline-size: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
 .candidate-editor-name {
 	display: grid;
 	gap: 8px;
@@ -168,7 +174,7 @@
 	line-height: 1.6;
 	overflow-wrap: anywhere;
 }
-.candidate-editor > .candidate-editor-error:not(:empty) {
+.candidate-editor-fields > .candidate-editor-error:not(:empty) {
 	margin-block: 12px;
 }
 .candidate-editor-error:empty {

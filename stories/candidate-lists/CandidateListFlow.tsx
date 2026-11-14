@@ -30,6 +30,13 @@ export type CandidateListFlowArgs = {
 	initialStage: "current" | "choose" | "editor" | "excel";
 	storageMode: "normal" | "fail";
 };
+export type RoomCandidateSession = {
+	list: SavedCandidateList;
+	version: number;
+	isHost: boolean;
+	lockedReason: string;
+	onApply: (draft: CandidateListDraft) => Promise<void>;
+};
 const copy = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
 const newId = () => crypto.randomUUID();
 const defaultList: SavedCandidateList = {
@@ -120,17 +127,25 @@ function Confirmation({
 export function CandidateListFlow({
 	initialStage,
 	storageMode,
-}: CandidateListFlowArgs) {
+	room,
+}: CandidateListFlowArgs & { room?: RoomCandidateSession }) {
 	const [loaded] = useState(initialLibrary);
 	const storedRaw = useRef(loaded.raw);
 	const [library, setLibrary] = useState<CandidateLibrary>(loaded.library);
-	const [applied, setApplied] = useState<SavedCandidateList>(() =>
+	const [personalApplied, setApplied] = useState<SavedCandidateList>(() =>
 		copy(
 			loaded.library.lists.find(
 				(list) => list.id === loaded.library.lastUsedId,
 			) ?? defaultList,
 		),
 	);
+	const applied = room?.list ?? personalApplied;
+	const [pending, setPending] = useState(false);
+	const applying = useRef(false);
+	const [savedRoomCopy, setSavedRoomCopy] = useState<{
+		version: number;
+		id: string;
+	} | null>(null);
 	const [view, setView] = useState<View>(initialStage);
 	const [draft, setDraft] = useState<CandidateListDraft | null>(() =>
 		initialStage === "editor" ? copy(applied) : null,
@@ -160,12 +175,18 @@ export function CandidateListFlow({
 	}, [view]);
 	const count = applied.items.filter((item) => item.included).length;
 	const titles: Record<View, string> = {
-		current: "후보 목록",
+		current: room ? "방 후보" : "후보 목록",
 		choose: "새 목록 준비",
 		templates: "템플릿에서 가져오기",
 		excel: "엑셀에서 가져오기",
 		editor: "목록 편집",
 	};
+	const canEdit = !room || (room.isHost && !room.lockedReason && !pending);
+	const roomCopySaved = Boolean(
+		room &&
+			savedRoomCopy?.version === room.version &&
+			library.lists.some((list) => list.id === savedRoomCopy.id),
+	);
 
 	function hasSaveSlot(listId?: string) {
 		if (
@@ -180,7 +201,7 @@ export function CandidateListFlow({
 		return false;
 	}
 	function edit(list: CandidateListDraft) {
-		if (!hasSaveSlot(list.id)) return;
+		if (!canEdit || (!room && !hasSaveSlot(list.id))) return;
 		const next = copy(list);
 		setDraft(next);
 		baseline.current = JSON.stringify(next);
@@ -189,7 +210,7 @@ export function CandidateListFlow({
 		setView("editor");
 	}
 	function choose() {
-		if (!hasSaveSlot()) return;
+		if (!canEdit || (!room && !hasSaveSlot())) return;
 		setDraft(null);
 		setImportMode("replace");
 		setError("");
@@ -197,7 +218,7 @@ export function CandidateListFlow({
 		setView("choose");
 	}
 	function newList() {
-		if (!hasSaveSlot()) return;
+		if (!canEdit || (!room && !hasSaveSlot())) return;
 		edit({
 			id: newId(),
 			name: "새 후보 목록",
@@ -210,13 +231,15 @@ export function CandidateListFlow({
 		});
 	}
 	function openImport(kind: "templates" | "excel", mode: "replace" | "append") {
+		if (!canEdit) return;
 		setImportMode(mode);
 		setExcelReady(false);
 		setError("");
 		setView(kind);
 	}
 	function importItems(name: string, items: CandidateListItem[]) {
-		if (importMode === "replace" && !hasSaveSlot()) return;
+		if (!canEdit) return;
+		if (!room && importMode === "replace" && !hasSaveSlot()) return;
 		const incoming = items.map((item) => ({ ...item, id: newId() }));
 		const next =
 			importMode === "append" && draft
@@ -235,6 +258,7 @@ export function CandidateListFlow({
 		} else edit(next);
 	}
 	function back() {
+		if (pending) return;
 		setError("");
 		if (view === "editor") {
 			if (draft && JSON.stringify(draft) !== baseline.current)
@@ -267,7 +291,29 @@ export function CandidateListFlow({
 		);
 		setLibrary(next);
 	}
-	function save(value: CandidateListDraft) {
+	async function save(value: CandidateListDraft) {
+		if (applying.current || !canEdit) return;
+		if (room) {
+			applying.current = true;
+			setPending(true);
+			setError("");
+			try {
+				await room.onApply(copy(value));
+				setDraft(null);
+				setNotice("방 후보를 적용했습니다.");
+				setView("current");
+			} catch (failure) {
+				setError(
+					failure instanceof Error
+						? failure.message
+						: "적용하지 못했습니다. 초안은 유지됩니다.",
+				);
+			} finally {
+				applying.current = false;
+				setPending(false);
+			}
+			return;
+		}
 		const saved: SavedCandidateList = { ...copy(value), updatedAt: Date.now() };
 		const lists = [
 			saved,
@@ -294,6 +340,27 @@ export function CandidateListFlow({
 			);
 		}
 	}
+	function saveRoomCopy() {
+		if (!room || roomCopySaved) return;
+		if (!hasSaveSlot()) return;
+		try {
+			const saved = { ...copy(applied), id: newId(), updatedAt: Date.now() };
+			persist({
+				version: 1,
+				lists: [saved, ...library.lists],
+				lastUsedId: saved.id,
+			});
+			setSavedRoomCopy({ version: room.version, id: saved.id });
+			setError("");
+			setNotice("내 목록에 사본을 저장했습니다.");
+		} catch (failure) {
+			setError(
+				failure instanceof Error
+					? failure.message
+					: "내 목록에 저장하지 못했습니다.",
+			);
+		}
+	}
 	function deleteSaved(list: SavedCandidateList) {
 		try {
 			persist({
@@ -315,7 +382,9 @@ export function CandidateListFlow({
 		<div className="sb-candidate-flow">
 			<aside className="sb-list-tools" aria-label="미리보기 안내">
 				<p>
-					흐름 미리보기 · 실제 방 변경 없음 · 저장은 예제 전용 브라우저 공간
+					{room
+						? "방 생성 후 편집 미리보기 · 방 적용은 모의 응답 · 저장은 예제 전용"
+						: "흐름 미리보기 · 실제 방 변경 없음 · 저장은 예제 전용 브라우저 공간"}
 				</p>
 			</aside>
 			<main className="cl-manager">
@@ -326,6 +395,7 @@ export function CandidateListFlow({
 							className="cl-button"
 							onClick={back}
 							aria-label="뒤로"
+							disabled={pending}
 						>
 							<ArrowLeft size={20} aria-hidden="true" />
 						</button>
@@ -343,7 +413,7 @@ export function CandidateListFlow({
 							<li aria-current={view === "editor" ? "step" : undefined}>
 								2 편집
 							</li>
-							<li>3 저장하고 사용</li>
+							<li>{room ? "3 방에 적용" : "3 저장하고 사용"}</li>
 						</ol>
 					</nav>
 				)}
@@ -353,6 +423,9 @@ export function CandidateListFlow({
 					</p>
 				)}
 				<output className="cl-inline-message">{notice}</output>
+				{room?.lockedReason && (
+					<output className="cl-inline-message">{room.lockedReason}</output>
+				)}
 				{view !== "editor" && (
 					<p className="cl-inline-message" role="alert">
 						{error}
@@ -370,6 +443,9 @@ export function CandidateListFlow({
 						onImportTemplate={() => openImport("templates", "append")}
 						onImportExcel={() => openImport("excel", "append")}
 						error={error}
+						submitLabel={room ? "방에 적용" : undefined}
+						pending={pending}
+						disabled={!canEdit && !pending}
 					/>
 				) : (
 					<div className="cl-stage">
@@ -378,29 +454,37 @@ export function CandidateListFlow({
 								<section aria-labelledby="cl-current-title">
 									<div className="cl-current">
 										<div>
-											<p className="cl-summary">지금 사용하는 목록</p>
+											<p className="cl-summary">
+												{room
+													? `방에 적용된 목록 · v${room.version}`
+													: "지금 사용하는 목록"}
+											</p>
 											<h2 id="cl-current-title">{applied.name}</h2>
 											<span>
 												{count}개 포함 · 전체 {applied.items.length}개
 											</span>
 										</div>
-										<div className="cl-actionbar">
-											<button
-												type="button"
-												className="cl-button"
-												onClick={() => edit(applied)}
-											>
-												목록 편집
-											</button>
-											<button
-												type="button"
-												className="cl-button cl-primary"
-												onClick={choose}
-											>
-												<RotateCcw size={18} aria-hidden="true" />
-												목록 리셋
-											</button>
-										</div>
+										{(!room || room.isHost) && (
+											<div className="cl-actionbar">
+												<button
+													type="button"
+													className="cl-button"
+													onClick={() => edit(applied)}
+													disabled={!canEdit}
+												>
+													목록 편집
+												</button>
+												<button
+													type="button"
+													className="cl-button cl-primary"
+													onClick={choose}
+													disabled={!canEdit}
+												>
+													<RotateCcw size={18} aria-hidden="true" />
+													목록 리셋
+												</button>
+											</div>
+										)}
 									</div>
 									<ol className="cl-current-items" aria-label="현재 후보 목록">
 										{applied.items.map((item, index) => (
@@ -415,55 +499,75 @@ export function CandidateListFlow({
 										))}
 									</ol>
 								</section>
-								<section className="cl-saved" aria-labelledby="cl-saved-title">
-									<h2 id="cl-saved-title">
-										<FolderOpen size={21} aria-hidden="true" />내 목록{" "}
-										<span>{library.lists.length}</span>
-									</h2>
-									{library.lists.length ? (
-										<ul>
-											{library.lists.map((list) => (
-												<li className="cl-saved-row" key={list.id}>
-													<div>
-														<strong>{list.name}</strong>
-														<span>
-															{
-																list.items.filter((item) => item.included)
-																	.length
+								{room?.isHost && (
+									<div className="cl-room-save">
+										<button
+											type="button"
+											className="cl-button"
+											disabled={roomCopySaved}
+											onClick={saveRoomCopy}
+										>
+											{roomCopySaved ? "내 목록에 저장됨" : "내 목록에 저장"}
+										</button>
+									</div>
+								)}
+								{(!room || room.isHost) && (
+									<section
+										className="cl-saved"
+										aria-labelledby="cl-saved-title"
+									>
+										<h2 id="cl-saved-title">
+											<FolderOpen size={21} aria-hidden="true" />내 목록{" "}
+											<span>{library.lists.length}</span>
+										</h2>
+										{library.lists.length ? (
+											<ul>
+												{library.lists.map((list) => (
+													<li className="cl-saved-row" key={list.id}>
+														<div>
+															<strong>{list.name}</strong>
+															<span>
+																{
+																	list.items.filter((item) => item.included)
+																		.length
+																}
+																개 포함
+																{!room && list.id === applied.id && (
+																	<>
+																		{" "}
+																		· <Check size={14} aria-hidden="true" />{" "}
+																		사용 중
+																	</>
+																)}
+															</span>
+														</div>
+														<button
+															type="button"
+															className="cl-button"
+															onClick={() => edit(list)}
+															disabled={!canEdit}
+															aria-label={`${list.name} 불러와 편집`}
+														>
+															불러와 편집
+														</button>
+														<button
+															type="button"
+															className="cl-button"
+															onClick={() =>
+																setConfirm({ kind: "delete", list })
 															}
-															개 포함
-															{list.id === applied.id && (
-																<>
-																	{" "}
-																	· <Check size={14} aria-hidden="true" /> 사용
-																	중
-																</>
-															)}
-														</span>
-													</div>
-													<button
-														type="button"
-														className="cl-button"
-														onClick={() => edit(list)}
-														aria-label={`${list.name} 불러와 편집`}
-													>
-														불러와 편집
-													</button>
-													<button
-														type="button"
-														className="cl-button"
-														onClick={() => setConfirm({ kind: "delete", list })}
-														aria-label={`${list.name} 저장 목록 삭제`}
-													>
-														<Trash2 size={18} aria-hidden="true" />
-													</button>
-												</li>
-											))}
-										</ul>
-									) : (
-										<p>저장하고 사용한 목록이 여기에 남습니다.</p>
-									)}
-								</section>
+															aria-label={`${list.name} 저장 목록 삭제`}
+														>
+															<Trash2 size={18} aria-hidden="true" />
+														</button>
+													</li>
+												))}
+											</ul>
+										) : (
+											<p>저장하고 사용한 목록이 여기에 남습니다.</p>
+										)}
+									</section>
+								)}
 							</>
 						)}
 						{view === "choose" && (
@@ -476,6 +580,7 @@ export function CandidateListFlow({
 										type="button"
 										className="cl-source-option"
 										onClick={newList}
+										disabled={!canEdit}
 									>
 										<Plus size={28} aria-hidden="true" />
 										<strong>새로 만들기</strong>
@@ -485,6 +590,7 @@ export function CandidateListFlow({
 										type="button"
 										className="cl-source-option"
 										onClick={() => openImport("templates", "replace")}
+										disabled={!canEdit}
 									>
 										<LayoutTemplate size={28} aria-hidden="true" />
 										<strong>템플릿에서 가져오기</strong>
@@ -494,6 +600,7 @@ export function CandidateListFlow({
 										type="button"
 										className="cl-source-option"
 										onClick={() => openImport("excel", "replace")}
+										disabled={!canEdit}
 									>
 										<FileSpreadsheet size={28} aria-hidden="true" />
 										<strong>엑셀에서 가져오기</strong>
@@ -514,6 +621,7 @@ export function CandidateListFlow({
 											className="cl-button"
 											key={template.id}
 											onClick={() => importItems(template.name, template.items)}
+											disabled={!canEdit}
 										>
 											<LayoutTemplate size={22} aria-hidden="true" />
 											<strong>{template.name}</strong>
@@ -534,6 +642,7 @@ export function CandidateListFlow({
 										type="button"
 										className="cl-source-option"
 										onClick={() => setExcelReady(true)}
+										disabled={!canEdit}
 									>
 										<FileSpreadsheet size={30} aria-hidden="true" />
 										<strong>예제 엑셀 선택</strong>
@@ -547,6 +656,7 @@ export function CandidateListFlow({
 												type="button"
 												className="cl-button"
 												onClick={() => setExcelReady(false)}
+												disabled={!canEdit}
 											>
 												다시 선택
 											</button>
@@ -583,6 +693,7 @@ export function CandidateListFlow({
 											<button
 												type="button"
 												className="cl-button cl-primary"
+												disabled={!canEdit}
 												onClick={() =>
 													importItems(
 														"엑셀에서 가져온 목록",

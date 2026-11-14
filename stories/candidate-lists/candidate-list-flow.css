@@ -584,3 +584,67 @@
 	color: var(--muted);
 	font-size: 13px;
 }
+.cl-room-preview {
+	max-inline-size: 1040px;
+	margin-inline: auto;
+}
+.cl-room-fixture,
+.cl-room-context {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 12px 20px;
+	margin-block-end: 16px;
+	padding-block: 12px;
+	border-block-end: 1px solid var(--line);
+}
+.cl-room-fixture label {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-block-size: 44px;
+	font-size: 14px;
+}
+.cl-room-fixture select {
+	min-block-size: 44px;
+	border: 1px solid var(--section-line);
+	padding: 8px;
+	background: #fff;
+}
+.cl-room-fixture input {
+	inline-size: 20px;
+	block-size: 20px;
+	accent-color: #405f26;
+}
+.cl-room-context > div {
+	display: grid;
+	gap: 4px;
+}
+.cl-room-context strong {
+	font-size: 20px;
+}
+.cl-room-context :is(span, output) {
+	font-size: 13px;
+	color: var(--muted);
+}
+.cl-room-save {
+	margin-block-start: 16px;
+}
+.cl-room-history {
+	margin-block-start: 20px;
+	border-block: 1px solid var(--section-line);
+}
+.cl-room-history summary {
+	min-block-size: 48px;
+	padding: 12px;
+	cursor: pointer;
+}
+.cl-room-history section {
+	padding: 12px;
+	border-block-start: 1px solid var(--line);
+}
+.cl-room-preview :is(select, input, summary):focus-visible {
+	outline: 3px solid #527427;
+	outline-offset: 3px;
+}

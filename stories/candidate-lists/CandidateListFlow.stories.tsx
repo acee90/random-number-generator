@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { CandidateListFlow } from "./CandidateListFlow";
+import { RoomCandidateFlow } from "./RoomCandidateFlow";
 
 const meta = {
 	title: "FLOW/후보 목록",
@@ -31,4 +32,9 @@ export const Mobile: Story = {
 export const StorageFailure: Story = {
 	name: "저장 실패 · 초안 유지",
 	args: { initialStage: "editor", storageMode: "fail" },
+};
+export const AfterRoomCreated: Story = {
+	name: "방 생성 후 후보 수정",
+	parameters: { controls: { disable: true } },
+	render: () => <RoomCandidateFlow />,
 };

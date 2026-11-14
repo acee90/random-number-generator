@@ -245,4 +245,71 @@ describe("candidate list editor", () => {
 			).value,
 		).toBe(draft.items[0].name);
 	});
+
+	it("disables a locked editor without announcing an in-flight request", () => {
+		const onSave = vi.fn();
+		render(
+			<CandidateListEditor
+				draft={exampleDraft()}
+				onChange={vi.fn()}
+				onSave={onSave}
+				onCancel={vi.fn()}
+				onImportTemplate={vi.fn()}
+				onImportExcel={vi.fn()}
+				disabled
+			/>,
+		);
+		const form = screen.getByRole("form", { name: "후보 목록 편집" });
+		const submit = screen.getByRole("button", { name: "저장하고 사용" });
+		expect(form.getAttribute("aria-busy")).toBe("false");
+		expect(submit.getAttribute("aria-busy")).toBe("false");
+		for (const control of [
+			...screen.getAllByRole("textbox"),
+			...screen.getAllByRole("checkbox"),
+			...screen.getAllByRole("button"),
+		]) {
+			expect(control.matches(":disabled")).toBe(true);
+		}
+		fireEvent.submit(form);
+		expect(onSave).not.toHaveBeenCalled();
+	});
+
+	it("disables every control while pending without replacing the submit label or draft", () => {
+		const draft = exampleDraft();
+		const props = {
+			draft,
+			onChange: vi.fn(),
+			onSave: vi.fn(),
+			onCancel: vi.fn(),
+			onImportTemplate: vi.fn(),
+			onImportExcel: vi.fn(),
+			submitLabel: "후보 적용",
+		};
+		const view = render(<CandidateListEditor {...props} />);
+		const form = screen.getByRole("form", { name: "후보 목록 편집" });
+		const submit = screen.getByRole("button", { name: "후보 적용" });
+		const name = screen.getByRole("textbox", {
+			name: "목록 이름",
+		}) as HTMLInputElement;
+		expect(submit.matches(":disabled")).toBe(false);
+		view.rerender(<CandidateListEditor {...props} pending />);
+		expect(form.getAttribute("aria-busy")).toBe("true");
+		expect(screen.getByRole("button", { name: "후보 적용" })).toBe(submit);
+		expect(submit.getAttribute("aria-busy")).toBe("true");
+		for (const control of [
+			...screen.getAllByRole("textbox"),
+			...screen.getAllByRole("checkbox"),
+			...screen.getAllByRole("button"),
+		]) {
+			expect(control.matches(":disabled")).toBe(true);
+		}
+		fireEvent.click(submit);
+		fireEvent.submit(form);
+		expect(props.onSave).not.toHaveBeenCalled();
+		expect(name.value).toBe(draft.name);
+		view.rerender(<CandidateListEditor {...props} />);
+		expect(submit.matches(":disabled")).toBe(false);
+		expect(form.getAttribute("aria-busy")).toBe("false");
+		expect(screen.getByRole("button", { name: "후보 적용" })).toBe(submit);
+	});
 });
