@@ -2,7 +2,7 @@
 
 개발 계획과 진행 상태는 [GitHub 전체 로드맵 #7](https://github.com/acee90/random-number-generator/issues/7), 최신 운영 반영은 [출시 이슈 #8](https://github.com/acee90/random-number-generator/issues/8)에서 관리한다. 이 문서는 현재 로컬에 구현된 방의 동작과 운영 설명을 보관하는 보조 자료다.
 
-현재 경로는 `/`의 인라인 방 생성, `/solo`의 혼자 추첨, `/tools?tool=number|lotto|pension`의 번호 도구다. 기존 `/lunch`는 `/`로 이동시키며 `/lunch-room/<UUID>` 초대 주소는 유지한다. 상세 설계는 [점메추 정보 구조 문서](jeommechu-ia-plan.md)를 참고한다.
+현재 경로는 `/`의 시작 방식 선택, `/create`의 방 정보 입력·생성, `/solo`의 혼자 추첨, `/tools?tool=number|lotto|pension`의 번호 도구다. 홈에는 방 생성 폼을 두지 않고 **방 만들기**를 누르면 별도 화면에서 방 이름·닉네임을 입력한다. 기존 생성 검증·오류 재시도·기본 후보를 그대로 사용하며, 생성 화면은 검색 색인에서 제외한다. [홈 단계 분리 이슈 #34](https://github.com/acee90/random-number-generator/issues/34)에서 구현·배포 상태를 관리한다. 기존 `/lunch`는 `/`로 이동시키며 `/lunch-room/<UUID>` 초대 주소는 유지한다. 상세 설계는 [점메추 정보 구조 문서](jeommechu-ia-plan.md)를 참고한다.
 
 현재 기본 목록은 사용자 제공 `회사주변_음식점_목록.xlsx`의 `회사 주변 음식점!A6:C112`에 있는 107곳·11개 분류다. 원본 순서를 유지하며 메뉴는 임의로 추가하지 않는다. 분류 미확인 2곳은 원본의 `확인 불가`를 유지하고 거리 미확인 1곳은 거리 값을 생략한다. 새 방과 단독 추첨의 전체 후보가 이 목록을 사용한다. [데이터 갱신 이슈 #17](https://github.com/acee90/random-number-generator/issues/17)에서 관리하며, 사용자 요청에 따라 이번 갱신에서 기존 방 검증·이관은 제외한다.
 
