@@ -2,7 +2,10 @@ import { fileURLToPath } from "node:url";
 import type { StorybookConfig } from "@storybook/react-vite";
 
 const config: StorybookConfig = {
-	stories: ["../stories/core/*.stories.tsx"],
+	stories: [
+		"../stories/core/*.stories.tsx",
+		"../stories/candidate-lists/*.stories.tsx",
+	],
 	framework: "@storybook/react-vite",
 	addons: [],
 	core: {
