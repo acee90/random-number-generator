@@ -1214,7 +1214,7 @@ describe("synchronized lunch room UI", () => {
 		).toBeTruthy();
 		expect(
 			screen.getByRole("link", { name: "새 방 만들기" }).getAttribute("href"),
-		).toBe("/");
+		).toBe("/create");
 		expect(screen.queryByRole("log")).toBeNull();
 		expect(animate).not.toHaveBeenCalled();
 		expect(screen.queryByRole("textbox")).toBeNull();

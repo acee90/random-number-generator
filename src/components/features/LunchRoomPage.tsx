@@ -743,7 +743,7 @@ export default function LunchRoomPage({
 						<p>
 							{room.error || "방이 만료되었거나 더 이상 이용할 수 없습니다."}
 						</p>
-						<a className="generate-button" href="/">
+						<a className="generate-button" href="/create">
 							새 방 만들기
 						</a>
 						<a className="room-outline-button" href="/solo">

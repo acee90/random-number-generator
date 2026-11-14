@@ -64,6 +64,7 @@ async function main() {
 		[
 			["/", `${canonicalOrigin}/`],
 			["/solo", `${canonicalOrigin}/solo`],
+			["/create", null],
 			["/tools?tool=number", null],
 			["/tools?tool=lotto", null],
 			["/tools?tool=pension", null],
@@ -113,7 +114,7 @@ async function main() {
 		manifest: true,
 		legacyRedirect: 301,
 	});
-	report("complete", { pages: 6, origin });
+	report("complete", { pages: 7, origin });
 }
 
 await main().catch((error) => {

@@ -1,0 +1,128 @@
+.create-room-page {
+	display: flex;
+	flex-direction: column;
+	min-block-size: 100dvh;
+}
+.create-room-main {
+	flex: 1;
+	inline-size: min(100%, 640px);
+	margin-inline: auto;
+	padding-block: 20px 40px;
+}
+.create-room-location {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--muted);
+	font-size: 13px;
+}
+.create-room-location a {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-block-size: 44px;
+	color: var(--ink);
+}
+.create-room-heading {
+	margin-block: 16px 24px;
+}
+.create-room-heading h1 {
+	margin: 0 0 8px;
+	font-size: 36px;
+	font-weight: 800;
+	letter-spacing: -0.05em;
+	line-height: 1.25;
+}
+.create-room-heading p {
+	margin: 0;
+	color: var(--muted);
+	font-size: 15px;
+	line-height: 1.6;
+}
+.create-room-page .lunch-create-inline > h2 {
+	position: absolute;
+	inline-size: 1px;
+	block-size: 1px;
+	padding: 0;
+	margin: -1px;
+	clip-path: inset(50%);
+	overflow: hidden;
+	white-space: nowrap;
+}
+.create-room-page .lunch-create-inline .lunch-create-submit {
+	min-block-size: 64px;
+	font-size: 18px;
+}
+.create-room-help {
+	margin-block-start: 16px;
+	border-block-end: 1px solid var(--line);
+	font-size: 13px;
+	line-height: 1.7;
+	color: var(--muted);
+}
+.create-room-help summary {
+	min-block-size: 44px;
+	padding-block: 10px;
+	color: var(--ink);
+	cursor: pointer;
+}
+.create-room-help > div {
+	padding-block-end: 14px;
+}
+.create-room-help p {
+	margin: 0 0 4px;
+}
+.create-room-footer {
+	display: flex;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 8px 16px;
+	padding-block: 16px;
+	border-block-start: 1px solid var(--line);
+	font-size: 11px;
+	color: var(--muted);
+}
+@media (max-width: 600px) {
+	.create-room-main {
+		padding-block: 8px 24px;
+	}
+	.create-room-heading {
+		margin-block: 8px 20px;
+	}
+	.create-room-heading h1 {
+		font-size: 30px;
+	}
+	.create-room-heading p {
+		font-size: 14px;
+	}
+	.create-room-page .lunch-create-inline {
+		padding: 20px;
+	}
+}
+@media (hover: hover) and (pointer: fine) {
+	.create-room-location a:hover {
+		text-decoration: underline;
+		text-underline-offset: 4px;
+	}
+}
+@media (prefers-reduced-motion: no-preference) {
+	.create-room-main {
+		animation: create-room-enter 180ms ease-out both;
+	}
+	.create-room-page .lunch-create-submit {
+		transition: scale 100ms ease-out;
+	}
+	.create-room-page .lunch-create-submit:not(:disabled):active {
+		scale: 0.985;
+	}
+}
+@keyframes create-room-enter {
+	from {
+		opacity: 0.6;
+		translate: 0 6px;
+	}
+	to {
+		opacity: 1;
+		translate: 0 0;
+	}
+}

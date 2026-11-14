@@ -59,6 +59,22 @@
 	flex-direction: column;
 	gap: 10px;
 }
+.lunch-create-inline {
+	border: 1px solid var(--section-line);
+	border-radius: var(--panel-radius);
+	background: transparent;
+	padding: 24px;
+}
+.lunch-create-inline h2 {
+	font-size: 23px;
+	line-height: 1.4;
+	margin: 0 0 20px;
+	font-weight: 700;
+}
+.lunch-create-inline .lunch-create-submit {
+	margin-block-start: 6px;
+	font-size: 16px;
+}
 .lunch-create-form label {
 	font-size: 14px;
 	font-weight: 650;
