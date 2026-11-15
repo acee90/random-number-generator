@@ -4,45 +4,16 @@ import {
 	lunchRoomLimits,
 	validateCreateRoomInput,
 } from "@/lib/lunchRoom";
+import {
+	nicknameCheckPath,
+	readBoundedRoomJson,
+} from "@/lib/lunchRoomRequest.server";
 
 const json = (value: unknown, status: number, headers?: HeadersInit) =>
 	Response.json(value, {
 		status,
 		headers: { "Cache-Control": "no-store", ...headers },
 	});
-
-async function boundedJson(request: Request): Promise<unknown> {
-	if (
-		Number(request.headers.get("Content-Length")) >
-		lunchRoomLimits.maxMessageBytes
-	)
-		throw new RangeError("Request too large");
-	const reader = request.body?.getReader();
-	if (!reader) throw new SyntaxError("Empty body");
-	const chunks: Uint8Array[] = [];
-	let length = 0;
-	try {
-		for (;;) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			length += value.byteLength;
-			if (length > lunchRoomLimits.maxMessageBytes) {
-				await reader.cancel();
-				throw new RangeError("Request too large");
-			}
-			chunks.push(value);
-		}
-	} finally {
-		reader.releaseLock();
-	}
-	const bytes = new Uint8Array(length);
-	let offset = 0;
-	for (const chunk of chunks) {
-		bytes.set(chunk, offset);
-		offset += chunk.byteLength;
-	}
-	return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-}
 
 export async function handleLunchRoomRequest(
 	request: Request,
@@ -53,6 +24,7 @@ export async function handleLunchRoomRequest(
 		/^\/api\/lunch\/rooms\/([^/]+)\/nickname-availability$/,
 	);
 	if (availabilityPath) {
+		const startedAt = performance.now();
 		const roomId = availabilityPath[1];
 		if (!isLunchRoomId(roomId))
 			return json(
@@ -70,7 +42,7 @@ export async function handleLunchRoomRequest(
 			return json({ error: "JSON 형식이 필요합니다." }, 415);
 		let body: unknown;
 		try {
-			body = await boundedJson(request);
+			body = await readBoundedRoomJson(request);
 		} catch (error) {
 			return json(
 				{ code: "INVALID_REQUEST", error: "입력 내용을 확인해 주세요." },
@@ -78,16 +50,40 @@ export async function handleLunchRoomRequest(
 			);
 		}
 		try {
-			const room = await getServerByName(env.LunchRooms, roomId);
-			const result = await room.checkNicknameAvailability(body);
-			return result.status === 200
-				? json(
-						{ name: result.body.name, available: result.body.available },
-						200,
-					)
+			const room = env.LunchRooms.get(env.LunchRooms.idFromName(roomId));
+			const roomStartedAt = performance.now();
+			// PartyServer.fetch initializes onStart before onRequest. Unlike
+			// getServerByName + RPC this needs only one Worker-to-room round trip.
+			const response = await room.fetch(
+				new Request(`https://lunch-room.internal${nicknameCheckPath}`, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						"x-partykit-room": roomId,
+					},
+					body: JSON.stringify(body),
+				}),
+			);
+			const result = (await response.json()) as {
+				name?: string;
+				available?: boolean;
+				code?: string;
+				error?: string;
+			};
+			const timings = [
+				`room;dur=${(performance.now() - roomStartedAt).toFixed(1)}`,
+				`worker;dur=${(performance.now() - startedAt).toFixed(1)}`,
+			];
+			const nicknameTiming = response.headers.get("Server-Timing");
+			if (nicknameTiming && /^nickname;dur=\d+(?:\.\d+)?$/.test(nicknameTiming))
+				timings.unshift(nicknameTiming);
+			const headers = { "Server-Timing": timings.join(", ") };
+			return response.status === 200
+				? json({ name: result.name, available: result.available }, 200, headers)
 				: json(
-						{ code: result.body.code, error: result.body.error },
-						result.status,
+						{ code: result.code, error: result.error },
+						response.status,
+						headers,
 					);
 		} catch {
 			return json(
@@ -111,7 +107,7 @@ export async function handleLunchRoomRequest(
 			return json({ error: "JSON 형식이 필요합니다." }, 415);
 		let body: unknown;
 		try {
-			body = await boundedJson(request);
+			body = await readBoundedRoomJson(request);
 		} catch (error) {
 			return json(
 				{ error: "방 설정을 확인해 주세요." },

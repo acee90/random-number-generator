@@ -252,6 +252,8 @@ export function RoomPageFixtureProvider({
 		serverNow: () => Date.now(),
 		enter: () => false,
 		clearError: () => commit((value) => ({ ...value, error: "" })),
+		localChatMessages: [],
+		dismissLocalChat: () => {},
 		rename(name) {
 			const normalized = normalizeLunchRoomNickname(name);
 			if (

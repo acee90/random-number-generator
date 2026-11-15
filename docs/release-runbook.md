@@ -37,6 +37,8 @@ npm run check:release:room -- --origin https://jeommechu.dev
 
 방 검사는 HTTP·WebSocket·입장 승인 시간의 표본 수와 중앙값·p95·최솟값·최댓값을 출력한다. 적은 수의 단일 방 관측이며 부하 시험이나 일반적인 응답 시간 보장이 아니다. 키 등록 전 두 추첨의 출처는 `csprng`, 등록 후 별도 방의 두 추첨은 `quantum`이었다.
 
+닉네임·채팅 지연만 비교할 때는 `npm run check:latency -- --origin https://jeommechu.dev --samples 5`를 사용한다. 새 시험 방 하나에서 추첨 없이 HTTP·WebSocket·채팅 ACK와 `Server-Timing`을 측정한다. 한국 접속의 LAX 경로 조사·계측 항목·운영 전후 비교 방법은 [지연 조사 기록](room-latency-investigation.md), 진행 상태는 [#47](https://github.com/acee90/random-number-generator/issues/47)에서 관리한다.
+
 UI 입장 진단은 새 페이지를 `https://jeommechu.dev/?debugRoom=1` 또는 검증용 방 주소의 `?debugRoom=1`로 열고 콘솔의 `[room timing]`을 읽는다. 초기 로드 시에만 켜지고 같은 SPA 화면 이동 동안 유지된다. 일반 페이지는 계측하지 않는다. 출력은 단계명·소요 시간·화면 표시 상태뿐이며 이름·방 ID·URL·요청 내용·키를 담지 않는다.
 
 | 단계 | 측정 구간 |
@@ -48,6 +50,7 @@ UI 입장 진단은 새 페이지를 `https://jeommechu.dev/?debugRoom=1` 또는
 | `socket_open` | 연결 시도부터 WebSocket 열림까지 |
 | `join_ack` | 입장 요청부터 본인 승인 snapshot 수신까지 |
 | `room_commit` | 첫 승인 수신 이후 React의 연결 화면 커밋까지. 실제 페인트는 아님 |
+| `chat_ack` | 채팅 전송부터 동일 메시지의 서버 확정 snapshot 수신까지. 본인 화면의 즉시 표시 시간과 구분 |
 
 구간이 겹칠 수 있으므로 단순 합산하지 않는다. HTTP와 소켓 시간은 네트워크·서버 대기를 포함하며 서버 CPU 시간과 같지 않다. 생성 화면의 기존 '방 만드는 중' 표시는 HTTP 외에도 응답 해석과 화면 이동을 포함하므로 표시만 보고 닉네임 API가 느리다고 판단하지 않는다. 이번 검증에서 수십 초 대기가 다시 발생하지 않았다면 원인 해결로 확정하지 않고, 이후 발생 시 이 단계들을 비교한다.
 

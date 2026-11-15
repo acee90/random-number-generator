@@ -39,7 +39,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useLunchRoom } from "@/hooks/useLunchRoom";
+import { type LocalChatMessage, useLunchRoom } from "@/hooks/useLunchRoom";
 import { useRoomTimeline } from "@/hooks/useRoomTimeline";
 import {
 	type LunchCategory,
@@ -72,6 +72,8 @@ const presenceLabels = {
 	away: "자리비움",
 	offline: "오프라인",
 } as const;
+type DisplayChatMessage = ChatMessage & Partial<LocalChatMessage>;
+const noLocalChatMessages: LocalChatMessage[] = [];
 
 function sameMessageGroup(left?: ChatMessage, right?: ChatMessage) {
 	return Boolean(
@@ -212,13 +214,17 @@ export default function LunchRoomPage({
 			? "재연결 중"
 			: "연결 중";
 	const serverMessages = snapshot?.messages;
-	const messages = useMemo(
-		() =>
-			[...(serverMessages ?? []), ...connectionEvents]
-				.sort((left, right) => left.timestamp - right.timestamp)
-				.slice(-lunchRoomLimits.maxMessages),
-		[serverMessages, connectionEvents],
-	);
+	const localMessages = room.localChatMessages ?? noLocalChatMessages;
+	const messages = useMemo((): DisplayChatMessage[] => {
+		const confirmedIds = new Set(serverMessages?.map((entry) => entry.id));
+		const confirmedMessages = [...(serverMessages ?? []), ...connectionEvents]
+			.sort((left, right) => left.timestamp - right.timestamp)
+			.slice(-lunchRoomLimits.maxMessages);
+		return [
+			...confirmedMessages,
+			...localMessages.filter((entry) => !confirmedIds.has(entry.id)),
+		].sort((left, right) => left.timestamp - right.timestamp);
+	}, [serverMessages, localMessages, connectionEvents]);
 	const hostOnline = participants.some((participant) => participant.isHost);
 	const canStart =
 		isHost && !busy && !room.candidatesPending && places.length >= 2;
@@ -666,6 +672,12 @@ export default function LunchRoomPage({
 			nearBottomRef.current = true;
 			setUnread(0);
 		}
+	}
+	function restoreFailedChat(entry: DisplayChatMessage) {
+		if (entry.delivery !== "failed" || message) return;
+		setMessage(entry.text);
+		room.dismissLocalChat(entry.id);
+		chatInputRef.current?.focus();
 	}
 	async function copy(
 		text: string,
@@ -1499,6 +1511,7 @@ export default function LunchRoomPage({
 												<li
 													key={entry.id}
 													className={`room-chat-bubble ${mine ? "is-mine" : "is-other"} ${continuation ? "is-continuation" : ""}`}
+													data-delivery={entry.delivery}
 												>
 													{!continuation ? (
 														<strong className="room-message-author">
@@ -1525,6 +1538,52 @@ export default function LunchRoomPage({
 															</time>
 														)}
 													</div>
+													{entry.delivery && (
+														<output className="room-message-delivery">
+															<span>
+																{entry.delivery === "sending"
+																	? "전송 중…"
+																	: entry.delivery === "failed"
+																		? "전송 실패"
+																		: "전송 확인 안 됨"}
+															</span>
+															{entry.reason && <span>{entry.reason}</span>}
+															{entry.delivery === "failed" && (
+																<Button
+																	variant="link"
+																	size="sm"
+																	type="button"
+																	disabled={Boolean(message)}
+																	title={
+																		message
+																			? "작성 중인 메시지를 먼저 보내 주세요."
+																			: undefined
+																	}
+																	onClick={() => restoreFailedChat(entry)}
+																>
+																	다시 작성
+																</Button>
+															)}
+															{entry.delivery === "unconfirmed" && (
+																<>
+																	<span>
+																		같은 내용을 다시 보내기 전에 확인해 주세요.
+																	</span>
+																	<Button
+																		variant="link"
+																		size="sm"
+																		type="button"
+																		title="이 화면의 미확인 표시만 닫습니다. 메시지 전송을 취소하지 않습니다."
+																		onClick={() =>
+																			room.dismissLocalChat(entry.id)
+																		}
+																	>
+																		표시 닫기
+																	</Button>
+																</>
+															)}
+														</output>
+													)}
 												</li>
 											);
 										})}
