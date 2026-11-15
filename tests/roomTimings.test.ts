@@ -155,6 +155,42 @@ describe("admission acknowledgement to React commit timings", () => {
 		expect(stages()).toContain("join_ack");
 		expect(stages()).not.toContain("room_commit");
 	});
+
+	it("records chat acknowledgement only after the matching server message and never logs message text or IDs", async () => {
+		await loadEnabled();
+		const { useLunchRoom } = await import("../src/hooks/useLunchRoom");
+		vi.useFakeTimers();
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		const socket = socketMocks.sockets[0];
+		open(socket);
+		const admitted = acknowledgement();
+		act(() => socket.dispatchEvent(admitted));
+		act(() => result.current.sendChat("private-message-text"));
+		const sent = socket.send.mock.calls
+			.map(([raw]) => JSON.parse(raw as string))
+			.find((message) => message.type === "chat");
+		expect(stages()).not.toContain("chat_ack");
+		const message = JSON.parse(admitted.data);
+		message.snapshot.messages = [
+			{
+				id: sent.id,
+				participantId: "timed-client",
+				name: "시간 확인",
+				text: "private-message-text",
+				timestamp: Date.now(),
+			},
+		];
+		act(() =>
+			socket.dispatchEvent(
+				new MessageEvent("message", { data: JSON.stringify(message) }),
+			),
+		);
+		expect(stages().filter((stage) => stage === "chat_ack")).toHaveLength(1);
+		expect(JSON.stringify(info.mock.calls)).not.toContain(
+			"private-message-text",
+		);
+		expect(JSON.stringify(info.mock.calls)).not.toContain(sent.id);
+	});
 });
 async function loadEnabled() {
 	window.history.replaceState(null, "", "/?debugRoom=1");
@@ -220,10 +256,11 @@ describe("opt-in sanitized room timings", () => {
 			"socket_open",
 			"join_ack",
 			"room_commit",
+			"chat_ack",
 		] as const)
 			beginRoomTiming(stage)();
 		beginRoomTiming("private-name private-proof" as never)();
-		expect(info).toHaveBeenCalledTimes(7);
+		expect(info).toHaveBeenCalledTimes(8);
 		for (const call of info.mock.calls) {
 			expect(call).toHaveLength(1);
 			expect(typeof call[0]).toBe("string");

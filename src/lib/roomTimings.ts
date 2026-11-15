@@ -6,6 +6,7 @@ const stages = new Set([
 	"socket_open",
 	"join_ack",
 	"room_commit",
+	"chat_ack",
 ] as const);
 export type RoomTimingStage =
 	| "create_http"
@@ -14,7 +15,8 @@ export type RoomTimingStage =
 	| "nickname_check"
 	| "socket_open"
 	| "join_ack"
-	| "room_commit";
+	| "room_commit"
+	| "chat_ack";
 
 const noop = () => {};
 const enabled = (() => {

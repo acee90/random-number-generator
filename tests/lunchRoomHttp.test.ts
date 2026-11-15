@@ -6,7 +6,9 @@ import { handleLunchRoomRequest } from "../src/server/lunchRoomHttp";
 
 const party = vi.hoisted(() => ({
 	initialize: vi.fn(),
-	checkNicknameAvailability: vi.fn(),
+	roomFetch: vi.fn(),
+	idFromName: vi.fn(),
+	get: vi.fn(),
 	getServerByName: vi.fn(),
 	routePartykitRequest: vi.fn(),
 }));
@@ -20,7 +22,7 @@ const origin = "https://randomlab.example";
 const endpoint = `${origin}/api/lunch/rooms`;
 const roomId = "28a5cbd4-051b-48f8-9e93-c052e4746b39";
 const now = 1_800_000_000_000;
-const binding = { testBinding: true };
+const binding = { idFromName: party.idFromName, get: party.get };
 const env = { LunchRooms: binding } as unknown as Env;
 const ids = sampleLunchPlaces.slice(0, 3).map((place) => place.id);
 const input = { title: "오늘 점심", hostName: "방장", candidateIds: ids };
@@ -54,13 +56,16 @@ async function responseFor(request: Request) {
 beforeEach(() => {
 	vi.clearAllMocks();
 	party.initialize.mockResolvedValue(undefined);
-	party.checkNicknameAvailability.mockResolvedValue({
-		status: 200,
-		body: { name: "새이름", available: true },
-	});
+	party.roomFetch.mockImplementation(async () =>
+		Response.json(
+			{ name: "새이름", available: true },
+			{ headers: { "Server-Timing": "nickname;dur=2.4" } },
+		),
+	);
+	party.idFromName.mockReturnValue("named-room-id");
+	party.get.mockReturnValue({ fetch: party.roomFetch });
 	party.getServerByName.mockResolvedValue({
 		initialize: party.initialize,
-		checkNicknameAvailability: party.checkNicknameAvailability,
 	});
 	party.routePartykitRequest.mockResolvedValue(
 		new Response("routed", { status: 200 }),
@@ -196,6 +201,7 @@ describe("lunch room HTTP creation", () => {
 		expect(response.status).toBe(400);
 		expect(response.headers.get("Cache-Control")).toBe("no-store");
 		expect(party.getServerByName).not.toHaveBeenCalled();
+		expect(party.get).not.toHaveBeenCalled();
 		expect(party.initialize).not.toHaveBeenCalled();
 	});
 
@@ -210,6 +216,7 @@ describe("lunch room HTTP creation", () => {
 		expect(response.status).toBe(405);
 		expect(response.headers.get("Allow")).toBe("POST");
 		expect(party.getServerByName).not.toHaveBeenCalled();
+		expect(party.get).not.toHaveBeenCalled();
 	});
 
 	it.each([
@@ -223,6 +230,7 @@ describe("lunch room HTTP creation", () => {
 		const response = await responseFor(createRequest(input, { headers }));
 		expect(response.status).toBe(403);
 		expect(party.getServerByName).not.toHaveBeenCalled();
+		expect(party.get).not.toHaveBeenCalled();
 	});
 
 	it.each([
@@ -235,6 +243,7 @@ describe("lunch room HTTP creation", () => {
 		const response = await responseFor(createRequest(input, { headers }));
 		expect(response.status).toBe(415);
 		expect(party.getServerByName).not.toHaveBeenCalled();
+		expect(party.get).not.toHaveBeenCalled();
 	});
 
 	it("accepts the JSON media type with a charset parameter", async () => {
@@ -278,6 +287,7 @@ describe("lunch room HTTP creation", () => {
 		);
 		expect(response.status).toBe(413);
 		expect(party.getServerByName).not.toHaveBeenCalled();
+		expect(party.get).not.toHaveBeenCalled();
 	});
 
 	it("bounds actual UTF-8 bytes even without Content-Length", async () => {
@@ -368,31 +378,40 @@ describe("lunch room nickname availability HTTP", () => {
 			...init,
 		});
 
-	it("checks the exact room RPC without joining or exposing any extra response fields", async () => {
+	it("uses one initialized room fetch without a bootstrap RPC or extra response fields", async () => {
 		const body = {
 			name: "새이름",
 			hostToken: "h".repeat(64),
 			guestToken: "g".repeat(64),
 		};
-		party.checkNicknameAvailability.mockResolvedValueOnce({
-			status: 200,
-			body: {
-				name: "새이름",
-				available: false,
-				participants: ["private-name"],
-				hostToken: "private-token",
-			},
-		});
+		party.roomFetch.mockResolvedValueOnce(
+			Response.json(
+				{
+					name: "새이름",
+					available: false,
+					participants: ["private-name"],
+					hostToken: "private-token",
+				},
+				{ headers: { "Server-Timing": "nickname;dur=2.4" } },
+			),
+		);
 		const response = await responseFor(requestForName(body));
 		expect(response.status).toBe(200);
 		expect(response.headers.get("Cache-Control")).toBe("no-store");
 		expect(await response.json()).toEqual({ name: "새이름", available: false });
-		expect(party.getServerByName).toHaveBeenCalledExactlyOnceWith(
-			binding,
-			roomId,
+		expect(party.getServerByName).not.toHaveBeenCalled();
+		expect(party.idFromName).toHaveBeenCalledExactlyOnceWith(roomId);
+		expect(party.get).toHaveBeenCalledExactlyOnceWith("named-room-id");
+		expect(party.roomFetch).toHaveBeenCalledOnce();
+		const internal = party.roomFetch.mock.calls[0][0] as Request;
+		expect(internal.url).toBe(
+			"https://lunch-room.internal/_internal/lunch-room/nickname-availability",
 		);
-		expect(party.checkNicknameAvailability).toHaveBeenCalledExactlyOnceWith(
-			body,
+		expect(internal.method).toBe("POST");
+		expect(internal.headers.get("x-partykit-room")).toBe(roomId);
+		expect(await internal.json()).toEqual(body);
+		expect(response.headers.get("Server-Timing")).toMatch(
+			/^nickname;dur=2.4, room;dur=[\d.]+, worker;dur=[\d.]+$/,
 		);
 		expect(party.initialize).not.toHaveBeenCalled();
 		expect(party.routePartykitRequest).not.toHaveBeenCalled();
@@ -401,15 +420,17 @@ describe("lunch room nickname availability HTTP", () => {
 	it.each([
 		400, 403, 404, 410,
 	])("preserves server error status %s without leaking a roster or proofs", async (status) => {
-		party.checkNicknameAvailability.mockResolvedValueOnce({
-			status,
-			body: {
-				code: "EXPECTED_CODE",
-				error: "안내",
-				participants: ["private-name"],
-				hostToken: "private-token",
-			},
-		});
+		party.roomFetch.mockResolvedValueOnce(
+			Response.json(
+				{
+					code: "EXPECTED_CODE",
+					error: "안내",
+					participants: ["private-name"],
+					hostToken: "private-token",
+				},
+				{ status },
+			),
+		);
 		const response = await responseFor(requestForName());
 		expect(response.status).toBe(status);
 		expect(response.headers.get("Cache-Control")).toBe("no-store");
@@ -426,6 +447,7 @@ describe("lunch room nickname availability HTTP", () => {
 		expect(response.status).toBe(405);
 		expect(response.headers.get("Allow")).toBe("POST");
 		expect(party.getServerByName).not.toHaveBeenCalled();
+		expect(party.get).not.toHaveBeenCalled();
 	});
 
 	it.each([
@@ -439,6 +461,7 @@ describe("lunch room nickname availability HTTP", () => {
 		const response = await responseFor(requestForName(undefined, { headers }));
 		expect(response.status).toBe(403);
 		expect(party.getServerByName).not.toHaveBeenCalled();
+		expect(party.get).not.toHaveBeenCalled();
 	});
 
 	it.each([
@@ -451,6 +474,7 @@ describe("lunch room nickname availability HTTP", () => {
 		const response = await responseFor(requestForName(undefined, { headers }));
 		expect(response.status).toBe(415);
 		expect(party.getServerByName).not.toHaveBeenCalled();
+		expect(party.get).not.toHaveBeenCalled();
 	});
 
 	it.each([
@@ -462,6 +486,7 @@ describe("lunch room nickname availability HTTP", () => {
 		expect(response.status).toBe(400);
 		expect(await response.json()).toMatchObject({ code: "INVALID_REQUEST" });
 		expect(party.getServerByName).not.toHaveBeenCalled();
+		expect(party.get).not.toHaveBeenCalled();
 	});
 
 	it("bounds availability payload bytes before accessing a Durable Object", async () => {
@@ -470,6 +495,7 @@ describe("lunch room nickname availability HTTP", () => {
 		);
 		expect(response.status).toBe(413);
 		expect(party.getServerByName).not.toHaveBeenCalled();
+		expect(party.get).not.toHaveBeenCalled();
 	});
 
 	it("rejects a malformed room ID and does not route suffixes or different endpoint names", async () => {
@@ -489,19 +515,25 @@ describe("lunch room nickname availability HTTP", () => {
 				),
 			).toBeNull();
 		expect(party.getServerByName).not.toHaveBeenCalled();
+		expect(party.get).not.toHaveBeenCalled();
 	});
 
 	it.each([
 		"lookup",
-		"check",
+		"fetch",
+		"decode",
 	])("returns a generic503 on %s failure without revealing private error details", async (failure) => {
 		if (failure === "lookup")
-			party.getServerByName.mockRejectedValueOnce(
+			party.get.mockImplementationOnce(() => {
+				throw new Error("private binding and proof");
+			});
+		else if (failure === "fetch")
+			party.roomFetch.mockRejectedValueOnce(
 				new Error("private binding and proof"),
 			);
 		else
-			party.checkNicknameAvailability.mockRejectedValueOnce(
-				new Error("private binding and proof"),
+			party.roomFetch.mockResolvedValueOnce(
+				new Response("private invalid JSON"),
 			);
 		const response = await responseFor(requestForName());
 		expect(response.status).toBe(503);
@@ -526,6 +558,7 @@ describe("lunch room WebSocket routing", () => {
 			{ cors: false },
 		);
 		expect(party.getServerByName).not.toHaveBeenCalled();
+		expect(party.get).not.toHaveBeenCalled();
 	});
 
 	it("accepts a case-insensitive WebSocket Upgrade header", async () => {
@@ -598,5 +631,6 @@ describe("unrelated request fallback", () => {
 		).toBeNull();
 		expect(party.routePartykitRequest).not.toHaveBeenCalled();
 		expect(party.getServerByName).not.toHaveBeenCalled();
+		expect(party.get).not.toHaveBeenCalled();
 	});
 });

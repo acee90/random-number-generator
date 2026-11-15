@@ -355,6 +355,164 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
+describe("immediate own-chat display and acknowledgement", () => {
+	function acknowledgeChat(id: string, text = "김밥 어때요?") {
+		return snapshot({
+			messages: [
+				{
+					id,
+					participantId: "host-client",
+					name: "민수",
+					text,
+					timestamp: Date.now(),
+				},
+			],
+		});
+	}
+	function publish(current: RoomSnapshot) {
+		receive({ type: "snapshot", snapshot: current, serverTime: Date.now() });
+	}
+
+	it("shows the sent text immediately without changing authoritative room data, then reconciles by message ID", () => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined();
+		const authoritative = result.current.snapshot;
+		act(() => expect(result.current.sendChat(" 김밥 어때요? ")).toBe(true));
+		const id = sent("chat")[0].id;
+		expect(result.current.snapshot).toBe(authoritative);
+		expect(result.current.snapshot?.messages).toEqual([]);
+		expect(result.current.localChatMessages).toEqual([
+			expect.objectContaining({
+				id,
+				roomId,
+				participantId: "host-client",
+				name: "민수",
+				text: "김밥 어때요?",
+				delivery: "sending",
+			}),
+		]);
+		publish(snapshot({ listVersion: 2 }));
+		expect(result.current.localChatMessages).toHaveLength(1);
+		publish(acknowledgeChat(id));
+		expect(result.current.localChatMessages).toEqual([]);
+		expect(result.current.snapshot?.messages).toHaveLength(1);
+		publish(acknowledgeChat(id));
+		expect(result.current.localChatMessages).toEqual([]);
+		act(() => vi.advanceTimersByTime(15000));
+		expect(result.current.error).toBe("");
+		expect(sent("chat")).toHaveLength(1);
+	});
+
+	it("marks only the rejected chat as failed and keeps another pending action intact", () => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined();
+		act(() => {
+			result.current.sendChat("첫 메시지");
+			result.current.sendChat("두 번째 메시지");
+			result.current.startDraw();
+		});
+		const chats = sent("chat");
+		receive({
+			type: "error",
+			code: "CHAT_RATE_LIMIT",
+			message: "메시지를 조금 천천히 보내 주세요.",
+			requestId: chats[1].id,
+		});
+		expect(
+			result.current.localChatMessages.map((entry) => entry.delivery),
+		).toEqual(["sending", "failed"]);
+		expect(result.current.localChatMessages[1].reason).toContain("천천히");
+		expect(result.current.startPending).toBe(true);
+		act(() => result.current.dismissLocalChat(chats[0].id));
+		expect(result.current.localChatMessages).toHaveLength(2);
+		act(() => result.current.dismissLocalChat(chats[1].id));
+		expect(result.current.localChatMessages.map((entry) => entry.id)).toEqual([
+			chats[0].id,
+		]);
+	});
+
+	it("keeps timed-out text visibly unconfirmed and replaces it with a late authoritative acknowledgement", () => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined();
+		act(() => result.current.sendChat("김밥 어때요?"));
+		const id = sent("chat")[0].id;
+		act(() => vi.advanceTimersByTime(15000));
+		expect(result.current.localChatMessages[0]).toMatchObject({
+			id,
+			delivery: "unconfirmed",
+			text: "김밥 어때요?",
+		});
+		publish(acknowledgeChat(id));
+		expect(result.current.localChatMessages).toEqual([]);
+		expect(result.current.snapshot?.messages.map((entry) => entry.id)).toEqual([
+			id,
+		]);
+		expect(sent("chat")).toHaveLength(1);
+	});
+
+	it("does not replay unconfirmed chat on reconnect and accepts its acknowledgement after rejoining", () => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined();
+		act(() => result.current.sendChat("김밥 어때요?"));
+		const id = sent("chat")[0].id;
+		act(() => {
+			socket().readyState = 3;
+			socket().dispatchEvent(new Event("close"));
+		});
+		expect(result.current.localChatMessages[0].delivery).toBe("unconfirmed");
+		joined(true, acknowledgeChat(id));
+		expect(result.current.localChatMessages).toEqual([]);
+		expect(sent("chat")).toHaveLength(1);
+	});
+
+	it("does not create local messages when transport fails, and clears room-scoped work on navigation and expiry", () => {
+		const { result, rerender } = renderHook(({ id }) => useLunchRoom(id), {
+			initialProps: { id: roomId },
+		});
+		joined();
+		socket().send.mockReturnValueOnce(false);
+		act(() => expect(result.current.sendChat("보내지 못함")).toBe(false));
+		expect(result.current.localChatMessages).toEqual([]);
+		act(() => result.current.sendChat("이전 방 메시지"));
+		expect(result.current.localChatMessages).toHaveLength(1);
+		const nextId = "00000000-0000-0000-0000-000000000001";
+		rerender({ id: nextId });
+		expect(result.current.localChatMessages).toEqual([]);
+		joined(true, snapshot({ roomId: nextId, expiresAt: Date.now() + 1000 }));
+		act(() => result.current.sendChat("만료 전 메시지"));
+		expect(result.current.localChatMessages).toHaveLength(1);
+		act(() => vi.advanceTimersByTime(1000));
+		expect(result.current.connection).toBe("closed");
+		expect(result.current.localChatMessages).toEqual([]);
+		act(() => vi.advanceTimersByTime(15000));
+		expect(result.current.localChatMessages).toEqual([]);
+	});
+
+	it("bounds unacknowledged local messages and does not send more while the limit is reached", () => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined();
+		act(() => {
+			for (let index = 0; index < 20; index++)
+				expect(result.current.sendChat(`메시지 ${index}`)).toBe(true);
+			expect(result.current.sendChat("한도 초과")).toBe(false);
+		});
+		expect(result.current.localChatMessages).toHaveLength(20);
+		expect(sent("chat")).toHaveLength(20);
+		expect(result.current.error).toContain("미확인 메시지가 많습니다");
+		const hiddenId = sent("chat")[0].id;
+		act(() => vi.advanceTimersByTime(15000));
+		act(() => result.current.dismissLocalChat(hiddenId));
+		expect(result.current.localChatMessages).toHaveLength(19);
+		act(() => expect(result.current.sendChat("이어서 보내기")).toBe(true));
+		expect(sent("chat")).toHaveLength(21);
+		publish(acknowledgeChat(hiddenId, "메시지 0"));
+		expect(result.current.snapshot?.messages[0].id).toBe(hiddenId);
+		expect(
+			result.current.localChatMessages.some((entry) => entry.id === hiddenId),
+		).toBe(false);
+	});
+});
+
 describe("explicit lunch room admission", () => {
 	it("renders the same initial loading state on the server and first client commit without consuming admission during render", () => {
 		mocks.consumeEntry.mockReturnValueOnce("새방장");
