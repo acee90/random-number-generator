@@ -78,6 +78,16 @@ $names | Select-Object name, type
 
 ## 배포와 최초 마이그레이션
 
+### Durable Object를 포함한 격리 미리보기
+
+DO 클래스를 구현하는 Worker는 일반 Version URL을 제공하지 않는다. 브랜치의 `versions upload` 성공만으로 실행 가능한 미리보기가 생겼다고 판단하지 않는다. [공식 Version URL 제약](https://developers.cloudflare.com/workers/versions-and-deployments/version-urls/#limitations)에 따라 Worker Previews를 사용한다.
+
+Git 빌드의 비운영 명령은 `npx wrangler preview`, 운영 명령은 기존 `npx wrangler deploy`다. `wrangler.jsonc`의 `previews`는 같은 Worker의 `LunchRoomServer`를 참조해 미리보기별 DO namespace를 자동 분리하고, `SEED_POOL`은 전용 KV `jeommechu-room-latency-preview`에 연결한다. 이 KV를 사용하는 미리보기끼리는 공유하지만 운영 KV와는 분리된다. 운영 secret은 상속하지 않으며 미리보기 추첨은 공개 난수 대체 경로를 사용한다.
+
+빌드 로그에서 실제 Preview URL·커밋을 확인하고 새 시험 방에서 닉네임·채팅·권한·재접속을 검증한 뒤 main을 병합한다. 운영 트래픽은 main 배포가 완료될 때까지 기존 버전을 유지한다. 진행·실제 URL·배포 전후 측정은 [#47](https://github.com/acee90/random-number-generator/issues/47)에서 관리한다.
+
+### 최초 DO 마이그레이션과 운영 배포
+
 로컬에서 `npm test`, `npx tsc --noEmit`, `npm run build`를 통과시킨다. 생성된 `dist/server/wrangler.json`의 Worker 이름이 `jeommechu`이며 DO 바인딩과 마이그레이션이 원본 설정과 일치하는지 확인한다.
 
 DO 클래스를 생성·삭제·개명·이관하는 변경은 `wrangler versions upload`로 적용할 수 없다. 최초 `lunch-rooms-v1`은 `wrangler deploy`로 적용한다. 이는 [Cloudflare 버전 관리 명세](https://developers.cloudflare.com/workers/versions-and-deployments/deployment-management/)의 제약이다.
