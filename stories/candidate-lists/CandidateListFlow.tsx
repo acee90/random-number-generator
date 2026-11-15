@@ -8,8 +8,19 @@ import {
 	RotateCcw,
 	Trash2,
 } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import CandidateListEditor from "@/components/features/CandidateListEditor";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import {
 	type CandidateListDraft,
 	type CandidateListItem,
@@ -78,48 +89,44 @@ function Confirmation({
 	title,
 	description,
 	action,
+	disabled,
 	onKeep,
 	onConfirm,
+	onClosed,
 }: {
 	title: string;
 	description: string;
 	action: string;
+	disabled: boolean;
 	onKeep: () => void;
 	onConfirm: () => void;
+	onClosed: () => void;
 }) {
-	const ref = useRef<HTMLDialogElement>(null);
-	const id = useId();
-	useEffect(() => {
-		const dialog = ref.current;
-		dialog?.showModal();
-		return () => dialog?.close();
-	}, []);
 	return (
-		<dialog
-			ref={ref}
-			className="cl-confirm"
-			aria-labelledby={`${id}-title`}
-			aria-describedby={`${id}-description`}
-			onCancel={(event) => {
-				event.preventDefault();
-				onKeep();
+		<AlertDialog
+			open
+			onOpenChange={(open) => {
+				if (!open) onKeep();
 			}}
 		>
-			<h2 id={`${id}-title`}>{title}</h2>
-			<p id={`${id}-description`}>{description}</p>
-			<div className="cl-actionbar">
-				<button type="button" className="cl-button" onClick={onKeep}>
-					돌아가기
-				</button>
-				<button
-					type="button"
-					className="cl-button cl-primary"
-					onClick={onConfirm}
-				>
-					{action}
-				</button>
-			</div>
-		</dialog>
+			<AlertDialogContent
+				onCloseAutoFocus={(event) => {
+					event.preventDefault();
+					onClosed();
+				}}
+			>
+				<AlertDialogHeader>
+					<AlertDialogTitle>{title}</AlertDialogTitle>
+					<AlertDialogDescription>{description}</AlertDialogDescription>
+				</AlertDialogHeader>
+				<AlertDialogFooter>
+					<AlertDialogCancel onClick={onKeep}>돌아가기</AlertDialogCancel>
+					<AlertDialogAction disabled={disabled} onClick={onConfirm}>
+						{action}
+					</AlertDialogAction>
+				</AlertDialogFooter>
+			</AlertDialogContent>
+		</AlertDialog>
 	);
 }
 
@@ -156,16 +163,13 @@ export function CandidateListFlow({
 	const [error, setError] = useState("");
 	const [notice, setNotice] = useState("");
 	const [confirm, setConfirm] = useState<
-		{ kind: "discard" } | { kind: "delete"; list: SavedCandidateList } | null
+		| { kind: "discard" | "restart" }
+		| { kind: "delete"; list: SavedCandidateList }
+		| null
 	>(null);
 	const heading = useRef<HTMLHeadingElement>(null);
 	const focusAfterConfirm = useRef(false);
-	useEffect(() => {
-		if (!confirm && focusAfterConfirm.current) {
-			focusAfterConfirm.current = false;
-			heading.current?.focus();
-		}
-	}, [confirm]);
+	const confirmReturnFocus = useRef<HTMLElement | null>(null);
 	const previousView = useRef(view);
 	useEffect(() => {
 		if (previousView.current !== view) {
@@ -188,7 +192,7 @@ export function CandidateListFlow({
 			library.lists.some((list) => list.id === savedRoomCopy.id),
 	);
 
-	function hasSaveSlot(listId?: string) {
+	function hasSaveSlot(listId?: string, limitView: View = "current") {
 		if (
 			library.lists.length < candidateDraftLimits.savedLists ||
 			library.lists.some((list) => list.id === listId)
@@ -197,7 +201,7 @@ export function CandidateListFlow({
 		setError(
 			`저장 목록은 ${candidateDraftLimits.savedLists}개까지입니다. 내 목록에서 하나를 삭제한 뒤 새 목록을 만들어 주세요.`,
 		);
-		setView("current");
+		setView(limitView);
 		return false;
 	}
 	function edit(list: CandidateListDraft) {
@@ -257,12 +261,26 @@ export function CandidateListFlow({
 			setView("editor");
 		} else edit(next);
 	}
+	function askConfirmation(next: NonNullable<typeof confirm>) {
+		confirmReturnFocus.current =
+			document.activeElement instanceof HTMLElement
+				? document.activeElement
+				: null;
+		setConfirm(next);
+	}
+	function restart() {
+		if (!canEdit) return;
+		if (!room && !hasSaveSlot(undefined, "editor")) return;
+		if (draft && JSON.stringify(draft) !== baseline.current)
+			askConfirmation({ kind: "restart" });
+		else choose();
+	}
 	function back() {
 		if (pending) return;
 		setError("");
 		if (view === "editor") {
 			if (draft && JSON.stringify(draft) !== baseline.current)
-				setConfirm({ kind: "discard" });
+				askConfirmation({ kind: "discard" });
 			else setView("current");
 		} else if (view === "templates" || view === "excel") {
 			setView(importMode === "append" ? "editor" : "choose");
@@ -390,15 +408,16 @@ export function CandidateListFlow({
 			<main className="cl-manager">
 				<header className="cl-heading">
 					{view !== "current" && (
-						<button
+						<Button
 							type="button"
+							variant="outline"
 							className="cl-button"
 							onClick={back}
 							aria-label="뒤로"
 							disabled={pending}
 						>
 							<ArrowLeft size={20} aria-hidden="true" />
-						</button>
+						</Button>
 					)}
 					<h1 ref={heading} tabIndex={-1}>
 						{titles[view]}
@@ -439,6 +458,7 @@ export function CandidateListFlow({
 							setError("");
 						}}
 						onCancel={back}
+						onRestart={restart}
 						onSave={save}
 						onImportTemplate={() => openImport("templates", "append")}
 						onImportExcel={() => openImport("excel", "append")}
@@ -466,23 +486,25 @@ export function CandidateListFlow({
 										</div>
 										{(!room || room.isHost) && (
 											<div className="cl-actionbar">
-												<button
+												<Button
 													type="button"
+													variant="outline"
 													className="cl-button"
 													onClick={() => edit(applied)}
 													disabled={!canEdit}
 												>
 													목록 편집
-												</button>
-												<button
+												</Button>
+												<Button
 													type="button"
-													className="cl-button cl-primary"
+													className="cl-primary"
+													size="lg"
 													onClick={choose}
 													disabled={!canEdit}
 												>
 													<RotateCcw size={18} aria-hidden="true" />
 													목록 리셋
-												</button>
+												</Button>
 											</div>
 										)}
 									</div>
@@ -501,14 +523,15 @@ export function CandidateListFlow({
 								</section>
 								{room?.isHost && (
 									<div className="cl-room-save">
-										<button
+										<Button
 											type="button"
+											variant="outline"
 											className="cl-button"
 											disabled={roomCopySaved}
 											onClick={saveRoomCopy}
 										>
 											{roomCopySaved ? "내 목록에 저장됨" : "내 목록에 저장"}
-										</button>
+										</Button>
 									</div>
 								)}
 								{(!room || room.isHost) && (
@@ -541,25 +564,27 @@ export function CandidateListFlow({
 																)}
 															</span>
 														</div>
-														<button
+														<Button
 															type="button"
+															variant="outline"
 															className="cl-button"
 															onClick={() => edit(list)}
 															disabled={!canEdit}
 															aria-label={`${list.name} 불러와 편집`}
 														>
 															불러와 편집
-														</button>
-														<button
+														</Button>
+														<Button
 															type="button"
+															variant="outline"
 															className="cl-button"
 															onClick={() =>
-																setConfirm({ kind: "delete", list })
+																askConfirmation({ kind: "delete", list })
 															}
 															aria-label={`${list.name} 저장 목록 삭제`}
 														>
 															<Trash2 size={18} aria-hidden="true" />
-														</button>
+														</Button>
 													</li>
 												))}
 											</ul>
@@ -576,36 +601,42 @@ export function CandidateListFlow({
 									기존 목록은 새 목록을 적용할 때 바뀝니다.
 								</p>
 								<div className="cl-source-options">
-									<button
+									<Button
 										type="button"
 										className="cl-source-option"
+										variant="plain"
+										size="auto"
 										onClick={newList}
 										disabled={!canEdit}
 									>
 										<Plus size={28} aria-hidden="true" />
 										<strong>새로 만들기</strong>
 										<small>직접 하나씩 추가</small>
-									</button>
-									<button
+									</Button>
+									<Button
 										type="button"
 										className="cl-source-option"
+										variant="plain"
+										size="auto"
 										onClick={() => openImport("templates", "replace")}
 										disabled={!canEdit}
 									>
 										<LayoutTemplate size={28} aria-hidden="true" />
 										<strong>템플릿에서 가져오기</strong>
 										<small>준비된 목록으로 시작</small>
-									</button>
-									<button
+									</Button>
+									<Button
 										type="button"
 										className="cl-source-option"
+										variant="plain"
+										size="auto"
 										onClick={() => openImport("excel", "replace")}
 										disabled={!canEdit}
 									>
 										<FileSpreadsheet size={28} aria-hidden="true" />
 										<strong>엑셀에서 가져오기</strong>
 										<small>예제 파일로 흐름 확인</small>
-									</button>
+									</Button>
 								</div>
 							</>
 						)}
@@ -616,9 +647,11 @@ export function CandidateListFlow({
 								</p>
 								<div className="cl-template-options">
 									{templates.map((template) => (
-										<button
+										<Button
 											type="button"
-											className="cl-button"
+											variant="plain"
+											size="auto"
+											className="cl-template-option"
 											key={template.id}
 											onClick={() => importItems(template.name, template.items)}
 											disabled={!canEdit}
@@ -626,7 +659,7 @@ export function CandidateListFlow({
 											<LayoutTemplate size={22} aria-hidden="true" />
 											<strong>{template.name}</strong>
 											<span>{template.items.length}개</span>
-										</button>
+										</Button>
 									))}
 								</div>
 							</>
@@ -638,28 +671,31 @@ export function CandidateListFlow({
 									단계입니다.
 								</p>
 								{!excelReady ? (
-									<button
+									<Button
 										type="button"
 										className="cl-source-option"
+										variant="plain"
+										size="auto"
 										onClick={() => setExcelReady(true)}
 										disabled={!canEdit}
 									>
 										<FileSpreadsheet size={30} aria-hidden="true" />
 										<strong>예제 엑셀 선택</strong>
 										<small>점심후보_예제.xlsx</small>
-									</button>
+									</Button>
 								) : (
 									<>
 										<div className="cl-current">
 											<h2>점심후보_예제.xlsx</h2>
-											<button
+											<Button
 												type="button"
+												variant="outline"
 												className="cl-button"
 												onClick={() => setExcelReady(false)}
 												disabled={!canEdit}
 											>
 												다시 선택
-											</button>
+											</Button>
 										</div>
 										<p className="cl-summary">
 											5개 후보 · 이름 확인 1개 · 같은 이름도 별도 후보로
@@ -690,9 +726,10 @@ export function CandidateListFlow({
 											</tbody>
 										</table>
 										<div className="cl-actionbar">
-											<button
+											<Button
 												type="button"
-												className="cl-button cl-primary"
+												className="cl-primary"
+												size="lg"
 												disabled={!canEdit}
 												onClick={() =>
 													importItems(
@@ -706,7 +743,7 @@ export function CandidateListFlow({
 												}
 											>
 												편집기로 가져오기
-											</button>
+											</Button>
 										</div>
 									</>
 								)}
@@ -718,20 +755,42 @@ export function CandidateListFlow({
 			{confirm && (
 				<Confirmation
 					title={
-						confirm.kind === "discard"
-							? "편집 내용을 버릴까요?"
-							: "저장 목록에서 삭제할까요?"
+						confirm.kind === "delete"
+							? "저장 목록에서 삭제할까요?"
+							: confirm.kind === "restart"
+								? "새 목록으로 다시 만들까요?"
+								: "편집 내용을 버릴까요?"
 					}
 					description={
-						confirm.kind === "discard"
-							? "현재 사용하는 목록과 저장된 목록은 유지됩니다."
-							: `${confirm.list.name} 저장본을 삭제합니다. 현재 사용 중인 후보는 그대로입니다.`
+						confirm.kind === "delete"
+							? `${confirm.list.name} 저장본을 삭제합니다. 현재 사용 중인 후보는 그대로입니다.`
+							: "편집 내용은 버리고 현재 사용하는 목록과 저장된 목록은 유지합니다."
 					}
-					action={confirm.kind === "discard" ? "편집 취소" : "삭제"}
+					action={
+						confirm.kind === "delete"
+							? "삭제"
+							: confirm.kind === "restart"
+								? "다시 만들기"
+								: "편집 취소"
+					}
+					disabled={pending || (confirm.kind === "restart" && !canEdit)}
+					onClosed={() => {
+						const target = focusAfterConfirm.current
+							? heading.current
+							: confirmReturnFocus.current;
+						focusAfterConfirm.current = false;
+						target?.focus();
+					}}
 					onKeep={() => setConfirm(null)}
 					onConfirm={() => {
+						if (pending || (confirm.kind === "restart" && !canEdit)) return;
 						if (confirm.kind === "delete") deleteSaved(confirm.list);
-						else {
+						else if (confirm.kind === "restart") {
+							focusAfterConfirm.current = true;
+							setConfirm(null);
+							choose();
+						} else {
+							focusAfterConfirm.current = true;
 							setConfirm(null);
 							setDraft(null);
 							setError("");

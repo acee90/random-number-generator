@@ -7,6 +7,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { Button } from "@/components/ui/button";
 import {
 	isRoomDrawVoter,
 	type RoomDraw,
@@ -228,7 +229,9 @@ export default function RoomDrawFeedback({
 						<fieldset className="room-feedback-actions">
 							<legend className="sr-only">이번 추첨 결과 투표</legend>
 							{choices.map(({ vote, label, Icon }) => (
-								<button
+								<Button
+									variant="plain"
+									size="auto"
 									key={vote}
 									type="button"
 									aria-label={`${label} 투표`}
@@ -259,7 +262,7 @@ export default function RoomDrawFeedback({
 											<Check size={13} aria-hidden="true" />내 선택
 										</span>
 									)}
-								</button>
+								</Button>
 							))}
 						</fieldset>
 					</div>

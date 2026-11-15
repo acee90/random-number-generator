@@ -2,6 +2,7 @@ import { type ErrorComponentProps, useRouter } from "@tanstack/react-router";
 import { ArrowRight, LoaderCircle, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import SiteHeader from "@/components/layout/SiteHeader";
+import { Button } from "@/components/ui/button";
 
 export default function RouteError({ reset }: ErrorComponentProps) {
 	const router = useRouter();
@@ -39,7 +40,9 @@ export default function RouteError({ reset }: ErrorComponentProps) {
 					<h1 id="route-error-title">화면을 열 수 없습니다</h1>
 					<p>다시 시도하거나 홈으로 이동해 주세요.</p>
 				</section>
-				<button
+				<Button
+					variant="default"
+					size="lg"
 					type="button"
 					className="generate-button"
 					disabled={retrying}
@@ -53,10 +56,12 @@ export default function RouteError({ reset }: ErrorComponentProps) {
 						)}
 						{retrying ? "다시 시도 중…" : "다시 시도"}
 					</span>
-				</button>
-				<a className="text-button" href="/">
-					홈으로 이동 <ArrowRight size={18} aria-hidden="true" />
-				</a>
+				</Button>
+				<Button asChild variant="ghost" size="default">
+					<a className="text-button" href="/">
+						홈으로 이동 <ArrowRight size={18} aria-hidden="true" />
+					</a>
+				</Button>
 			</main>
 		</div>
 	);

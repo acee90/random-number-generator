@@ -6,15 +6,7 @@ import {
 	screen,
 	within,
 } from "@testing-library/react";
-import {
-	afterAll,
-	afterEach,
-	beforeAll,
-	beforeEach,
-	describe,
-	expect,
-	it,
-} from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { candidateDraftLimits } from "../src/lib/candidateListDraft";
 import { sampleLunchPlaces } from "../src/lib/lunch";
 import { CandidateListFlow } from "../stories/candidate-lists/CandidateListFlow";
@@ -24,42 +16,6 @@ import {
 	readCandidateLibrary,
 	writeCandidateLibrary,
 } from "../stories/candidate-lists/list-library";
-
-const originalShowModal = Object.getOwnPropertyDescriptor(
-	HTMLDialogElement.prototype,
-	"showModal",
-);
-const originalClose = Object.getOwnPropertyDescriptor(
-	HTMLDialogElement.prototype,
-	"close",
-);
-
-beforeAll(() => {
-	// jsdom does not implement native modal visibility or dismissal.
-	Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
-		configurable: true,
-		value(this: HTMLDialogElement) {
-			this.open = true;
-		},
-	});
-	Object.defineProperty(HTMLDialogElement.prototype, "close", {
-		configurable: true,
-		value(this: HTMLDialogElement) {
-			this.open = false;
-		},
-	});
-});
-
-afterAll(() => {
-	for (const [key, descriptor] of [
-		["showModal", originalShowModal],
-		["close", originalClose],
-	] as const) {
-		if (descriptor)
-			Object.defineProperty(HTMLDialogElement.prototype, key, descriptor);
-		else Reflect.deleteProperty(HTMLDialogElement.prototype, key);
-	}
-});
 
 beforeEach(() => {
 	localStorage.removeItem(previewLibraryKey);
@@ -107,6 +63,103 @@ function savedExample(): CandidateLibrary {
 }
 
 describe("Storybook candidate list flow", () => {
+	it("can clear every draft item and cancel without changing the applied or saved list", () => {
+		writeCandidateLibrary(localStorage, savedExample());
+		const storedBefore = localStorage.getItem(previewLibraryKey);
+		render(<CandidateListFlow initialStage="current" storageMode="normal" />);
+		fireEvent.click(screen.getByRole("button", { name: "목록 편집" }));
+		fireEvent.click(screen.getByRole("button", { name: "전체 비우기" }));
+		fireEvent.click(
+			within(screen.getByRole("alertdialog")).getByRole("button", {
+				name: "전체 비우기",
+			}),
+		);
+		expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+		expect(localStorage.getItem(previewLibraryKey)).toBe(storedBefore);
+		fireEvent.click(screen.getByRole("button", { name: "취소" }));
+		fireEvent.click(
+			within(screen.getByRole("alertdialog")).getByRole("button", {
+				name: "편집 취소",
+			}),
+		);
+		const current = screen.getByRole("list", { name: "현재 후보 목록" });
+		expect(within(current).getByText("김밥")).toBeTruthy();
+		expect(within(current).getByText("국밥")).toBeTruthy();
+		expect(localStorage.getItem(previewLibraryKey)).toBe(storedBefore);
+	});
+
+	it.each([
+		"new",
+		"template",
+		"excel",
+	] as const)("confirms replacing a dirty draft through the existing %s source flow", (source) => {
+		writeCandidateLibrary(localStorage, savedExample());
+		const storedBefore = localStorage.getItem(previewLibraryKey);
+		render(<CandidateListFlow initialStage="current" storageMode="normal" />);
+		fireEvent.click(screen.getByRole("button", { name: "목록 편집" }));
+		changeName(1, "아직 저장하지 않은 후보");
+		fireEvent.click(screen.getByRole("button", { name: "다시 만들기" }));
+		fireEvent.click(
+			within(
+				screen.getByRole("alertdialog", { name: "새 목록으로 다시 만들까요?" }),
+			).getByRole("button", { name: "돌아가기" }),
+		);
+		expect(
+			(
+				screen.getByRole("textbox", {
+					name: /^1번째\s*후보 이름/,
+				}) as HTMLInputElement
+			).value,
+		).toBe("아직 저장하지 않은 후보");
+		fireEvent.click(screen.getByRole("button", { name: "다시 만들기" }));
+		fireEvent.click(
+			within(screen.getByRole("alertdialog")).getByRole("button", {
+				name: "다시 만들기",
+			}),
+		);
+		expect(
+			screen.getByRole("heading", { level: 1, name: "새 목록 준비" }),
+		).toBeTruthy();
+		for (const name of [
+			/^새로 만들기/,
+			/^템플릿에서 가져오기/,
+			/^엑셀에서 가져오기/,
+		])
+			expect(screen.getByRole("button", { name })).toBeTruthy();
+		if (source === "new")
+			fireEvent.click(screen.getByRole("button", { name: /^새로 만들기/ }));
+		else if (source === "template") {
+			fireEvent.click(
+				screen.getByRole("button", { name: /^템플릿에서 가져오기/ }),
+			);
+			fireEvent.click(screen.getByRole("button", { name: /^샐러드/ }));
+		} else {
+			fireEvent.click(
+				screen.getByRole("button", { name: /^엑셀에서 가져오기/ }),
+			);
+			fireEvent.click(screen.getByRole("button", { name: /^예제 엑셀 선택/ }));
+			fireEvent.click(
+				screen.getByRole("button", { name: "편집기로 가져오기" }),
+			);
+		}
+		expect(screen.getByRole("form", { name: "후보 목록 편집" })).toBeTruthy();
+		expect(
+			(
+				screen.getByRole("textbox", {
+					name: /^1번째\s*후보 이름/,
+				}) as HTMLInputElement
+			).value,
+		).not.toBe("아직 저장하지 않은 후보");
+		expect(localStorage.getItem(previewLibraryKey)).toBe(storedBefore);
+		fireEvent.click(screen.getByRole("button", { name: "취소" }));
+		expect(
+			within(screen.getByRole("list", { name: "현재 후보 목록" })).getByText(
+				"김밥",
+			),
+		).toBeTruthy();
+		expect(localStorage.getItem(previewLibraryKey)).toBe(storedBefore);
+	});
+
 	it("blocks starting a new list at the library limit while allowing existing lists to be edited", () => {
 		const library = savedExample();
 		library.lists = Array.from(
@@ -144,6 +197,47 @@ describe("Storybook candidate list flow", () => {
 				.value,
 		).toBe("저장 목록 2");
 		expect(localStorage.getItem(previewLibraryKey)).toBe(storedBefore);
+	});
+
+	it("keeps an edited draft when the full library prevents restarting with a new list", () => {
+		const library = savedExample();
+		library.lists = Array.from(
+			{ length: candidateDraftLimits.savedLists },
+			(_, index) => ({
+				...savedExample().lists[0],
+				id: `saved-list-${index}`,
+				name: `저장 목록 ${index + 1}`,
+			}),
+		);
+		library.lastUsedId = library.lists[0].id;
+		writeCandidateLibrary(localStorage, library);
+		const storedBefore = localStorage.getItem(previewLibraryKey);
+		render(<CandidateListFlow initialStage="current" storageMode="normal" />);
+		fireEvent.click(screen.getByRole("button", { name: "목록 편집" }));
+		changeName(1, "한도에서도 보존할 초안");
+		fireEvent.click(screen.getByRole("button", { name: "다시 만들기" }));
+		expect(screen.queryByRole("alertdialog")).toBeNull();
+		expect(
+			screen.getByRole("heading", { level: 1, name: "목록 편집" }),
+		).toBeTruthy();
+		expect(
+			(
+				screen.getByRole("textbox", {
+					name: /^1번째\s*후보 이름/,
+				}) as HTMLInputElement
+			).value,
+		).toBe("한도에서도 보존할 초안");
+		const limit = screen.getByText(
+			"저장 목록은 20개까지입니다. 내 목록에서 하나를 삭제한 뒤 새 목록을 만들어 주세요.",
+		);
+		expect(limit.getAttribute("role")).toBe("alert");
+		expect(document.activeElement).toBe(limit);
+		expect(localStorage.getItem(previewLibraryKey)).toBe(storedBefore);
+		save();
+		expect(storedLibrary().lists).toHaveLength(candidateDraftLimits.savedLists);
+		expect(storedLibrary().lists[0].items[0].name).toBe(
+			"한도에서도 보존할 초안",
+		);
 	});
 
 	it("creates, applies and restores a custom list on the next visit", () => {
@@ -205,11 +299,11 @@ describe("Storybook candidate list flow", () => {
 		).toBe("저장 전 초안");
 		expect(localStorage.getItem(previewLibraryKey)).toBe(storedBefore);
 		fireEvent.click(screen.getByRole("button", { name: "취소" }));
-		const firstDialog = screen.getByRole("dialog", {
+		const firstDialog = screen.getByRole("alertdialog", {
 			name: "편집 내용을 버릴까요?",
 		});
-		fireEvent(firstDialog, new Event("cancel", { cancelable: true }));
-		expect(screen.queryByRole("dialog")).toBeNull();
+		fireEvent.keyDown(firstDialog, { key: "Escape" });
+		expect(screen.queryByRole("alertdialog")).toBeNull();
 		expect(
 			(
 				screen.getByRole("textbox", {
@@ -219,7 +313,7 @@ describe("Storybook candidate list flow", () => {
 		).toBe("수정한 김밥");
 		fireEvent.click(screen.getByRole("button", { name: "취소" }));
 		fireEvent.click(
-			within(screen.getByRole("dialog")).getByRole("button", {
+			within(screen.getByRole("alertdialog")).getByRole("button", {
 				name: "편집 취소",
 			}),
 		);

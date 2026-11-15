@@ -1,6 +1,7 @@
 import { ArrowLeft, Check, Copy } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import CopyFallback from "@/components/features/CopyFallback";
+import { Button } from "@/components/ui/button";
 import { type LunchHistoryRecord, lunchHistoryLimit } from "@/lib/lunchHistory";
 import { getSourceDisplayName } from "@/services/randomService";
 import "./lunch-history-panel.css";
@@ -76,14 +77,16 @@ export default function LunchHistoryPanel({
 						최근 {lunchHistoryLimit}회 · {records.length}회
 					</p>
 				</div>
-				<button
+				<Button
+					variant="outline"
+					size="sm"
 					type="button"
 					className="lunch-history-return"
 					onClick={onClose}
 				>
 					<ArrowLeft size={16} aria-hidden="true" />
 					룰렛으로 돌아가기
-				</button>
+				</Button>
 			</div>
 			{storageFailed && (
 				<output className="lunch-history-storage-error" aria-live="polite">
@@ -110,7 +113,9 @@ export default function LunchHistoryPanel({
 						<li key={record.id} className="lunch-history-item">
 							<div className="lunch-history-item-heading">
 								<h3>{record.place.name}</h3>
-								<button
+								<Button
+									variant="outline"
+									size="sm"
 									type="button"
 									className="lunch-history-copy"
 									aria-label={`${record.place.name} 기록 복사`}
@@ -126,7 +131,7 @@ export default function LunchHistoryPanel({
 										<Copy size={16} aria-hidden="true" />
 									)}
 									{copiedId === record.id ? "복사됨" : "복사"}
-								</button>
+								</Button>
 							</div>
 							<p className="lunch-history-category">{record.place.category}</p>
 							<p className="lunch-history-source">

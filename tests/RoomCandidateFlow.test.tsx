@@ -7,16 +7,7 @@ import {
 	screen,
 	within,
 } from "@testing-library/react";
-import {
-	afterAll,
-	afterEach,
-	beforeAll,
-	beforeEach,
-	describe,
-	expect,
-	it,
-	vi,
-} from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sampleLunchPlaces } from "../src/lib/lunch";
 import {
 	type CandidateLibrary,
@@ -25,40 +16,6 @@ import {
 	writeCandidateLibrary,
 } from "../stories/candidate-lists/list-library";
 import { RoomCandidateFlow } from "../stories/candidate-lists/RoomCandidateFlow";
-
-const originalShowModal = Object.getOwnPropertyDescriptor(
-	HTMLDialogElement.prototype,
-	"showModal",
-);
-const originalClose = Object.getOwnPropertyDescriptor(
-	HTMLDialogElement.prototype,
-	"close",
-);
-beforeAll(() => {
-	// jsdom needs native modal visibility and dismissal supplied by the test.
-	Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
-		configurable: true,
-		value(this: HTMLDialogElement) {
-			this.open = true;
-		},
-	});
-	Object.defineProperty(HTMLDialogElement.prototype, "close", {
-		configurable: true,
-		value(this: HTMLDialogElement) {
-			this.open = false;
-		},
-	});
-});
-afterAll(() => {
-	for (const [key, descriptor] of [
-		["showModal", originalShowModal],
-		["close", originalClose],
-	] as const) {
-		if (descriptor)
-			Object.defineProperty(HTMLDialogElement.prototype, key, descriptor);
-		else Reflect.deleteProperty(HTMLDialogElement.prototype, key);
-	}
-});
 
 beforeEach(() => {
 	vi.useFakeTimers();
@@ -116,6 +73,46 @@ function personalLibrary(): CandidateLibrary {
 }
 
 describe("Storybook in-room candidate editing flow", () => {
+	it("keeps cleared and restarted drafts private until the new list receives the room acknowledgement", async () => {
+		writeCandidateLibrary(localStorage, personalLibrary());
+		const storedBefore = localStorage.getItem(previewLibraryKey);
+		render(<RoomCandidateFlow />);
+		fireEvent.click(screen.getByRole("button", { name: "목록 편집" }));
+		fireEvent.click(screen.getByRole("button", { name: "전체 비우기" }));
+		fireEvent.click(
+			within(screen.getByRole("alertdialog")).getByRole("button", {
+				name: "전체 비우기",
+			}),
+		);
+		expect(
+			screen.queryAllByRole("checkbox", { name: /번째 후보 포함/ }),
+		).toHaveLength(0);
+		expect(sharedCandidates().textContent).toBe("공유된 후보 v1 · 6개");
+		expect(localStorage.getItem(previewLibraryKey)).toBe(storedBefore);
+		fireEvent.click(screen.getByRole("button", { name: "다시 만들기" }));
+		fireEvent.click(
+			within(screen.getByRole("alertdialog")).getByRole("button", {
+				name: "다시 만들기",
+			}),
+		);
+		fireEvent.click(screen.getByRole("button", { name: /^새로 만들기/ }));
+		changeFirstName("새 회차 김밥");
+		fireEvent.change(
+			screen.getByRole("textbox", { name: /^2번째\s*후보 이름/ }),
+			{ target: { value: "새 회차 국밥" } },
+		);
+		applyToRoom();
+		expect(sharedCandidates().textContent).toBe("공유된 후보 v1 · 6개");
+		await advance(1000);
+		expect(sharedCandidates().textContent).toBe("공유된 후보 v2 · 2개");
+		expect(
+			within(screen.getByRole("list", { name: "현재 후보 목록" })).getByText(
+				"새 회차 김밥",
+			),
+		).toBeTruthy();
+		expect(localStorage.getItem(previewLibraryKey)).toBe(storedBefore);
+	});
+
 	it("allows a deleted personal copy of the current room list to be saved again", () => {
 		render(<RoomCandidateFlow />);
 		fireEvent.click(screen.getByRole("button", { name: "내 목록에 저장" }));
@@ -133,7 +130,7 @@ describe("Storybook in-room candidate editing flow", () => {
 		);
 		fireEvent.click(
 			within(
-				screen.getByRole("dialog", { name: "저장 목록에서 삭제할까요?" }),
+				screen.getByRole("alertdialog", { name: "저장 목록에서 삭제할까요?" }),
 			).getByRole("button", { name: "삭제" }),
 		);
 		expect(readCandidateLibrary(localStorage).library.lists).toHaveLength(0);

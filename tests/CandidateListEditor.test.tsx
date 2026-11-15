@@ -1,5 +1,12 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import CandidateListEditor from "../src/components/features/CandidateListEditor";
@@ -42,6 +49,7 @@ function exampleDraft(): CandidateListDraft {
 function edit(initial: CandidateListDraft) {
 	const onSave = vi.fn();
 	const onChange = vi.fn();
+	const onRestart = vi.fn();
 	function ControlledEditor() {
 		const [draft, setDraft] = useState(initial);
 		return (
@@ -55,16 +63,85 @@ function edit(initial: CandidateListDraft) {
 				onCancel={() => {}}
 				onImportTemplate={() => {}}
 				onImportExcel={() => {}}
+				onRestart={onRestart}
 			/>
 		);
 	}
-	return { ...render(<ControlledEditor />), onSave, onChange };
+	return { ...render(<ControlledEditor />), onSave, onChange, onRestart };
 }
 
 const save = () =>
 	fireEvent.click(screen.getByRole("button", { name: "저장하고 사용" }));
 
 describe("candidate list editor", () => {
+	it("clears only the confirmed draft items, preserves its identity, and focuses adding a replacement", async () => {
+		const original = exampleDraft();
+		const before = structuredClone(original);
+		const { onChange, onSave } = edit(original);
+		const trigger = screen.getByRole("button", { name: "전체 비우기" });
+		trigger.focus();
+		fireEvent.click(trigger);
+		const first = screen.getByRole("alertdialog", {
+			name: "후보를 모두 비울까요?",
+		});
+		expect(onChange).not.toHaveBeenCalled();
+		fireEvent.click(within(first).getByRole("button", { name: "돌아가기" }));
+		expect(screen.getAllByRole("checkbox")).toHaveLength(3);
+		expect(onChange).not.toHaveBeenCalled();
+		await waitFor(() => expect(document.activeElement).toBe(trigger));
+		fireEvent.click(trigger);
+		fireEvent.click(
+			within(screen.getByRole("alertdialog")).getByRole("button", {
+				name: "전체 비우기",
+			}),
+		);
+		expect(onChange).toHaveBeenCalledExactlyOnceWith({ ...before, items: [] });
+		expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+		expect(
+			(screen.getByRole("textbox", { name: "목록 이름" }) as HTMLInputElement)
+				.value,
+		).toBe(before.name);
+		const add = screen.getByRole("button", { name: "후보 추가" });
+		await waitFor(() => expect(document.activeElement).toBe(add));
+		expect(trigger.matches(":disabled")).toBe(true);
+		save();
+		expect(onSave).not.toHaveBeenCalled();
+		fireEvent.click(add);
+		expect(document.activeElement).toBe(
+			screen.getByRole("textbox", { name: /^1번째\s*후보 이름/ }),
+		);
+		expect(original).toEqual(before);
+	});
+
+	it.each([
+		"pending",
+		"disabled",
+	] as const)("prevents clearing and restarting when %s locks an open confirmation", (lock) => {
+		const props = {
+			draft: exampleDraft(),
+			onChange: vi.fn(),
+			onSave: vi.fn(),
+			onCancel: vi.fn(),
+			onImportTemplate: vi.fn(),
+			onImportExcel: vi.fn(),
+			onRestart: vi.fn(),
+		};
+		const view = render(<CandidateListEditor {...props} />);
+		const clear = screen.getByRole("button", { name: "전체 비우기" });
+		const restart = screen.getByRole("button", { name: "다시 만들기" });
+		fireEvent.click(clear);
+		view.rerender(<CandidateListEditor {...props} {...{ [lock]: true }} />);
+		expect(clear.matches(":disabled")).toBe(true);
+		expect(restart.matches(":disabled")).toBe(true);
+		const action = within(screen.getByRole("alertdialog")).getByRole("button", {
+			name: "전체 비우기",
+		});
+		expect(action.matches(":disabled")).toBe(true);
+		fireEvent.click(action);
+		expect(props.onChange).not.toHaveBeenCalled();
+		expect(props.onRestart).not.toHaveBeenCalled();
+	});
+
 	it("edits, includes and removes items without mutating the source or losing item metadata", () => {
 		const original = exampleDraft();
 		const before = structuredClone(original);

@@ -84,6 +84,7 @@
 
 .lotto-mode-description {
 	font-size: 13px;
+	font-weight: 400;
 	line-height: 1.85;
 	color: #40532d;
 }
@@ -135,26 +136,6 @@
 	color: #536d3e;
 }
 
-.lotto-fixed-clear {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	gap: 6px;
-	min-height: 44px;
-	padding: 7px 10px;
-	border: 1px solid var(--section-line);
-	border-block-end-width: 3px;
-	border-radius: var(--control-radius);
-	background: #fff;
-	font-size: 12px;
-	font-weight: 750;
-	color: var(--ink);
-}
-
-.lotto-fixed-clear:disabled {
-	opacity: 0.55;
-}
-
 .lotto-fixed-selection {
 	display: flex;
 	align-items: center;
@@ -204,8 +185,6 @@
 }
 
 .lotto-number-entry > label {
-	font-size: 14px;
-	font-weight: 650;
 	color: #48672e;
 }
 
@@ -218,29 +197,7 @@
 }
 
 .lotto-entry-controls > textarea {
-	width: 100%;
-	min-width: 0;
 	min-height: 44px;
-	padding: 9px 10px;
-	border: 1px solid var(--section-line);
-	border-radius: var(--control-radius);
-	background: #fff;
-	font-size: 16px;
-	color: #304426;
-	resize: vertical;
-}
-
-.lotto-entry-controls > textarea[aria-invalid="true"] {
-	border-color: #9e5947;
-}
-
-.lotto-entry-controls > textarea:disabled {
-	opacity: 0.55;
-}
-
-.lotto-entry-add {
-	min-height: 44px;
-	font-size: 14px;
 }
 
 .lotto-entry-help,
@@ -349,6 +306,7 @@
 
 .lotto-spread-remainder > span > span {
 	font-size: 12px;
+	font-weight: 400;
 	line-height: 1.8;
 	color: #5d734c;
 }
@@ -434,11 +392,6 @@
 	color: #865143;
 }
 
-.lotto-excluded-clear {
-	border-color: #c8a89b;
-	color: #754738;
-}
-
 .lotto-excluded-chip {
 	min-height: 44px;
 	border-color: #c8a89b;
@@ -466,14 +419,12 @@
 
 @media (hover: hover) {
 	.lotto-mode-card:not([data-disabled="true"]):hover,
-	.lotto-fixed-clear:not(:disabled):hover,
 	.lotto-selected-chip:not(:disabled):hover,
 	.lotto-number-choice:not(:disabled):not(.is-selected):hover {
 		border-color: #69873c;
 		background: #f0f7df;
 	}
 	.lotto-excluded-chip:not(:disabled):hover,
-	.lotto-excluded-clear:not(:disabled):hover,
 	.lotto-excluded-choice:not(:disabled):hover {
 		border-color: #9e5947;
 		background: #f3d7cb;
@@ -537,10 +488,6 @@
 
 	.lotto-excluded-fieldset {
 		padding: 0 15px 15px;
-	}
-
-	.lotto-excluded-clear {
-		min-height: 44px;
 	}
 
 	.lotto-number-grid {

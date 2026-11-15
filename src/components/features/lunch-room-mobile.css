@@ -32,11 +32,6 @@
 		padding: 0;
 		background: transparent;
 	}
-	.lunch-room.room-live .site-header-item {
-		min-block-size: 44px;
-		padding: 6px 10px;
-		font-size: 12px;
-	}
 	.lunch-room.room-live .room-main {
 		display: flex;
 		flex: 1;
@@ -57,10 +52,6 @@
 		font-size: 18px;
 		line-height: 1.25;
 	}
-	.lunch-room.room-live .room-heading-actions > .room-outline-button {
-		min-block-size: 44px;
-		font-size: 11px;
-	}
 	.lunch-room.room-live .room-connection {
 		flex-shrink: 0;
 		gap: 4px 8px;
@@ -71,9 +62,6 @@
 		padding: 2px 4px;
 		font-size: 10px;
 		line-height: 1.2;
-	}
-	.lunch-room.room-live .room-connection .text-button {
-		min-block-size: 44px;
 	}
 	.lunch-room.room-live .room-host-offline,
 	.lunch-room.room-live .room-main > .room-error {
@@ -225,10 +213,9 @@
 	.lunch-room.room-live .room-result-actions {
 		margin-block-start: 8px;
 	}
-	.lunch-room.room-live .room-result-actions .generate-button {
+	.lunch-room.room-live .room-result-actions .room-next-round {
 		min-block-size: 48px;
 		padding: 8px;
-		font-size: 14px;
 	}
 	.lunch-room.room-live .room-draw-feedback[data-mode="results"] {
 		border-block-start: 1px solid var(--line);
@@ -299,10 +286,6 @@
 	}
 	.lunch-room.room-live .room-feedback-list .room-feedback-delay {
 		font-size: 11px;
-	}
-	.lunch-room.room-live .room-motion-button {
-		min-block-size: 44px;
-		font-size: 12px;
 	}
 	.lunch-room.room-live .room-chat-panel {
 		position: relative;

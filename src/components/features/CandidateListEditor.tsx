@@ -1,5 +1,24 @@
-import { FileSpreadsheet, ListPlus, Plus, Trash2 } from "lucide-react";
+import {
+	FileSpreadsheet,
+	ListPlus,
+	Plus,
+	RotateCcw,
+	Trash2,
+} from "lucide-react";
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
 	type CandidateListDraft,
 	type CandidateListItem,
@@ -15,6 +34,7 @@ export type CandidateListEditorProps = {
 	onSave: (draft: CandidateListDraft) => void;
 	onImportTemplate: () => void;
 	onImportExcel: () => void;
+	onRestart?: () => void;
 	error?: string;
 	submitLabel?: string;
 	pending?: boolean;
@@ -64,6 +84,7 @@ export function CandidateListEditor({
 	onSave,
 	onImportTemplate,
 	onImportExcel,
+	onRestart,
 	error,
 	submitLabel = "저장하고 사용",
 	pending = false,
@@ -71,9 +92,12 @@ export function CandidateListEditor({
 }: CandidateListEditorProps) {
 	const id = useId();
 	const [submitAttempt, setSubmitAttempt] = useState(0);
+	const [clearOpen, setClearOpen] = useState(false);
+	const focusAfterClear = useRef(false);
 	const nameRef = useRef<HTMLInputElement>(null);
 	const itemsHeadingRef = useRef<HTMLHeadingElement>(null);
 	const addRef = useRef<HTMLButtonElement>(null);
+	const clearRef = useRef<HTMLButtonElement>(null);
 	const errorRef = useRef<HTMLParagraphElement>(null);
 	const itemRefs = useRef(new Map<string, HTMLInputElement>());
 	const categoryRefs = useRef(new Map<string, HTMLInputElement>());
@@ -88,6 +112,7 @@ export function CandidateListEditor({
 					categories: new Map<string, string>(),
 				};
 	const includedCount = draft.items.filter((item) => item.included).length;
+	const locked = pending || disabled;
 
 	useEffect(() => {
 		const next = nextFocus.current;
@@ -143,6 +168,14 @@ export function CandidateListEditor({
 		});
 	}
 
+	function clearItems() {
+		if (locked) return;
+		focusAfterClear.current = true;
+		nextFocus.current = "add";
+		setSubmitAttempt(0);
+		onChange({ ...draft, items: [] });
+	}
+
 	function submit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
 		if (pending || disabled) return;
@@ -183,8 +216,8 @@ export function CandidateListEditor({
 				disabled={pending || disabled}
 			>
 				<div className="candidate-editor-name">
-					<label htmlFor={`${id}-list-name`}>목록 이름</label>
-					<input
+					<Label htmlFor={`${id}-list-name`}>목록 이름</Label>
+					<Input
 						ref={nameRef}
 						id={`${id}-list-name`}
 						name="candidate-list-name"
@@ -213,14 +246,30 @@ export function CandidateListEditor({
 						후보 편집
 					</h2>
 					<div>
-						<button type="button" onClick={onImportTemplate}>
+						<Button type="button" variant="outline" onClick={onImportTemplate}>
 							<ListPlus size={18} aria-hidden="true" />
 							템플릿에서 추가
-						</button>
-						<button type="button" onClick={onImportExcel}>
+						</Button>
+						<Button type="button" variant="outline" onClick={onImportExcel}>
 							<FileSpreadsheet size={18} aria-hidden="true" />
 							엑셀에서 추가
-						</button>
+						</Button>
+						<Button
+							type="button"
+							variant="ghost"
+							ref={clearRef}
+							disabled={draft.items.length === 0}
+							onClick={() => setClearOpen(true)}
+						>
+							<Trash2 size={18} aria-hidden="true" />
+							전체 비우기
+						</Button>
+						{onRestart && (
+							<Button type="button" variant="outline" onClick={onRestart}>
+								<RotateCcw size={18} aria-hidden="true" />
+								다시 만들기
+							</Button>
+						)}
 					</div>
 				</div>
 				<p
@@ -243,8 +292,8 @@ export function CandidateListEditor({
 							className="candidate-editor-row"
 							data-included={item.included}
 						>
-							<label className="candidate-editor-included">
-								<input
+							<Label className="candidate-editor-included">
+								<Input
 									type="checkbox"
 									checked={item.included}
 									onChange={(event) =>
@@ -255,15 +304,15 @@ export function CandidateListEditor({
 									aria-label={`${index + 1}번째 후보 포함`}
 								/>
 								<span aria-hidden="true">{index + 1}</span>
-							</label>
+							</Label>
 							<div className="candidate-editor-field candidate-editor-item-name">
-								<label
+								<Label
 									className="candidate-editor-field-label"
 									htmlFor={`${id}-item-${index}`}
 								>
 									<span className="sr-only">{index + 1}번째 </span>후보 이름
-								</label>
-								<input
+								</Label>
+								<Input
 									ref={(element) => {
 										if (element) itemRefs.current.set(item.id, element);
 										else itemRefs.current.delete(item.id);
@@ -294,13 +343,13 @@ export function CandidateListEditor({
 								)}
 							</div>
 							<div className="candidate-editor-field candidate-editor-category">
-								<label
+								<Label
 									className="candidate-editor-field-label"
 									htmlFor={`${id}-category-${index}`}
 								>
 									<span className="sr-only">{index + 1}번째 </span>분류 (선택)
-								</label>
-								<input
+								</Label>
+								<Input
 									ref={(element) => {
 										if (element) categoryRefs.current.set(item.id, element);
 										else categoryRefs.current.delete(item.id);
@@ -330,22 +379,25 @@ export function CandidateListEditor({
 									</span>
 								)}
 							</div>
-							<button
+							<Button
 								className="candidate-editor-delete"
+								variant="ghost"
+								size="icon"
 								type="button"
 								onClick={() => removeItem(index)}
 								aria-label={`${index + 1}번째 후보 삭제`}
 							>
 								<Trash2 size={18} aria-hidden="true" />
-							</button>
+							</Button>
 						</li>
 					))}
 				</ol>
 				{draft.items.length === 0 && (
 					<p className="candidate-editor-empty">후보를 추가해 주세요.</p>
 				)}
-				<button
+				<Button
 					className="candidate-editor-add"
+					variant="outline"
 					type="button"
 					ref={addRef}
 					disabled={draft.items.length >= candidateDraftLimits.items}
@@ -353,7 +405,7 @@ export function CandidateListEditor({
 				>
 					<Plus size={20} aria-hidden="true" />
 					후보 추가
-				</button>
+				</Button>
 				<p
 					ref={errorRef}
 					tabIndex={-1}
@@ -367,19 +419,47 @@ export function CandidateListEditor({
 						포함 <strong>{includedCount}</strong> / 전체 {draft.items.length}
 					</p>
 					<div>
-						<button type="button" onClick={onCancel}>
+						<Button type="button" variant="outline" onClick={onCancel}>
 							취소
-						</button>
-						<button
+						</Button>
+						<Button
 							className="candidate-editor-save"
+							size="lg"
 							type="submit"
 							aria-busy={pending}
 						>
 							{submitLabel}
-						</button>
+						</Button>
 					</div>
 				</footer>
 			</fieldset>
+			<AlertDialog open={clearOpen} onOpenChange={setClearOpen}>
+				<AlertDialogContent
+					onCloseAutoFocus={(event) => {
+						event.preventDefault();
+						if (!focusAfterClear.current) {
+							clearRef.current?.focus();
+							return;
+						}
+						focusAfterClear.current = false;
+						addRef.current?.focus();
+					}}
+				>
+					<AlertDialogHeader>
+						<AlertDialogTitle>후보를 모두 비울까요?</AlertDialogTitle>
+						<AlertDialogDescription>
+							편집 중인 후보만 비웁니다. 현재 사용하는 목록과 저장된 목록은
+							유지됩니다.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>돌아가기</AlertDialogCancel>
+						<AlertDialogAction disabled={locked} onClick={clearItems}>
+							전체 비우기
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 		</form>
 	);
 }

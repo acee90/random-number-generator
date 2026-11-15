@@ -1,4 +1,5 @@
 import { UtensilsCrossed } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import "./site-header.css";
 
 type Tool = "number" | "lotto" | "pension";
@@ -21,14 +22,17 @@ export default function SiteHeader({ active }: SiteHeaderProps) {
 				</span>
 			</a>
 			<nav className="site-header-nav" aria-label="서비스 메뉴">
-				<a
+				<Button
+					asChild
+					variant={active === "lunch" ? "default" : "ghost"}
+					size="sm"
 					className="site-header-item"
-					href="/"
-					aria-current={active === "lunch" ? "page" : undefined}
 				>
-					<UtensilsCrossed size={16} aria-hidden="true" />
-					점메추
-				</a>
+					<a href="/" aria-current={active === "lunch" ? "page" : undefined}>
+						<UtensilsCrossed size={16} aria-hidden="true" />
+						점메추
+					</a>
+				</Button>
 			</nav>
 		</header>
 	);

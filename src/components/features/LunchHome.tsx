@@ -7,6 +7,7 @@ import {
 	Users,
 } from "lucide-react";
 import SiteHeader from "@/components/layout/SiteHeader";
+import { Button } from "@/components/ui/button";
 import { sampleLunchPlaces } from "@/lib/lunch";
 import "./lunch-home.css";
 
@@ -30,12 +31,14 @@ export default function LunchHome() {
 							<p>링크로 모여 같은 룰렛을 돌려요.</p>
 						</div>
 						<div className="lunch-home-actions">
-							<a className="lunch-home-create" href="/create">
-								<span>
-									<Users size={22} aria-hidden="true" />방 만들기
-								</span>
-								<ArrowRight size={24} aria-hidden="true" />
-							</a>
+							<Button asChild variant="secondary" size="auto">
+								<a className="lunch-home-create" href="/create">
+									<span>
+										<Users size={22} aria-hidden="true" />방 만들기
+									</span>
+									<ArrowRight size={24} aria-hidden="true" />
+								</a>
+							</Button>
 							<ol className="lunch-home-steps" aria-label="이용 방법">
 								<li>
 									<Link2 size={18} aria-hidden="true" />
@@ -53,11 +56,13 @@ export default function LunchHome() {
 						</div>
 					</div>
 					<div className="lunch-home-secondary">
-						<a className="lunch-home-solo" href="/solo">
-							<Dices size={20} aria-hidden="true" />
-							혼자 추첨하기
-							<ArrowRight size={18} aria-hidden="true" />
-						</a>
+						<Button asChild variant="ghost" size="default">
+							<a className="lunch-home-solo" href="/solo">
+								<Dices size={20} aria-hidden="true" />
+								혼자 추첨하기
+								<ArrowRight size={18} aria-hidden="true" />
+							</a>
+						</Button>
 						<details className="lunch-home-details">
 							<summary>
 								식당 목록 · 이용 안내

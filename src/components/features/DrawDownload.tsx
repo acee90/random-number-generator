@@ -1,5 +1,6 @@
 import { Download } from "lucide-react";
 import { useId, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { createDrawText, type TextDraw } from "@/lib/drawText";
 
 export default function DrawDownload({
@@ -55,7 +56,9 @@ export default function DrawDownload({
 	}
 	return (
 		<div>
-			<button
+			<Button
+				variant="outline"
+				size="sm"
 				type="button"
 				className="result-copy"
 				onClick={download}
@@ -63,7 +66,7 @@ export default function DrawDownload({
 				title="생성 시각과 난수 출처를 함께 저장"
 			>
 				<Download size={15} aria-hidden="true" /> 텍스트로 저장
-			</button>
+			</Button>
 			<p
 				id={`${id}-download-error`}
 				className={error ? "inline-error" : undefined}

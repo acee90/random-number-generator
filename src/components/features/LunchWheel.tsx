@@ -1,5 +1,6 @@
 import { LoaderCircle, Shuffle } from "lucide-react";
 import { memo, type RefObject } from "react";
+import { Button } from "@/components/ui/button";
 import type { LunchPlace } from "@/lib/lunch";
 import "./lunch-picker.css";
 
@@ -114,7 +115,9 @@ export function LunchWheel({
 					<WheelFace labels={labels} />
 				</div>
 			</div>
-			<button
+			<Button
+				variant="plain"
+				size="auto"
 				type="button"
 				id={buttonId}
 				ref={buttonRef}
@@ -154,7 +157,7 @@ export function LunchWheel({
 									: "추첨하기"}
 				</span>
 				<small aria-hidden="true">{size}곳</small>
-			</button>
+			</Button>
 		</div>
 	);
 }

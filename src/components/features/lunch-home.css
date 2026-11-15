@@ -48,20 +48,14 @@
 	min-inline-size: 0;
 }
 .lunch-home-create {
-	display: flex;
-	align-items: center;
 	justify-content: space-between;
+	inline-size: 100%;
 	gap: 16px;
 	min-block-size: 72px;
 	padding: 16px 22px;
-	border: 1px solid var(--ink);
-	border-block-end-width: 4px;
-	border-radius: var(--control-radius, 2px);
 	background: var(--ink);
 	color: #fff;
 	font-size: 21px;
-	font-weight: 800;
-	line-height: 1.4;
 }
 .lunch-home-create > span {
 	display: inline-flex;
@@ -104,14 +98,9 @@
 	background: #fff;
 }
 .lunch-home-solo {
-	display: flex;
-	align-items: center;
 	gap: 9px;
 	inline-size: fit-content;
-	min-block-size: 48px;
 	padding-inline: 2px;
-	font-size: 14px;
-	font-weight: 650;
 }
 .lunch-home-solo > svg:last-child {
 	margin-inline-start: 10px;
@@ -145,10 +134,6 @@
 	font-size: 12px;
 	line-height: 1.7;
 }
-.lunch-home-create:focus-visible {
-	outline: 3px solid var(--ink);
-	outline-offset: 5px;
-}
 .lunch-home-footer {
 	display: flex;
 	justify-content: space-between;
@@ -163,21 +148,10 @@
 	.lunch-home-create:hover {
 		background: #3d482f;
 	}
-	.lunch-home-solo:hover {
-		color: #4c742c;
-	}
 }
 @media (prefers-reduced-motion: no-preference) {
 	.lunch-home-board {
 		animation: lunch-home-arrive 300ms ease-out both;
-	}
-	.lunch-home-create {
-		transition:
-			translate 120ms ease-out,
-			background-color 150ms ease-out;
-	}
-	.lunch-home-create:active {
-		translate: 0 2px;
 	}
 	.lunch-home-solo > svg:last-child {
 		transition: translate 150ms ease-out;
@@ -248,7 +222,6 @@
 		padding-block: 8px;
 	}
 	.lunch-home-solo {
-		min-block-size: 48px;
 		font-size: 13px;
 	}
 	.lunch-home-details {
