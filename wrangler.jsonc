@@ -24,9 +24,10 @@
 		{ "tag": "lunch-rooms-v1", "new_sqlite_classes": ["LunchRoomServer"] }
 	],
 	"previews": {
-		"placement": { "mode": "off" },
+		"placement": { "region": "aws:ap-northeast-2" },
 		"vars": {
-			"LUNCH_ROOM_DIAGNOSTICS": "enabled"
+			"LUNCH_ROOM_DIAGNOSTICS": "enabled",
+			"LUNCH_ROOM_LOCATION_HINT": "apac-ne"
 		},
 		"observability": {
 			"enabled": true,
