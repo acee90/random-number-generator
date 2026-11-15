@@ -1,0 +1,175 @@
+{
+  "date": "2026-11-15",
+  "scope": "local-prototype-DOM",
+  "method": {
+    "tool": "JSDOM",
+    "source": "output/roulette-session-ux/roulette-session-wireframe.html",
+    "interactions": "DOM click, input, submit, and change events",
+    "deterministic_random": "Math.random returns 0",
+    "timers": "Animation completion callbacks are queued and flushed manually",
+    "dialog": "showModal is replaced with an open-attribute stub",
+    "source_mutated": false,
+    "runtime_errors": []
+  },
+  "actual_service_status": "actual-service-not-implemented",
+  "limitations": [
+    "네 건은 로컬 검토 시안에서 재현한 관찰이며 실제 운영 서비스의 신규 버그로 기록하지 않는다.",
+    "실제 브라우저 레이아웃, 네이티브 모달과 포커스 트랩, 모바일 키보드는 검증하지 않았다.",
+    "네트워크 동시 요청이나 서버 경쟁 상태를 실행하지 않았다. 첫 관찰은 두 역할의 DOM 이벤트를 순차 실행해 초안과 공유 상태 변경의 충돌을 재현했다.",
+    "Ready의 의미와 무효화 정책은 아직 미확정이다. 해당 관찰의 기대 동작은 조건 버전 확인이라는 제안된 불변식에 한정한다."
+  ],
+  "observations": [
+    {
+      "id": "LC-AUDIT-01",
+      "title": "오래된 방장 초안 적용이 새 참가자 추천을 제거한다",
+      "priority": "P1",
+      "status": "reproduced-open",
+      "actual_service_status": "actual-service-not-implemented",
+      "source": [
+        {
+          "file": "output/roulette-session-ux/roulette-session-wireframe.html",
+          "function_or_handler": "resetDraft",
+          "line": 223
+        },
+        {
+          "file": "output/roulette-session-ux/roulette-session-wireframe.html",
+          "function_or_handler": "apply-draft click handler",
+          "line": 395
+        }
+      ],
+      "steps": [
+        "메뉴 예시의 후보 4개로 시작한다.",
+        "방장이 후보 추천받기를 눌러 접수 단계로 이동한다.",
+        "방장이 후보·옵션 보기에서 편집 초안을 연다.",
+        "참가자가 우동을 추천해 공유 후보가 5개가 된다.",
+        "방장은 기존 초안에서 방 제목만 수정한다.",
+        "변경 내용 확인 후 변경 적용을 누른다."
+      ],
+      "expected": {
+        "candidate_count_after_apply": 5,
+        "new_recommendation_preserved": true,
+        "behavior": "제목 변경으로 공유 후보를 되돌리지 않는다. 초안이 오래되었다면 충돌을 알리고 현재 공유 상태와 초안을 보존한다."
+      },
+      "actual": {
+        "candidate_count_before_apply": 5,
+        "candidate_count_after_apply": 4,
+        "new_recommendation_present_before_apply": true,
+        "new_recommendation_present_after_apply": false,
+        "phase_after_apply": "후보 추천 받는 중 · 4개"
+      },
+      "proposed_fix": "초안에 baseRevision을 기록하고 적용 시 현재 revision과 비교한다. 제목 변경은 제목만 패치하며 후보 목록 전체를 제출하지 않는다. 충돌 시 새 추천을 덮어쓰지 않고 초안을 보존한다."
+    },
+    {
+      "id": "LC-AUDIT-02",
+      "title": "Ready 완료 뒤 중복 제외로 후보가 바뀌어도 시작 가능 상태가 유지된다",
+      "priority": "P1",
+      "status": "reproduced-open",
+      "actual_service_status": "actual-service-not-implemented",
+      "source": [
+        {
+          "file": "output/roulette-session-ux/roulette-session-wireframe.html",
+          "function_or_handler": "autoExclude change handler",
+          "line": 434
+        },
+        {
+          "file": "output/roulette-session-ux/roulette-session-wireframe.html",
+          "function_or_handler": "advance Ready guard",
+          "line": 190
+        }
+      ],
+      "steps": [
+        "중복 제외가 꺼진 메뉴 예시 후보 4개에서 첫 추첨을 완료한다.",
+        "다음 게임 대기 화면으로 이동한다.",
+        "시작 방식 검토를 변경 후 Ready 확인으로 선택한다.",
+        "참가자가 준비 완료를 눌러 모두 준비 완료 상태로 만든다.",
+        "방장이 대기의 중복 없이 추첨 옵션을 켠다."
+      ],
+      "expected": {
+        "type": "proposed-invariant-policy-unresolved",
+        "behavior": "Ready가 확정 후보·확률·규칙을 확인했다는 의미라면 조건이 바뀐 뒤 이전 Ready로 시작하지 않는다. 재확인을 생략할 예외라면 그 예외와 Ready의 의미를 먼저 명시한다."
+      },
+      "actual": {
+        "eligible_candidate_count_before_option_change": 4,
+        "eligible_candidate_count_after_option_change": 3,
+        "start_disabled_before_option_change": false,
+        "start_disabled_after_option_change": false,
+        "roster_after_option_change": "방장 · 준비 완료민수 · 준비 완료서연 · 준비 완료"
+      },
+      "proposed_fix": "Ready를 boolean 하나가 아니라 확인한 conditionsRevision과 연결한다. 중복 제외 변경·복원·후보 변경별 재확인 정책을 결정한 뒤 시작 요청에서 같은 조건 버전인지 검증한다."
+    },
+    {
+      "id": "LC-AUDIT-03",
+      "title": "당첨 후보 이름만 수정하면 새 ID가 부여되어 당첨 제외가 해제된다",
+      "priority": "P1",
+      "status": "reproduced-open",
+      "actual_service_status": "actual-service-not-implemented",
+      "source": [
+        {
+          "file": "output/roulette-session-ux/roulette-session-wireframe.html",
+          "function_or_handler": "apply-draft candidate matching by name",
+          "line": 401
+        },
+        {
+          "file": "output/roulette-session-ux/roulette-session-wireframe.html",
+          "function_or_handler": "apply-draft exclusion ID pruning",
+          "line": 403
+        }
+      ],
+      "steps": [
+        "중복 제외가 켜진 1~10 번호 예시로 시작한다.",
+        "결정적 난수 0으로 1번을 뽑고 다음 게임 대기 화면으로 이동한다.",
+        "대기 후보가 9개인 것을 확인한다.",
+        "방장 편집 초안에서 후보 이름 1번만 1번 수정으로 바꾼다.",
+        "변경 내용 확인 후 변경 적용을 누른다."
+      ],
+      "expected": {
+        "eligible_candidate_count_after_rename": 9,
+        "behavior": "같은 후보의 이름 수정은 후보 ID와 당첨 제외 상태를 유지한다."
+      },
+      "actual": {
+        "eligible_candidate_count_before_rename": 9,
+        "eligible_candidate_count_after_rename": 10,
+        "history_after_rename": "이전 게임 기록 · 1개1게임 · 1번 · 10.0% · 당시 후보 10개",
+        "behavior": "이름이 같은 기존 후보를 찾지 못해 새 ID를 만들고, 기존 당첨 ID는 제외 내역에서 제거한다. 과거 결과 표시는 남아 있다."
+      },
+      "proposed_fix": "편집 초안의 각 행에 안정된 candidateId를 유지한다. 이름은 수정 가능한 속성으로 취급하고, 삭제·신규 추가와 이름 수정을 구분한다."
+    },
+    {
+      "id": "LC-AUDIT-04",
+      "title": "결과 화면에서 같은 옵션 변경이 진입 경로에 따라 서로 다른 단계로 이동한다",
+      "priority": "P1",
+      "status": "reproduced-open",
+      "actual_service_status": "actual-service-not-implemented",
+      "source": [
+        {
+          "file": "output/roulette-session-ux/roulette-session-wireframe.html",
+          "function_or_handler": "autoExclude change handler",
+          "line": 434
+        },
+        {
+          "file": "output/roulette-session-ux/roulette-session-wireframe.html",
+          "function_or_handler": "apply-draft result archive and phase change",
+          "line": 395
+        }
+      ],
+      "steps": [
+        "중복 제외가 꺼진 메뉴 예시에서 첫 추첨 결과를 표시한다.",
+        "결과 화면의 빠른 중복 제외 옵션을 켜고 화면을 확인한다.",
+        "빠른 옵션을 다시 꺼 같은 초기 설정으로 되돌린다.",
+        "후보·옵션 보기의 편집에서 같은 중복 제외 옵션을 켠다.",
+        "변경 내용 확인 후 변경 적용을 누르고 화면을 확인한다."
+      ],
+      "expected": {
+        "behavior": "같은 다음 게임 옵션 변경은 진입 경로에 관계없이 같은 단계 전환 규칙을 따른다. 결과를 유지하고 명시적인 다음 게임 대기 화면으로 행동을 기다리는 방향이 현재 기본 흐름과 맞는다."
+      },
+      "actual": {
+        "phase_before_change": "추첨 결과 · 1게임",
+        "phase_after_quick_toggle": "추첨 결과 · 1게임",
+        "phase_after_dialog_apply": "다음 추첨 대기 · 3개",
+        "history_count_after_dialog_apply": 1,
+        "behavior": "빠른 옵션은 결과 화면을 유지하지만 다이얼로그 적용은 결과를 보관하고 대기로 전환한다."
+      },
+      "proposed_fix": "다음 게임 옵션 변경과 현재 결과 닫기를 분리한 공통 명령을 사용한다. 다이얼로그 적용과 빠른 옵션이 같은 전환 규칙·기록 반영 시점을 사용하도록 통일한다."
+    }
+  ]
+}

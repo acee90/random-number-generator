@@ -1,0 +1,540 @@
+<div id="roulette-session-wireframe">
+  <div class="rw-preview">
+    <label>게임 예시 <select id="rw-scenario" class="form-select"><option value="menu">메뉴 후보 · 확률 투표 사용</option><option value="numbers">번호 후보 · 확률 투표 없음</option></select></label>
+    <label>미리볼 상태 <select id="rw-phase" class="form-select"><option value="locked">대기 · 룰렛과 후보</option><option value="collect">추천 접수 중</option><option value="review">접수 종료 · 목록 확인</option><option value="drawing">추첨 중</option><option value="result">결과</option></select></label>
+    <label>시작 방식 검토 <select id="rw-start-mode" class="form-select"><option value="close">방장 시작</option><option value="ready">변경 후 Ready 확인</option></select></label>
+    <button type="button" class="btn btn-ghost" id="rw-next-preview">다음 단계 미리보기</button>
+  </div>
+  <div class="rw-role-comparison viz-dotted-background" aria-label="방장과 참가자 화면 동시 비교">
+    <section class="rw-role-preview" aria-label="방장 시나리오">
+      <h3 class="rw-preview-heading">방장 화면</h3>
+      <div class="rw-app" data-flow="host" data-role="host" aria-label="방장 룰렛 화면"></div>
+    </section>
+    <section class="rw-role-preview" aria-label="참가자 시나리오">
+      <h3 class="rw-preview-heading">참가자 화면</h3>
+      <div class="rw-app" data-flow="guest" data-role="guest" aria-label="참가자 룰렛 화면"></div>
+    </section>
+  </div>
+</div>
+<style>
+  #roulette-session-wireframe .rw-preview {display:flex;align-items:end;flex-wrap:wrap;gap:12px;margin-bottom:16px;padding-right:90px}
+  #roulette-session-wireframe .rw-preview label {display:grid;gap:6px}
+  #roulette-session-wireframe .rw-role-comparison {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-items:start;padding:12px 0 24px}
+  #roulette-session-wireframe .rw-role-preview {min-width:0}
+  #roulette-session-wireframe .rw-preview-heading {margin:0 0 10px;font-weight:500}
+  #roulette-session-wireframe .rw-app {
+    --rw-paper:light-dark(#f7f7f2,#20241e);--rw-card:light-dark(#ffffff,#292e27);
+    --rw-ink:light-dark(#272b24,#eef2e7);--rw-soft:light-dark(#edf2e3,#343d2c);
+    --rw-line:light-dark(#c3ccb7,#626e55);--rw-lime:light-dark(#d6f266,#c0da62);
+    --rw-on-lime:#272b24;--rw-muted:light-dark(#59634f,#c3cdb8);--rw-danger:light-dark(#a13d27,#ffb79e);
+    --rw-wheel-a:light-dark(#d6f266,#536329);
+    --rw-accent:light-dark(#3f5e25,#d4edb9);
+    color:var(--rw-ink);background:var(--rw-paper);border:2px solid var(--rw-line);border-radius:2px;
+    font:14px/1.55 "Pretendard","Noto Sans KR",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    max-width:680px;margin:0 auto;text-align:left;overflow-wrap:anywhere;position:relative;container-type:inline-size;
+  }
+  #roulette-session-wireframe .rw-app * {box-sizing:border-box}
+  #roulette-session-wireframe .rw-app [hidden] {display:none}
+  #roulette-session-wireframe .rw-app button,#roulette-session-wireframe .rw-app input,
+  #roulette-session-wireframe .rw-app select,#roulette-session-wireframe .rw-app textarea {font:inherit;color:inherit;border-radius:2px}
+  #roulette-session-wireframe .rw-app button {min-height:44px;border:1px solid var(--rw-line);background:var(--rw-card);padding:8px 12px;font-weight:500}
+  #roulette-session-wireframe .rw-app button:disabled {opacity:.48;cursor:not-allowed}
+  #roulette-session-wireframe .rw-app button[aria-pressed="true"] {background:var(--rw-lime);color:var(--rw-on-lime);border-color:var(--rw-accent)}
+  #roulette-session-wireframe .rw-app .rw-primary {background:var(--rw-lime);color:var(--rw-on-lime);border-color:var(--rw-ink)}
+  #roulette-session-wireframe .rw-app .rw-quiet {border-color:transparent;background:transparent;color:var(--rw-accent);padding-inline:4px}
+  #roulette-session-wireframe .rw-app input:not([type="checkbox"]),#roulette-session-wireframe .rw-app textarea {width:100%;min-width:0;background:var(--rw-card);border:1px solid var(--rw-line);padding:10px;font-size:16px}
+  #roulette-session-wireframe .rw-app textarea {min-height:160px;resize:vertical}
+  #roulette-session-wireframe .rw-app input[type="checkbox"] {width:18px;height:18px;accent-color:var(--rw-accent);flex-shrink:0}
+  #roulette-session-wireframe .rw-app h2 {font-size:21px;font-weight:500;line-height:1.35;margin:0}
+  #roulette-session-wireframe .rw-app h3 {font-size:16px;font-weight:500;margin:0}
+  #roulette-session-wireframe .rw-app p {margin:0}
+  #roulette-session-wireframe .rw-brand {padding:12px 18px;background:var(--rw-lime);color:var(--rw-on-lime);font-weight:500;display:flex;gap:12px;align-items:center}
+  #roulette-session-wireframe .rw-brand span {font-weight:400;font-size:12px}
+  #roulette-session-wireframe .rw-body {padding:18px;display:grid;gap:18px}
+  #roulette-session-wireframe .rw-heading {display:flex;align-items:start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  #roulette-session-wireframe .rw-meta {font-size:12px;color:var(--rw-muted);margin-top:4px!important}
+  #roulette-session-wireframe .rw-steps {display:flex;list-style:none;margin:0;padding:0;gap:0;border-bottom:1px solid var(--rw-line)}
+  #roulette-session-wireframe .rw-steps li {flex:1;padding:8px 4px;text-align:center;color:var(--rw-muted);font-size:12px}
+  #roulette-session-wireframe .rw-steps li[aria-current="step"] {color:var(--rw-ink);border-bottom:3px solid var(--rw-accent);background:var(--rw-soft)}
+  #roulette-session-wireframe .rw-phase {display:grid;gap:8px}
+  #roulette-session-wireframe .rw-strip {display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:10px 12px;background:var(--rw-soft);font-size:12px}
+  #roulette-session-wireframe .rw-intake-status {font-size:12px;color:var(--rw-accent)}
+  #roulette-session-wireframe .rw-candidate-summary {display:grid;gap:8px}
+  #roulette-session-wireframe .rw-candidate-names {display:flex;flex-wrap:wrap;gap:6px;list-style:none;padding:0;margin:0}
+  #roulette-session-wireframe .rw-candidate-names li {padding:4px 9px;background:var(--rw-soft);font-size:13px}
+  #roulette-session-wireframe .rw-list {list-style:none;margin:0;padding:0;border-top:1px solid var(--rw-line)}
+  #roulette-session-wireframe .rw-item {display:flex;align-items:center;gap:10px;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--rw-line)}
+  #roulette-session-wireframe .rw-name {min-width:0;flex:1}
+  #roulette-session-wireframe .rw-name strong {font-weight:500;display:block}
+  #roulette-session-wireframe .rw-name small {color:var(--rw-muted);font-size:12px}
+  #roulette-session-wireframe .rw-votes {display:flex;align-items:center;gap:4px;flex-shrink:0}
+  #roulette-session-wireframe .rw-votes button {min-width:44px;padding:8px}
+  #roulette-session-wireframe .rw-percent {width:62px;text-align:right;font-variant-numeric:tabular-nums}
+  #roulette-session-wireframe .rw-percent small {font-size:11px;color:var(--rw-muted);display:block}
+  #roulette-session-wireframe .rw-add {display:flex;align-items:center;gap:8px}
+  #roulette-session-wireframe .rw-add button {white-space:nowrap}
+  #roulette-session-wireframe .rw-label {display:grid;gap:6px}
+  #roulette-session-wireframe .rw-actions {display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  #roulette-session-wireframe .rw-actions>.rw-primary {flex:1}
+  #roulette-session-wireframe .rw-foot {padding-top:14px;border-top:1px solid var(--rw-line);display:grid;gap:8px}
+  #roulette-session-wireframe .rw-check {display:flex;align-items:center;gap:10px;min-height:44px}
+  #roulette-session-wireframe .rw-options {display:grid;gap:14px;background:var(--rw-card);border:1px solid var(--rw-line);padding:16px}
+  #roulette-session-wireframe .rw-dialog {position:absolute;inset:12px 12px auto;width:calc(100% - 24px);max-width:600px;max-height:calc(100% - 24px);margin:0 auto;padding:0;border:2px solid var(--rw-line);border-radius:2px;color:var(--rw-ink);background:var(--rw-card);overscroll-behavior:contain;z-index:51}
+  #roulette-session-wireframe .rw-dialog-backdrop {position:absolute;inset:0;background:light-dark(rgb(25 31 20 / 36%),rgb(4 8 3 / 60%));z-index:50}
+  #roulette-session-wireframe .rw-dialog-head {display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid var(--rw-line);background:var(--rw-soft)}
+  #roulette-session-wireframe .rw-dialog-body {display:grid;gap:16px;padding:16px}
+  #roulette-session-wireframe .rw-dialog .rw-options {border:0;padding:0}
+  #roulette-session-wireframe .rw-option-values {display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 16px;margin:0;padding:12px;background:var(--rw-soft)}
+  #roulette-session-wireframe .rw-option-values dd {margin:0;text-align:right}
+  #roulette-session-wireframe .rw-dialog .rw-list {max-height:none}
+  #roulette-session-wireframe .rw-summary {margin:0;padding-left:20px;display:grid;gap:6px}
+  #roulette-session-wireframe .rw-result {padding:24px 14px;text-align:center;background:var(--rw-card);border:1px solid var(--rw-line);display:grid;gap:10px}
+  #roulette-session-wireframe .rw-winner {font-size:30px;font-weight:500}
+  #roulette-session-wireframe .rw-waiting {color:var(--rw-muted);font-size:13px}
+  #roulette-session-wireframe .rw-roster {display:flex;gap:8px;flex-wrap:wrap;font-size:12px}
+  #roulette-session-wireframe .rw-roster span {background:var(--rw-soft);padding:6px 10px}
+  #roulette-session-wireframe .rw-error {color:var(--rw-danger)}
+  #roulette-session-wireframe .rw-sr-only {position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+  #roulette-session-wireframe .rw-history summary {min-height:44px;display:flex;align-items:center;color:var(--rw-accent);cursor:default}
+  #roulette-session-wireframe .rw-history ol {margin:0;padding-left:22px;font-size:12px}
+  #roulette-session-wireframe .rw-removed {display:grid;gap:6px;color:var(--rw-muted);font-size:12px}
+  #roulette-session-wireframe .rw-wheel-stage {display:grid;justify-items:center;gap:12px;padding:10px 0}
+  #roulette-session-wireframe .rw-wheel-layout {display:grid;grid-template-columns:minmax(0,1fr) 164px;gap:16px;align-items:start}
+  #roulette-session-wireframe .rw-exclusion-panel {min-width:0;display:grid;gap:10px;padding:12px;background:var(--rw-soft);border:1px solid var(--rw-line)}
+  #roulette-session-wireframe .rw-exclusion-panel h3 {font-size:14px}
+  #roulette-session-wireframe .rw-exclusion-list {list-style:none;display:grid;gap:6px;margin:0;padding:0}
+  #roulette-session-wireframe .rw-exclusion-list li {padding:3px 0;border-bottom:1px solid var(--rw-line);font-size:13px}
+  #roulette-session-wireframe .rw-wheel {position:relative;width:min(100%,340px);aspect-ratio:1;isolation:isolate}
+  #roulette-session-wireframe .rw-wheel::before {content:'▼';position:absolute;top:-10px;left:calc(50% - 12px);font-size:26px;color:var(--rw-ink);z-index:3}
+  #roulette-session-wireframe .rw-rotor {position:absolute;inset:0;border:2px solid var(--rw-ink);border-radius:50%;overflow:hidden;transform:rotate(var(--rw-turn,0deg))}
+  #roulette-session-wireframe .rw-rotor[data-spinning="true"] {animation:rw-spin 1.8s cubic-bezier(.15,.65,.12,1) both}
+  #roulette-session-wireframe .rw-wheel-label {position:absolute;width:24%;transform:translate(-50%,-50%);text-align:center;font-size:12px;color:var(--rw-ink)}
+  #roulette-session-wireframe .rw-hub {position:absolute;inset:36%;border-radius:50%;background:var(--rw-card);display:grid;place-content:center;text-align:center;border:1px solid var(--rw-line);font-size:13px;z-index:2}
+  #roulette-session-wireframe .rw-candidates summary {min-height:44px;display:flex;align-items:center;gap:8px;color:var(--rw-accent)}
+  #roulette-session-wireframe .rw-candidates summary::before {content:'＋'}
+  #roulette-session-wireframe .rw-candidates[open] summary::before {content:'−'}
+  #roulette-session-wireframe .rw-candidates .rw-list {margin-top:8px}
+  @keyframes rw-spin {from{transform:rotate(0deg)}to{transform:rotate(var(--rw-turn))}}
+  @media(prefers-reduced-motion:reduce) {#roulette-session-wireframe .rw-rotor[data-spinning="true"]{animation:none}}
+  #roulette-session-wireframe .rw-number-list {display:grid;grid-template-columns:repeat(5,minmax(0,1fr));list-style:none;padding:0;margin:0;gap:8px}
+  #roulette-session-wireframe .rw-number-list button {display:grid;gap:3px;width:100%;min-height:66px;padding:6px;background:var(--rw-card)}
+  #roulette-session-wireframe .rw-number-list button[aria-pressed="true"] {background:var(--rw-soft);color:var(--rw-ink);border-color:var(--rw-line)}
+  #roulette-session-wireframe .rw-number-list small {font-size:11px}
+  @media(max-width:760px) {#roulette-session-wireframe .rw-role-comparison {grid-template-columns:minmax(0,1fr)}}
+  @container(max-width:560px) {#roulette-session-wireframe .rw-wheel-layout {grid-template-columns:minmax(0,1fr)}}
+  @media(max-width:440px) {
+    #roulette-session-wireframe .rw-preview {padding-right:0;gap:10px}
+    #roulette-session-wireframe .rw-preview label {width:100%}
+    #roulette-session-wireframe .rw-body {padding:12px;gap:14px}
+    #roulette-session-wireframe .rw-brand {padding:10px 12px}
+    #roulette-session-wireframe .rw-item {flex-wrap:wrap;gap:6px}
+    #roulette-session-wireframe .rw-name {flex-basis:100%}
+    #roulette-session-wireframe .rw-percent {margin-left:auto}
+    #roulette-session-wireframe .rw-heading button {min-height:36px}
+    #roulette-session-wireframe .rw-actions>button {flex-basis:100%}
+  }
+</style>
+<script>
+(() => {
+  const root = document.getElementById('roulette-session-wireframe');
+  const scenarioControl = root.querySelector('#rw-scenario');
+  const phaseControl = root.querySelector('#rw-phase');
+  const modeControl = root.querySelector('#rw-start-mode');
+  const apps = Array.from(root.querySelectorAll('[data-flow]'));
+  let readyMode = false;
+  let scenario = 'menu';
+  let serial = 100;
+  const states = {};
+  let resultTimer = null;
+  let resultToken = null;
+  const sharedKeys=['title','round','phase','items','votes','excluded','manual','autoExclude','allowAdd','useVotes','ready','locked','result','history','rotation','notice','feedback','drawContext','drawSeq'];
+  const escape = value => String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  const clone = value => JSON.parse(JSON.stringify(value));
+  const button = (action, text, options = '') => `<button type="button" class="cursor-interaction" data-action="${action}" ${options}>${text}</button>`;
+  const primary = (action, text, disabled = false) => `<button type="button" class="rw-primary cursor-interaction" data-action="${action}" ${disabled ? 'disabled' : ''}>${text}</button>`;
+  function fresh() {
+    const numeric = scenario === 'numbers';
+    const names = numeric ? Array.from({length:10}, (_,i) => `${i+1}번`) : ['김치찌개', '돈가스', '쌀국수', '카레'];
+    const s={title:numeric?'번호 중복 없이 뽑기':'오늘은 뭐 먹지?', round:1, phase:'locked',
+      items:names.map((name,i) => ({id:`c${++serial}`,name,owner:i===2?'민수':'방장'})),
+      votes:{},excluded:[],manual:[],autoExclude:numeric,allowAdd:false,useVotes:!numeric,
+      ready:{host:true,guest:true,other:true},locked:null,result:null,history:[],edit:null,panel:false,error:'',notice:'',rotation:0,feedback:{},suggestionDraft:'',drawContext:null,drawSeq:0,resetConfirm:null,resetReturnFocus:'advance'};
+    s.locked=clone(probabilities(s));return s;
+  }
+  function eligible(s) {return s.items.filter(x=>(!s.autoExclude||!s.excluded.includes(x.id))&&!s.manual.includes(x.id));}
+  function probabilities(s) {
+    const items = eligible(s);
+    const weights = items.map(x=>s.useVotes?Math.max(1,2+Object.values(s.votes).reduce((sum,ballot)=>sum+(ballot[x.id]||0),0)):1);
+    const total = weights.reduce((a,b)=>a+b,0);
+    return items.map((x,i)=>({...x,probability:weights[i]/total}));
+  }
+  function lock(s) {s.allowAdd=false;s.locked=clone(probabilities(s));s.phase='locked';s.ready={host:true,guest:!readyMode,other:true};}
+  function archive(s) {
+    if(!s.result)return;
+    s.history.unshift({round:s.round,name:s.result.name,probability:s.result.probability,items:clone(s.locked),drawId:s.drawContext?.id,autoExclude:s.drawContext?.autoExclude});
+    s.result=null;s.drawContext=null;
+  }
+  function visibleLedger(s) {
+    return s.phase==='drawing'&&s.drawContext?(s.drawContext.autoExclude?s.drawContext.ledgerBefore:[]):s.excluded;
+  }
+  function resetSignature(s) {
+    return JSON.stringify([s.phase,s.round,s.drawContext?.id,readyMode,s.autoExclude,s.excluded,s.manual,s.items,s.votes,s.locked,s.ready]);
+  }
+  function setIntake(s,open) {
+    if(open) {
+      if(s.result){archive(s);s.round++;}
+      s.allowAdd=true;s.phase='collect';s.locked=null;s.ready={host:true,guest:false,other:true};
+      s.notice='후보 추천을 받고 있어요.';
+    }else {
+      s.allowAdd=false;s.phase='review';
+      s.notice='추천 접수를 끝냈어요. 목록을 확인한 뒤 마감해 주세요.';
+    }
+  }
+  function candidateChanged(s) {
+    const hadVotes=Object.values(s.votes).some(ballot=>Object.values(ballot).some(Boolean));
+    s.votes={};s.ready={host:true,guest:false,other:true};
+    if(hadVotes)s.notice='후보가 바뀌어 확률 투표를 다시 받아요.';
+  }
+  function advance(s,key,resetApproved=false) {
+    if(s.phase==='result') {
+      archive(s);s.round++;s.locked=clone(probabilities(s));s.phase='locked';s.rotation=0;
+      s.notice='다음 게임 대기 · 후보와 옵션을 확인한 뒤 돌려 주세요.';return;
+    }
+    if(['collect','review'].includes(s.phase)){if(eligible(s).length===0)return;lock(s);}
+    else if(s.phase==='locked') {
+      if(readyMode&&!Object.values(s.ready).every(Boolean))return;
+      const list=s.locked||[];if(!list.length)return;
+      if(!s.autoExclude&&s.excluded.length&&!resetApproved){s.panel=false;s.error='';s.resetReturnFocus='advance';s.resetConfirm={kind:'draw',signature:resetSignature(s)};return;}
+      let target=Math.random(),winner=list[list.length-1],before=0;
+      for(const item of list){if(target<item.probability){winner=item;break;}target-=item.probability;before+=item.probability;}
+      s.rotation=1800+360-(before+winner.probability/2)*360;
+      const ledgerBefore=clone(s.excluded),autoExclude=s.autoExclude;
+      s.drawContext={id:`preview-draw-${++s.drawSeq}`,autoExclude,ledgerBefore,committed:true};
+      s.excluded=autoExclude?[...new Set([...ledgerBefore,winner.id])]:[winner.id];
+      s.result=clone(winner);s.phase='drawing';s.feedback={};
+    } else if(s.phase==='drawing')s.phase='result';
+    s.notice='';s.error='';
+  }
+  function persist() {
+    if(!window.openai?.setWidgetState)return;
+    window.openai.setWidgetState({modelContent:{scenario,roles:['host','guest'],readyMode,confirmed:false},privateContent:{scenario,readyMode}}).catch(()=>{});
+  }
+  function restore(raw) {
+    const v=raw?.privateContent||raw?.modelContent||raw;
+    if(!v||!['menu','numbers'].includes(v.scenario))return;
+    if(v.scenario===scenario&&Boolean(v.readyMode)===readyMode)return;
+    scenario=v.scenario;readyMode=Boolean(v.readyMode);
+    scenarioControl.value=scenario;modeControl.value=readyMode?'ready':'close';
+    resetRoom();renderAll();
+  }
+  function resetRoom() {
+    if(resultTimer)clearTimeout(resultTimer);resultTimer=null;resultToken=null;
+    const seed=fresh();
+    apps.forEach(app=>{states[app.dataset.flow]=clone(seed);});
+  }
+  function syncRoom(key) {
+    apps.forEach(app=>{
+      if(app.dataset.flow===key)return;
+      const target=states[app.dataset.flow],source=states[key];
+      sharedKeys.forEach(field=>{target[field]=clone(source[field]);});
+    });
+  }
+  function resetDraft(s) {
+    const base={title:s.title,names:s.items.map(x=>x.name).join('\n'),autoExclude:s.autoExclude,useVotes:s.useVotes};
+    s.edit={...base,step:'form',base:clone(base)};s.error='';
+  }
+  function draftChanged(s) {
+    return s.edit&&Object.keys(s.edit.base).some(key=>s.edit[key]!==s.edit.base[key]);
+  }
+  function closePanel(s) {
+    if(draftChanged(s)){s.edit.discard=true;return;}
+    s.panel=false;s.edit=null;s.reopen=false;s.error='';
+  }
+  function draftView(s) {
+    const d=s.edit;
+    if(d.discard)return `<section class="rw-options" aria-label="편집 내용 취소 확인"><h3>편집한 내용을 버릴까요?</h3><p>현재 방에 적용된 후보와 옵션은 유지돼요.</p><div class="rw-actions">${button('continue-edit','계속 편집')}${primary('discard-edit','버리고 닫기')}</div></section>`;
+    if(d.step==='confirm') {
+      const listChanged=d.parsed.join('\n')!==s.items.map(x=>x.name).join('\n');
+      const conditionsChanged=listChanged||['autoExclude','useVotes'].some(k=>d[k]!==s[k]);
+      return `<section class="rw-options" aria-label="변경 적용 확인"><h3>변경 내용을 적용할까요?</h3><ul class="rw-summary"><li>후보 ${d.parsed.length}개 · ${escape(d.title)}</li><li>${conditionsChanged?'변경 조건으로 확률을 다시 계산하고 준비 확인을 해제':'방 이름만 변경 · 후보·표·Ready 유지'}</li>${listChanged||d.useVotes!==s.useVotes?'<li>후보/투표 방식 변경으로 기존 확률 투표 초기화</li>':''}<li>남아 있는 후보의 당첨·직접 제외 내역 유지</li><li>초대 링크·참여자·채팅·이전 결과 기록 유지</li></ul><div class="rw-actions">${button('edit-back','돌아가기')}${primary('apply-draft','변경 적용')}</div></section>`;
+    }
+    return `<section class="rw-options" aria-label="후보와 옵션 편집"><h3>후보·옵션 편집</h3>
+      <label class="rw-label">방 이름<input data-draft="title" maxlength="50" value="${escape(d.title)}"></label>
+      <div><label class="rw-check"><input type="checkbox" data-draft="autoExclude" ${d.autoExclude?'checked':''}>당첨 후보 다음 게임에서 제외</label>
+      <label class="rw-check"><input type="checkbox" data-draft="useVotes" ${d.useVotes?'checked':''}>접수 종료 후 후보 확률 투표</label></div>
+      <label class="rw-label">후보 · 한 줄에 하나<textarea data-draft="names" maxlength="500">${escape(d.names)}</textarea></label>
+      ${s.error?`<p role="alert" class="rw-error">${escape(s.error)}</p>`:''}
+      <div class="rw-actions">${button('cancel-draft','취소')}${primary('review-draft','변경 내용 확인',!draftChanged(s))}</div>
+    </section>`;
+  }
+  function panelView(s,key) {
+    if(!s.panel)return '';
+    const role=key;
+    let content='';
+    if(s.edit)content=draftView(s);
+    else {
+      const fixed=['locked','drawing','result'].includes(s.phase),list=fixed?(s.locked||[]):probabilities(s),publicLedger=visibleLedger(s);
+      content=`<p class="rw-meta">${fixed?'이번 추첨의 확정 후보와 옵션':'현재 준비 중인 후보와 옵션'} · 추첨 포함 ${list.length}개</p><ul class="rw-list" aria-label="후보와 확률">${s.items.map(item=>{
+        const active=list.find(x=>x.id===item.id);
+        const status=s.manual.includes(item.id)?'직접 제외':s.autoExclude&&publicLedger.includes(item.id)?(s.phase==='result'?'다음 추첨에서 제외':'당첨 제외'):'추첨 포함';
+        return `<li class="rw-item"><div class="rw-name"><strong>${escape(item.name)}</strong><small>${escape(item.owner)} 등록 · ${status}</small></div><span class="rw-percent">${active?(active.probability*100).toFixed(1)+'%':'—'}</span></li>`;
+      }).join('')}</ul><dl class="rw-option-values"><dt>중복 없이 추첨</dt><dd>${s.autoExclude?'사용':'사용 안 함'}</dd><dt>후보 추천 접수</dt><dd>${s.allowAdd?'접수 중':s.phase==='review'?'접수 종료 · 목록 확인 중':'마감 완료'}</dd><dt>접수 종료 후 확률 투표</dt><dd>${s.useVotes?'사용':'사용 안 함'}</dd><dt>시작 방식</dt><dd>${readyMode?'변경 후 준비 확인':'방장 시작'}</dd></dl>`;
+      if(role==='host')content+=`<div class="rw-actions">${button('settings','후보·옵션 편집',s.phase==='drawing'?'disabled':'')}</div>${s.phase==='drawing'?'<p class="rw-meta">추첨 중에는 후보와 옵션을 편집할 수 없어요.</p>':''}`;
+    }
+    return `<dialog class="rw-dialog" aria-labelledby="rw-panel-title-${key}"><div class="rw-dialog-head"><h2 id="rw-panel-title-${key}">후보·옵션</h2>${button('close-panel','닫기')}</div><div class="rw-dialog-body">${content}</div></dialog>`;
+  }
+  function resetDialog(s,key) {
+    if(!s.resetConfirm)return '';
+    const drawing=s.resetConfirm.kind==='draw',names=s.items.filter(item=>s.excluded.includes(item.id)).map(item=>escape(item.name));
+    return `<dialog class="rw-dialog" data-reset-confirmation aria-labelledby="rw-reset-title-${key}"><div class="rw-dialog-head"><h2 id="rw-reset-title-${key}">${drawing?'제외 목록을 초기화하고 돌릴까요?':'제외 목록을 초기화할까요?'}</h2></div><div class="rw-dialog-body"><p>저장된 제외 후보 ${names.length}개</p><ul class="rw-exclusion-list">${names.map(name=>`<li>${name}</li>`).join('')}</ul><p>${drawing?'기존 목록을 지우고 추첨해요. 새 당첨 후보만 저장되며, 다시 ON으로 켜면 그 후보만 제외돼요.':'저장된 제외 목록을 비워요. 룰렛을 돌리지는 않아요.'}</p><p class="rw-meta">직접 제외한 후보와 지난 게임 기록은 유지돼요.</p><div class="rw-actions">${button('cancel-reset','취소')}${primary('confirm-reset',drawing?'초기화하고 돌리기':'제외 목록 초기화')}</div></div></dialog>`;
+  }
+  function exclusionView(s,key) {
+    const ids=visibleLedger(s),items=s.items.filter(item=>ids.includes(item.id)),manual=s.items.filter(item=>s.manual.includes(item.id));
+    const active=s.phase==='drawing'&&s.drawContext?s.drawContext.autoExclude:s.autoExclude;
+    return `<aside class="rw-exclusion-panel" data-exclusion-panel aria-labelledby="rw-exclusion-title-${key}"><h3 id="rw-exclusion-title-${key}">${active?'제외된 후보':'저장된 제외 후보'} ${items.length}개</h3>${!active?'<p class="rw-meta">중복 제외 꺼짐 · 지금은 추첨에 포함돼요.</p>':''}<ul class="rw-exclusion-list" data-excluded-names>${items.map(item=>`<li>${escape(item.name)}</li>`).join('')}</ul>${!items.length?`<p class="rw-meta">${s.phase==='drawing'&&!active?'기존 목록을 초기화했어요. 새 후보는 결과 공개 후 표시해요.':'저장된 제외 후보가 없어요.'}</p>`:''}${manual.length?`<h3>직접 제외 ${manual.length}개</h3><ul class="rw-exclusion-list">${manual.map(item=>`<li>${escape(item.name)}</li>`).join('')}</ul>`:''}${key==='host'&&s.phase!=='drawing'&&items.length?button('restore','제외 목록 초기화'):''}</aside>`;
+  }
+  function wheelView(s,list) {
+    if(!list.length)return '<p class="rw-waiting">모든 후보를 뽑았어요. 당첨 제외를 복원하거나 후보를 바꿔 주세요.</p>';
+    const colors=['var(--rw-wheel-a)','var(--rw-soft)','var(--rw-card)'];let acc=0;
+    const stops=list.map((item,i)=>{const start=acc;acc+=item.probability*100;return `${colors[i%3]} ${start}% ${acc}%`;});
+    let angle=0;const labels=list.map(item=>{
+      const mid=(angle+item.probability/2)*360;angle+=item.probability;
+      const rad=mid*Math.PI/180;
+      return `<span class="rw-wheel-label" style="left:${50+Math.sin(rad)*34}%;top:${50-Math.cos(rad)*34}%">${escape(item.name)}</span>`;
+    }).join('');
+    return `<div class="rw-wheel-stage"><div class="rw-wheel" role="img" aria-label="${list.length}개 확정 후보의 룰렛"><div class="rw-rotor" data-spinning="${s.phase==='drawing'}" style="background:conic-gradient(${stops.join(',')});--rw-turn:${s.phase==='drawing'?s.rotation:0}deg">${labels}</div><div class="rw-hub">${s.phase==='drawing'?'추첨 중':list.length+'개 후보'}</div></div><p class="rw-meta">${s.autoExclude?'당첨 후보 자동 제외 · 같은 조건으로 계속 추첨':'같은 목록·규칙으로 계속 추첨'}</p></div>`;
+  }
+  function render(app) {
+    const key=app.dataset.flow,role=app.dataset.role,s=states[key],isHost=role==='host',selfName=isHost?'방장':'민수';
+    const list=['locked','drawing','result'].includes(s.phase)?(s.locked||[]):probabilities(s);
+    const allReady=Object.values(s.ready).every(Boolean);
+    const names={collect:'후보 추천 받는 중',review:isHost?'접수 종료 · 목록 확인':'추천 접수 종료',locked:readyMode&&!allReady?'변경 조건 확인':isHost?'다음 추첨 대기':'방장 시작 대기',drawing:'룰렛이 돌아가고 있어요',result:'추첨 결과'};
+    let content='';
+    {
+      const info={collect:isHost?'추천을 받고 있어요. 접수를 끝내고 더 확인하거나, 바로 마감할 수 있어요.':'지금 후보를 추천해 주세요. 내 추천은 접수 중에만 삭제할 수 있어요.',review:isHost?'후보를 확인한 뒤 마감하면 룰렛 대기 화면으로 돌아가요.':s.useVotes?'추천 추가는 끝났어요. 후보에 투표하며 방장의 마감을 기다려 주세요.':'방장이 후보 목록을 확인하고 있어요.',locked:readyMode&&!allReady?(isHost?'참가자의 준비 확인을 기다리고 있어요.':'후보·옵션을 확인한 뒤 준비해 주세요.'):(isHost?'이번 후보를 확인한 뒤 룰렛을 돌려 주세요.':'이번 후보를 확인하며 방장의 시작을 기다려 주세요.'),drawing:'결과가 나오면 자동으로 보여드려요.',result:isHost?'결과를 확인한 뒤 대기 화면으로 돌아가 주세요.':'방장이 대기 화면으로 이동하면 함께 전환돼요.'};
+      content=`<div class="rw-phase"><h3>${names[s.phase]} · ${s.phase==='result'?s.round+'게임':list.length+'개'}</h3><p class="rw-meta">${info[s.phase]}</p></div>`;
+      if(['locked','drawing'].includes(s.phase))content+=`<div class="rw-wheel-layout">${wheelView(s,list)}${exclusionView(s,key)}</div>`;
+      if(s.phase==='locked')content+=`<section class="rw-candidate-summary" aria-label="이번 추첨 후보"><h3>이번 추첨 후보 ${list.length}개</h3><ul class="rw-candidate-names">${list.map(item=>`<li>${escape(item.name)}</li>`).join('')}</ul></section>`;
+      if(s.phase==='result') {
+        content+=`<section class="rw-result" aria-label="추첨 결과"><p>이번에 뽑힌 후보</p><p class="rw-winner">${escape(s.result.name)}</p><p class="rw-meta">당시 확률 ${(s.result.probability*100).toFixed(1)}%</p><p>${s.autoExclude&&s.excluded.includes(s.result.id)?'다음 게임부터 이 후보가 제외돼요.':'현재 설정에서는 다음 게임에도 이 후보가 참여해요.'}</p></section>${exclusionView(s,key)}`;
+        if(isHost)content+=`<p class="rw-meta">결과 피드백 · ${Object.keys(s.feedback).length}/2명 참여</p>`;
+        else content+=`<div class="rw-phase"><h3>이번 결과는 어땠나요?</h3><div class="rw-actions">${button('feedback-up','좋아요',`aria-pressed="${s.feedback[key]==='up'}" ${s.feedback[key]?'disabled':''}`)}${button('feedback-down','아쉬워요',`aria-pressed="${s.feedback[key]==='down'}" ${s.feedback[key]?'disabled':''}`)}</div><p class="rw-meta">${s.feedback[key]?'피드백을 보냈어요.':'추첨 확률에는 영향을 주지 않는 결과 피드백이에요.'}</p></div>`;
+      }
+      if(['collect','review'].includes(s.phase)) {
+      if((list.length||['collect','review'].includes(s.phase))&&scenario==='numbers'&&!s.useVotes) {
+        const shown=['collect','review'].includes(s.phase)?s.items:list;
+        content+=`<ul class="rw-number-list" aria-label="번호 후보">${shown.map(item=>{
+          const removed=s.autoExclude&&s.excluded.includes(item.id),manual=s.manual.includes(item.id);
+          const p=list.find(x=>x.id===item.id)?.probability||0;
+          return `<li>${button('toggle-manual',`${escape(item.name)}<small>${removed?'당첨 제외':manual?'직접 제외':(p*100).toFixed(1)+'%'}</small>`,`data-id="${item.id}" aria-label="${escape(item.name)} ${manual?'다시 포함':'직접 제외'}" aria-pressed="${!removed&&!manual}" ${!isHost||!['collect','review'].includes(s.phase)||removed?'disabled':''}`)}</li>`;
+        }).join('')}</ul>`;
+      } else if(list.length)content+=`<ul class="rw-list" aria-label="이번 게임 후보">${list.map(item=>{
+        const v=s.votes[key]?.[item.id]||0;
+        return `<li class="rw-item"><div class="rw-name"><strong>${escape(item.name)}</strong><small>${item.owner===selfName?'내 후보':escape(item.owner)+' 등록'}${s.phase==='review'&&s.useVotes?` · 내 표 ${v>0?'↑':v<0?'↓':'없음'}`:''}</small></div>
+          ${s.phase==='review'&&s.useVotes?`<div class="rw-votes">${button('down','↓',`data-id="${item.id}" aria-label="${escape(item.name)} 확률 낮추기" aria-pressed="${v===-1}"`)}${button('up','↑',`data-id="${item.id}" aria-label="${escape(item.name)} 확률 높이기" aria-pressed="${v===1}"`)}</div>`:''}
+          <div class="rw-percent">${(item.probability*100).toFixed(1)}%<small>${s.phase==='review'&&s.useVotes?'예상 확률':'현재 기준'}</small></div>
+          ${isHost&&['collect','review'].includes(s.phase)||s.phase==='collect'&&s.allowAdd&&item.owner===selfName?button('remove','삭제',`data-id="${item.id}" aria-label="${escape(item.name)} 삭제"`):''}</li>`;
+      }).join('')}</ul>`;
+      else content+='<p class="rw-waiting">남은 후보가 없어요. 당첨 후보를 복원하거나 새로 준비해 주세요.</p>';
+      }
+      if(s.phase==='collect'&&s.allowAdd||s.phase==='review'&&isHost)content+=`<form class="rw-add" data-add-form><label class="rw-label" style="flex:1">${isHost?'후보 추가':'내 후보 추천'}<input name="candidate" value="${escape(s.suggestionDraft)}" placeholder="${scenario==='menu'?'예: 비빔밥':'후보 이름'}" maxlength="40" required aria-label="추가할 후보 이름"></label><button class="cursor-interaction" type="submit">${isHost?'추가':'추천하기'}</button></form>`;
+      if(!isHost&&['review','locked'].includes(s.phase)&&s.suggestionDraft)content+='<p class="rw-meta">추천 접수가 끝났어요. 입력하던 내용은 보관했어요.</p>';
+      if(['collect','review'].includes(s.phase)&&(s.excluded.length||s.manual.length))content+=`<div class="rw-removed"><p>${s.autoExclude?'당첨 제외':'저장된 제외 후보'} ${s.excluded.length}개${s.excluded.length?' · '+s.items.filter(x=>s.excluded.includes(x.id)).map(x=>escape(x.name)).join(', '):''}</p>${isHost&&s.excluded.length?button('restore','제외 목록 초기화'):''}${s.manual.length?`<p>직접 제외 ${s.manual.length}개</p>`:''}</div>`;
+      if(s.phase==='collect'&&list.length===1)content+='<p class="rw-meta">마지막 1개 · 다음 단계에서 100% 확정합니다.</p>';
+      if(s.phase==='locked'&&readyMode)content+=`<div class="rw-roster" aria-label="준비 현황"><span>방장 · 준비 완료</span><span>민수 · ${s.ready.guest?'준비 완료':'확인 중'}</span><span>서연 · 준비 완료</span></div>${!isHost?button('ready',s.ready.guest?'준비 취소':'이대로 준비 완료',`aria-pressed="${s.ready.guest}"`):''}`;
+      if(s.error&&!s.panel)content+=`<p role="alert" class="rw-error">${escape(s.error)}</p>`;
+      content+='<div class="rw-foot">';
+      if(['locked','drawing','result'].includes(s.phase))content+=isHost?`<div><label class="rw-check"><input type="checkbox" data-game-option="autoExclude" ${s.autoExclude?'checked':''} ${s.phase==='drawing'?'disabled':''}>중복 없이 추첨 · 뽑힌 후보 제외</label><p class="rw-meta">${s.phase==='drawing'?'추첨이 끝나면 변경할 수 있어요.':s.autoExclude?'저장된 제외 후보는 다음 추첨에 참여하지 않아요.':'OFF로 돌리면 기존 제외 목록을 초기화하고 새 당첨 후보만 저장해요.'}</p></div>`:`<p>중복 없이 추첨: ${s.autoExclude?'사용':'사용 안 함'} <span class="rw-meta">· 방장만 변경</span></p>`;
+      if(isHost&&s.phase!=='drawing') {
+        const remaining=eligible(s);
+        const nextCount=remaining.length;
+        const label={collect:'마감',review:'마감',locked:list.length===1?'마지막 후보 확정':'룰렛 돌리기',result:'다음 게임 대기 화면으로'}[s.phase];
+        const stageAction=s.phase==='collect'?button('close-intake','접수 종료'):s.phase==='review'?button('open-intake','다시 접수받기'):s.phase==='locked'?button('open-intake','후보 추천받기'):'';
+        content+=`<div class="rw-actions">${stageAction}${primary('advance',label,['collect','review','locked'].includes(s.phase)&&!list.length||s.phase==='locked'&&readyMode&&!allReady)}</div>`;
+        if(s.phase==='collect')content+='<p class="rw-meta">접수 종료: 목록에서 계속 확인 · 마감: 대기 화면으로 이동</p>';
+        if(s.phase==='review')content+='<p class="rw-meta">마감하면 목록이 확정되고 룰렛 대기 화면으로 이동해요.</p>';
+        if(s.phase==='result'&&s.autoExclude)content+=`<p class="rw-meta">다음 추첨 후보 ${nextCount}개${s.excluded.includes(s.result.id)?' · '+escape(s.result.name)+' 제외':''}</p>`;
+        if(s.phase==='locked'&&readyMode&&!allReady)content+='<p class="rw-meta">준비 2/3 · 모두 준비하면 시작할 수 있어요.</p>';
+      }else if(!isHost)content+=`<p class="rw-waiting">${{collect:'방장이 접수를 종료하거나 목록을 마감할 수 있어요.',review:'방장이 마감하면 룰렛 대기 화면으로 이동해요.',locked:'방장이 시작하기를 기다리고 있어요.',drawing:'같은 룰렛을 함께 보고 있어요.',result:'결과를 확인하며 다음 게임 대기를 기다려 주세요.'}[s.phase]}</p>`;
+      content+='</div>';
+    }
+    const hasDialog=s.panel||s.resetConfirm;
+    app.innerHTML=`<div class="rw-room-surface" ${hasDialog?'inert':''}><div class="rw-brand">점메추 <span>함께 돌리는 룰렛</span></div><div class="rw-body">
+      <div class="rw-heading"><div><h2>${escape(s.title)}</h2><p class="rw-meta">${s.round}게임 · 3명 참여 · ${isHost?'방장 화면':'참가자 화면 · 민수'}</p></div>${button('show-panel','후보·옵션 보기')}</div>
+      ${content}${s.notice?`<p class="rw-meta" role="status">${escape(s.notice)}</p>`:''}
+      <details class="rw-history"><summary>이전 게임 기록 · ${s.history.length}개</summary><ol>${s.history.map(h=>`<li>${h.round}게임 · ${escape(h.name)} · ${(h.probability*100).toFixed(1)}% · 당시 후보 ${h.items.length}개</li>`).join('')}</ol></details>
+      <p class="rw-sr-only" data-live aria-live="polite">${names[s.phase]}${s.phase==='result'?' · '+escape(s.result.name):''}</p>
+    </div></div>${hasDialog?'<div class="rw-dialog-backdrop" aria-hidden="true"></div>':''}${panelView(s,key)}${resetDialog(s,key)}`;
+    const dialog=app.querySelector('dialog');
+    if(dialog) {
+      if(typeof dialog.show==='function')dialog.show();else dialog.setAttribute('open','');
+      const cancel=()=>{if(s.resetConfirm){s.resetConfirm=null;afterAction(app,'cancel-reset');}else{closePanel(s);afterAction(app,'close-panel');}};
+      dialog.addEventListener('cancel',event=>{event.preventDefault();cancel();});
+      dialog.addEventListener('keydown',event=>{
+        if(event.key==='Escape'){event.preventDefault();cancel();return;}
+        if(event.key!=='Tab')return;
+        const controls=Array.from(dialog.querySelectorAll('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled),a[href]'));
+        const first=controls[0],last=controls[controls.length-1];
+        if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}
+        else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}
+      });
+    }
+  }
+  function renderAll(){apps.forEach(render);phaseControl.value=states.host.phase;}
+  function afterAction(app,action,id) {
+    syncRoom(app.dataset.flow);renderAll();persist();
+    scheduleResult();
+    const target=Array.from(app.querySelectorAll('[data-action]')).find(el=>el.dataset.action===action&&el.dataset.id===id);
+    const current=states[app.dataset.flow];
+    if(current.resetConfirm)app.querySelector('[data-action="cancel-reset"]')?.focus();
+    else if(current.panel)app.querySelector('dialog button')?.focus();
+    else if(action==='cancel-reset')app.querySelector(`[data-action="${current.resetReturnFocus}"]`)?.focus();
+    else if(action==='open-intake')app.querySelector('[name="candidate"]')?.focus();
+    else if(!states[app.dataset.flow].panel&&action==='close-intake')app.querySelector('[data-action="advance"]')?.focus();
+    else if(!states[app.dataset.flow].panel&&['close-panel','cancel-draft','discard-edit','apply-draft'].includes(action))app.querySelector('[data-action="show-panel"]')?.focus();
+    else if(target&&!target.disabled&&!states[app.dataset.flow].panel)target.focus();
+  }
+  function scheduleResult() {
+    const s=states.host,round=s.round,winner=s.result?.id,drawId=s.drawContext?.id;
+    if(s.phase!=='drawing'){if(resultTimer)clearTimeout(resultTimer);resultTimer=null;resultToken=null;return;}
+    const token=drawId||`${round}:${winner}`;
+    if(resultTimer&&resultToken===token)return;
+    if(resultTimer)clearTimeout(resultTimer);
+    resultToken=token;
+    resultTimer=setTimeout(()=>{
+      resultTimer=null;resultToken=null;
+      if(states.host.phase==='drawing'&&states.host.round===round&&states.host.result?.id===winner&&states.host.drawContext?.id===drawId){states.host.phase='result';syncRoom('host');renderAll();}
+    },1900);
+  }
+  apps.forEach(app=>{
+    app.addEventListener('click',event=>{
+      const control=event.target.closest('[data-action]');
+      if(!control||control.disabled)return;
+      const s=states[app.dataset.flow],key=app.dataset.flow,role=app.dataset.role,action=control.dataset.action,id=control.dataset.id;
+      const admin=['settings','cancel-draft','review-draft','edit-back','apply-draft','advance','open-intake','close-intake','restore','confirm-reset','toggle-manual'];
+      if(admin.includes(action)&&role!=='host')return;
+      if(action==='show-panel'){s.panel=true;s.error='';}
+      else if(action==='close-panel'||action==='cancel-draft')closePanel(s);
+      else if(action==='continue-edit'&&s.edit)s.edit.discard=false;
+      else if(action==='discard-edit'){s.panel=false;s.edit=null;s.error='';}
+      else if(action==='cancel-reset')s.resetConfirm=null;
+      else if(action==='confirm-reset') {
+        const confirmation=s.resetConfirm;
+        if(!confirmation)return;
+        s.resetConfirm=null;
+        if(confirmation.signature!==resetSignature(s)){s.error='게임 조건이 바뀌었어요. 목록을 확인한 뒤 다시 진행해 주세요.';}
+        else if(confirmation.kind==='draw')advance(s,key,true);
+        else {
+          s.excluded=[];if(s.phase==='locked')s.locked=clone(probabilities(s));
+          s.notice='제외 목록을 초기화했어요. 직접 제외와 지난 게임 기록은 유지돼요.';
+        }
+      }
+      else if(action==='advance')advance(s,key);
+      else if(action==='open-intake'&&['locked','review'].includes(s.phase)){setIntake(s,true);s.panel=false;}
+      else if(action==='close-intake'&&s.phase==='collect'){setIntake(s,false);s.panel=false;}
+      else if(['up','down'].includes(action)&&s.phase==='review') {
+        if(!s.useVotes)return;
+        const vote=action==='up'?1:-1,ballot=s.votes[key]||(s.votes[key]={});ballot[id]=ballot[id]===vote?0:vote;
+      } else if(action==='ready'&&s.phase==='locked'&&readyMode&&role==='guest')s.ready.guest=!s.ready.guest;
+      else if(['feedback-up','feedback-down'].includes(action)&&s.phase==='result'&&role==='guest'&&!s.feedback[key])s.feedback[key]=action==='feedback-up'?'up':'down';
+      else if(action==='remove'&&['collect','review'].includes(s.phase)) {
+        const item=s.items.find(x=>x.id===id);if(!item||role!=='host'&&(!s.allowAdd||s.phase!=='collect'||item.owner!=='민수'))return;
+        s.items=s.items.filter(x=>x.id!==id);candidateChanged(s);
+      } else if(action==='settings'&&['collect','review','locked','result'].includes(s.phase))resetDraft(s);
+      else if(action==='review-draft'&&s.edit) {
+        const names=s.edit.names.split('\n').map(x=>x.trim()).filter(Boolean);
+        if(!s.edit.title.trim()||names.length<1||names.length>20||names.some(x=>x.length>40))s.error='방 이름과 후보 1~20개를 입력해 주세요. 후보 이름은 40자까지예요.';
+        else {s.edit.parsed=names;s.edit.step='confirm';s.error='';}
+      } else if(action==='edit-back'&&s.edit)s.edit.step='form';
+      else if(action==='apply-draft'&&s.edit?.step==='confirm') {
+        const d=clone(s.edit),listChanged=d.parsed.join('\n')!==s.items.map(x=>x.name).join('\n');
+        const conditionsChanged=listChanged||['autoExclude','useVotes'].some(k=>d[k]!==s[k]);
+        const clearVotes=listChanged||d.useVotes!==s.useVotes;
+        if(conditionsChanged&&s.result){archive(s);s.round++;s.phase='locked';}
+        const oldItems=[...s.items];
+        if(listChanged)s.items=d.parsed.map(name=>{const index=oldItems.findIndex(item=>item.name===name);return index<0?{id:`c${++serial}`,name,owner:'방장'}:oldItems.splice(index,1)[0];});
+        s.title=d.title.trim();s.autoExclude=d.autoExclude;s.useVotes=d.useVotes;
+        const ids=new Set(s.items.map(item=>item.id));s.excluded=s.excluded.filter(id=>ids.has(id));s.manual=s.manual.filter(id=>ids.has(id));
+        if(clearVotes)s.votes={};
+        if(conditionsChanged){s.ready={host:true,guest:!readyMode,other:true};if(s.phase==='locked')s.locked=clone(probabilities(s));}
+        s.edit=null;s.panel=false;s.reopen=false;s.error='';s.notice='변경을 적용했어요. 같은 화면에서 계속할 수 있어요.';
+      } else if(action==='restore'&&['collect','review','locked','result'].includes(s.phase)) {
+        if(!s.excluded.length)return;
+        s.panel=false;s.error='';s.resetReturnFocus='restore';s.resetConfirm={kind:'restore',signature:resetSignature(s)};
+      } else if(action==='toggle-manual'&&['collect','review'].includes(s.phase)&&(!s.autoExclude||!s.excluded.includes(id))) {
+        s.manual=s.manual.includes(id)?s.manual.filter(x=>x!==id):[...s.manual,id];
+        candidateChanged(s);
+      }
+      afterAction(app,action,id);
+    });
+    app.addEventListener('submit',event=>{
+      if(!event.target.matches('[data-add-form]'))return;
+      event.preventDefault();const s=states[app.dataset.flow],role=app.dataset.role;
+      if(!(s.phase==='collect'&&s.allowAdd||s.phase==='review'&&role==='host')) {
+        s.error='추천 접수가 끝났어요. 입력한 내용은 보관했어요.';render(app);return;
+      }
+      const field=event.target.querySelector('input'),name=field.value.trim();
+      if(!name)return;
+      if(s.items.length>=20){s.error='이 미리보기에서는 후보를 20개까지 등록할 수 있어요.';render(app);return;}
+      s.items.push({id:`c${++serial}`,name,owner:role==='host'?'방장':'민수'});s.error='';s.suggestionDraft='';candidateChanged(s);
+      syncRoom(app.dataset.flow);renderAll();app.querySelector('[name="candidate"]')?.focus();persist();
+    });
+    app.addEventListener('input',event=>{
+      const field=event.target,key=field.dataset.draft,s=states[app.dataset.flow];
+      if(field.name==='candidate'){s.suggestionDraft=field.value;return;}
+      if(!key||!s.edit)return;s.edit[key]=field.type==='checkbox'?field.checked:field.value;
+      const review=app.querySelector('[data-action="review-draft"]');if(review)review.disabled=!draftChanged(s);
+    });
+    app.addEventListener('change',event=>{
+      const field=event.target,s=states[app.dataset.flow];
+      if(field.dataset.gameOption!=='autoExclude')return;
+      if(app.dataset.role!=='host'||!['locked','result'].includes(s.phase))return;
+      s.autoExclude=field.checked;
+      if(s.phase==='locked')s.locked=clone(probabilities(s));
+      s.notice=`중복 없이 추첨을 ${s.autoExclude?'켰어요':'껐어요'}. 다음 추첨부터 적용해요.`;
+      afterAction(app,'quick-option');
+    });
+  });
+  scenarioControl.addEventListener('change',()=>{
+    scenario=scenarioControl.value;resetRoom();renderAll();persist();
+  });
+  phaseControl.addEventListener('change',()=>{
+    const phase=phaseControl.value,s=states.host;
+    apps.forEach(app=>{const view=states[app.dataset.flow];view.edit=null;view.panel=false;view.resetConfirm=null;view.reopen=false;view.error='';});
+    if(s.phase==='result'&&phase!=='result'){archive(s);s.round++;}
+    if(['drawing','result'].includes(phase)) {
+      s.allowAdd=false;s.locked=clone(probabilities(s));s.phase='locked';s.ready={host:true,guest:true,other:true};
+      advance(s,'host');if(phase==='result'&&s.result)s.phase='result';
+    }else {
+      s.phase=phase;s.allowAdd=phase==='collect';s.result=null;
+      s.locked=phase==='locked'?clone(probabilities(s)):null;
+      s.ready={host:true,guest:!readyMode,other:true};
+    }
+    syncRoom('host');renderAll();scheduleResult();persist();
+  });
+  modeControl.addEventListener('change',()=>{
+    readyMode=modeControl.value==='ready';
+    if(states.host.phase==='locked')states.host.ready={host:true,guest:!readyMode,other:true};
+    syncRoom('host');renderAll();persist();
+  });
+  root.querySelector('#rw-next-preview').addEventListener('click',()=>{
+    const s=states.host;
+    apps.forEach(app=>{const view=states[app.dataset.flow];view.edit=null;view.reopen=false;view.panel=false;view.resetConfirm=null;});
+    if(s.phase==='locked')s.ready={host:true,guest:true,other:true};
+    advance(s,'host');syncRoom('host');renderAll();scheduleResult();persist();
+  });
+  resetRoom();
+  renderAll();
+  restore(window.openai?.widgetState);
+  window.addEventListener('openai:set_globals',event=>{
+    if(event.detail?.globals?.widgetState)restore(event.detail.globals.widgetState);
+  });
+  if(globalThis.Tweak) {
+    apps.forEach(app=>{
+      const design={density:18};
+      const tweak=new Tweak({container:app,onChange:()=>{app.querySelector('.rw-body').style.gap=`${design.density}px`;}});
+      tweak.addSlider(design,'density',{label:'영역 사이 간격',min:12,max:24,step:2,unit:'px'});
+    });
+  }
+})();
+</script>
