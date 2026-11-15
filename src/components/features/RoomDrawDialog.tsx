@@ -144,6 +144,7 @@ export default function RoomDrawDialog({
 	returnFocusRef,
 	fallbackFocusRef,
 	chatInputRef,
+	onChatFocus,
 	onClose,
 }: {
 	draw: RoomDraw;
@@ -151,6 +152,7 @@ export default function RoomDrawDialog({
 	returnFocusRef: RefObject<HTMLButtonElement | null>;
 	fallbackFocusRef: RefObject<HTMLHeadingElement | null>;
 	chatInputRef: RefObject<HTMLTextAreaElement | null>;
+	onChatFocus?: () => void;
 	onClose: () => void;
 }) {
 	const [modal, setModal] = useState(
@@ -312,7 +314,9 @@ export default function RoomDrawDialog({
 								<button
 									type="button"
 									className="room-outline-button"
-									onClick={() => chatInputRef.current?.focus()}
+									onClick={() =>
+										onChatFocus ? onChatFocus() : chatInputRef.current?.focus()
+									}
 								>
 									채팅으로 이동
 								</button>
