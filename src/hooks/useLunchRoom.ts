@@ -61,7 +61,11 @@ export function useLunchRoom(
 	const [entryRequest, setEntryRequest] = useState<{
 		roomId: string;
 		name: string;
+		automatic: boolean;
 	} | null>(null);
+	const [entryResolvedRoomId, setEntryResolvedRoomId] = useState<string | null>(
+		null,
+	);
 	const [enteredRoomId, setEnteredRoomId] = useState<string | null>(null);
 	const entry =
 		currentScope && entryRequest?.roomId === roomId ? entryRequest : null;
@@ -124,7 +128,9 @@ export function useLunchRoom(
 		}
 		if (!requireEntry) return;
 		const preparedName = consumeLunchRoomEntry(roomId);
-		if (preparedName) setEntryRequest({ roomId, name: preparedName });
+		if (preparedName)
+			setEntryRequest({ roomId, name: preparedName, automatic: true });
+		setEntryResolvedRoomId(roomId);
 	}, [roomId, requireEntry]);
 
 	useEffect(() => {
@@ -686,7 +692,7 @@ export function useLunchRoom(
 			return false;
 		}
 		setErrorState(null);
-		setEntryRequest({ roomId, name });
+		setEntryRequest({ roomId, name, automatic: false });
 		return true;
 	}
 	function sendChat(text: string) {
@@ -821,6 +827,13 @@ export function useLunchRoom(
 	}
 
 	return {
+		entryLoading:
+			requireEntry &&
+			(!currentScope ||
+				entryResolvedRoomId !== roomId ||
+				Boolean(entry?.automatic)) &&
+			enteredRoomId !== roomId &&
+			connection !== "closed",
 		waitingForEntry:
 			requireEntry &&
 			(!currentScope || enteredRoomId !== roomId) &&

@@ -18,16 +18,20 @@ import "./room-entry.css";
 
 export default function RoomEntryGate({
 	roomId,
+	loading = false,
 	pending,
 	error,
 	onEnter,
 	onClearError,
+	onReconnect,
 }: {
 	roomId: string;
+	loading?: boolean;
 	pending: boolean;
 	error: string;
 	onEnter: (name: string) => boolean;
 	onClearError: () => void;
+	onReconnect?: () => void;
 }) {
 	const id = useId();
 	const inputRef = useRef<HTMLInputElement>(null);
@@ -39,7 +43,7 @@ export default function RoomEntryGate({
 		roomId,
 		name,
 		composing,
-		enabled: !pending,
+		enabled: !loading && !pending,
 		rejected: Boolean(error),
 	});
 	const canEnter = !pending && availability.status === "available";
@@ -56,11 +60,48 @@ export default function RoomEntryGate({
 
 	useEffect(() => {
 		setName(clampLunchRoomNickname(readLunchRoomName() ?? ""));
-		inputRef.current?.focus();
 	}, []);
 	useEffect(() => {
-		if (error && !pending) inputRef.current?.focus();
-	}, [error, pending]);
+		if (!loading && !pending) inputRef.current?.focus();
+	}, [loading, pending]);
+	useEffect(() => {
+		if (error && !loading && !pending) inputRef.current?.focus();
+	}, [loading, error, pending]);
+
+	if (loading)
+		return (
+			<section
+				className="room-entry-card room-entry-loading"
+				aria-labelledby={`${id}-loading-title`}
+			>
+				<div className="room-entry-icon" aria-hidden="true">
+					<LoaderCircle className="room-entry-spinner" size={26} />
+				</div>
+				<h1 id={`${id}-loading-title`}>입장 준비 중…</h1>
+				<output className="sr-only" aria-live="polite">
+					방 연결과 참가 정보를 확인하고 있습니다.
+				</output>
+				{error && (
+					<>
+						<p className="room-entry-error" role="alert">
+							{error}
+						</p>
+						{onReconnect && (
+							<button
+								type="button"
+								className="room-entry-submit"
+								onClick={onReconnect}
+							>
+								다시 연결
+							</button>
+						)}
+					</>
+				)}
+				<a className="room-entry-back" href="/">
+					홈으로 돌아가기
+				</a>
+			</section>
+		);
 
 	return (
 		<section className="room-entry-card" aria-labelledby={`${id}-title`}>

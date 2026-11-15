@@ -43,6 +43,7 @@ type PreviewOptions = {
 	isHost: boolean;
 	candidateCount?: number;
 	voteDelayMs?: number;
+	entryLoading?: boolean;
 };
 type PreviewState = Pick<
 	RoomState,
@@ -241,9 +242,12 @@ export function RoomPageFixtureProvider({
 	}
 	const room: RoomState = {
 		...frame,
-		waitingForEntry: false,
-		entryPending: false,
-		self: { id: selfId, isHost: options.isHost },
+		snapshot: options.entryLoading ? null : frame.snapshot,
+		connection: options.entryLoading ? "connecting" : frame.connection,
+		waitingForEntry: options.entryLoading ?? false,
+		entryPending: options.entryLoading ?? false,
+		entryLoading: options.entryLoading ?? false,
+		self: options.entryLoading ? null : { id: selfId, isHost: options.isHost },
 		clockOffset: 0,
 		serverNow: () => Date.now(),
 		enter: () => false,

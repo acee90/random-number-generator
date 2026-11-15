@@ -39,6 +39,12 @@
 	font-weight: 850;
 	letter-spacing: -0.05em;
 }
+.room-entry-loading {
+	min-block-size: 240px;
+}
+.room-entry-loading > .room-entry-error {
+	margin-block-start: 20px;
+}
 
 .room-entry-description {
 	margin: 10px 0 28px;

@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from "@testing-library/react";
+import { StrictMode, useLayoutEffect } from "react";
+import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useLunchRoom } from "../src/hooks/useLunchRoom";
 import { getWheelRotation, sampleLunchPlaces } from "../src/lib/lunch";
@@ -354,18 +356,214 @@ afterEach(() => {
 });
 
 describe("explicit lunch room admission", () => {
+	it("renders the same initial loading state on the server and first client commit without consuming admission during render", () => {
+		mocks.consumeEntry.mockReturnValueOnce("새방장");
+		type AdmissionState = {
+			entryLoading: boolean;
+			entryPending: boolean;
+			waitingForEntry: boolean;
+		};
+		let serverState: AdmissionState | undefined;
+		function ServerAdmission() {
+			const room = useLunchRoom(roomId, false, { requireEntry: true });
+			serverState = {
+				entryLoading: room.entryLoading,
+				entryPending: room.entryPending,
+				waitingForEntry: room.waitingForEntry,
+			};
+			return (
+				<output>{room.entryLoading ? "입장 준비 중" : "닉네임 입력"}</output>
+			);
+		}
+		try {
+			vi.stubGlobal("window", undefined);
+			expect(renderToString(<ServerAdmission />)).toContain("입장 준비 중");
+		} finally {
+			vi.unstubAllGlobals();
+		}
+		expect(serverState).toEqual({
+			entryLoading: true,
+			entryPending: false,
+			waitingForEntry: true,
+		});
+		expect(mocks.consumeEntry).not.toHaveBeenCalled();
+		expect(mocks.readName).not.toHaveBeenCalled();
+		expect(mocks.readHost).not.toHaveBeenCalled();
+		expect(mocks.sockets).toHaveLength(0);
+		const commits: AdmissionState[] = [];
+		const { result } = renderHook(() => {
+			const room = useLunchRoom(roomId, false, { requireEntry: true });
+			useLayoutEffect(() => {
+				commits.push({
+					entryLoading: room.entryLoading,
+					entryPending: room.entryPending,
+					waitingForEntry: room.waitingForEntry,
+				});
+			});
+			return room;
+		});
+		expect(commits[0]).toEqual(serverState);
+		expect(commits.every((state) => state.entryLoading)).toBe(true);
+		expect(result.current.entryPending).toBe(true);
+	});
+
+	it("keeps creator admission loading through connection and unrelated snapshots until its participant is confirmed", () => {
+		mocks.consumeEntry.mockReturnValueOnce("새방장");
+		const loadingCommits: boolean[] = [];
+		const { result } = renderHook(() => {
+			const room = useLunchRoom(roomId, false, { requireEntry: true });
+			useLayoutEffect(() => {
+				loadingCommits.push(room.entryLoading);
+			});
+			return room;
+		});
+		expect(result.current.entryLoading).toBe(true);
+		opened();
+		expect(result.current.self).toBeNull();
+		receive({ type: "snapshot", snapshot: snapshot(), serverTime: Date.now() });
+		expect(result.current.entryLoading).toBe(true);
+		expect(loadingCommits.every(Boolean)).toBe(true);
+		expect(mocks.saveName).not.toHaveBeenCalled();
+		receive({
+			type: "snapshot",
+			snapshot: snapshot({
+				participants: [{ id: "host-client", name: "새방장", isHost: true }],
+			}),
+			serverTime: Date.now(),
+			self: { id: "host-client", isHost: true },
+		});
+		expect(result.current.entryLoading).toBe(false);
+		expect(result.current.waitingForEntry).toBe(false);
+		expect(result.current.entryPending).toBe(false);
+		expect(result.current.self?.isHost).toBe(true);
+		act(() => {
+			socket().readyState = 3;
+			socket().dispatchEvent(new Event("close"));
+		});
+		expect(result.current.connection).toBe("reconnecting");
+		expect(result.current.entryLoading).toBe(false);
+	});
+
+	it("keeps a one-use creation intent active through StrictMode effect replay", () => {
+		mocks.consumeEntry.mockReturnValueOnce("Strict 방장");
+		const loadingCommits: boolean[] = [];
+		const { result } = renderHook(
+			() => {
+				const room = useLunchRoom(roomId, false, { requireEntry: true });
+				useLayoutEffect(() => {
+					loadingCommits.push(room.entryLoading);
+				});
+				return room;
+			},
+			{ wrapper: StrictMode },
+		);
+		expect(result.current.entryLoading).toBe(true);
+		expect(result.current.entryPending).toBe(true);
+		expect(loadingCommits.every(Boolean)).toBe(true);
+		opened();
+		expect(sent("join")[0]).toEqual({
+			type: "join",
+			name: "Strict 방장",
+			updateName: true,
+			hostToken: token,
+		});
+		receive({
+			type: "snapshot",
+			snapshot: snapshot({
+				participants: [
+					{ id: "host-client", name: "Strict 방장", isHost: true },
+				],
+			}),
+			serverTime: Date.now(),
+			self: { id: "host-client", isHost: true },
+		});
+		expect(result.current.entryLoading).toBe(false);
+		expect(result.current.waitingForEntry).toBe(false);
+	});
+
+	it.each([
+		"NICKNAME_TAKEN",
+		"INVALID_NICKNAME",
+	])("returns rejected automatic admission (%s) to manual entry and allows an explicit retry", (code) => {
+		mocks.consumeEntry.mockReturnValueOnce("새방장");
+		const { result } = renderHook(() =>
+			useLunchRoom(roomId, false, { requireEntry: true }),
+		);
+		opened();
+		receive({ type: "error", code, message: "다른 닉네임을 입력해 주세요." });
+		expect(result.current.entryLoading).toBe(false);
+		expect(result.current.waitingForEntry).toBe(true);
+		expect(result.current.entryPending).toBe(false);
+		expect(result.current.error).toBe("다른 닉네임을 입력해 주세요.");
+		expect(result.current.self).toBeNull();
+		expect(mocks.saveName).not.toHaveBeenCalled();
+		const rejectedSocket = socket();
+		expect(rejectedSocket.close).toHaveBeenCalled();
+		act(() => vi.advanceTimersByTime(60000));
+		expect(socket()).toBe(rejectedSocket);
+		expect(rejectedSocket.reconnect).not.toHaveBeenCalled();
+		act(() => expect(result.current.enter("다른 방장")).toBe(true));
+		expect(result.current.entryLoading).toBe(false);
+		expect(result.current.entryPending).toBe(true);
+		opened();
+		expect(sent("join")[0]).toEqual({
+			type: "join",
+			name: "다른 방장",
+			updateName: true,
+			hostToken: token,
+		});
+	});
+
+	it("clears pending automatic admission when switching rooms and does not reuse it on return", () => {
+		const otherId = "12345678-abcd-4abc-8abc-123456789012";
+		mocks.consumeEntry.mockReturnValueOnce("새방장");
+		const commits: { roomId: string; entryLoading: boolean }[] = [];
+		const view = renderHook(
+			({ id }) => {
+				const room = useLunchRoom(id, false, { requireEntry: true });
+				useLayoutEffect(() => {
+					commits.push({ roomId: id, entryLoading: room.entryLoading });
+				});
+				return room;
+			},
+			{ initialProps: { id: roomId } },
+		);
+		expect(view.result.current.entryLoading).toBe(true);
+		const creatorSocket = socket();
+		view.rerender({ id: otherId });
+		expect(
+			commits.find((state) => state.roomId === otherId)?.entryLoading,
+		).toBe(true);
+		expect(view.result.current.entryLoading).toBe(false);
+		expect(view.result.current.waitingForEntry).toBe(true);
+		expect(view.result.current.entryPending).toBe(false);
+		expect(creatorSocket.close).toHaveBeenCalled();
+		const connectionCount = mocks.sockets.length;
+		act(() => expect(view.result.current.enter("다른 방 참가자")).toBe(true));
+		expect(view.result.current.entryLoading).toBe(false);
+		expect(view.result.current.entryPending).toBe(true);
+		expect(mocks.sockets).toHaveLength(connectionCount + 1);
+		view.rerender({ id: roomId });
+		expect(view.result.current.entryLoading).toBe(false);
+		expect(view.result.current.waitingForEntry).toBe(true);
+		expect(view.result.current.entryPending).toBe(false);
+		expect(mocks.sockets).toHaveLength(connectionCount + 1);
+	});
+
 	it("does not connect or save a nickname before explicit entry, including a saved host through an old invite", () => {
 		const { result } = renderHook(() =>
 			useLunchRoom(roomId, true, { requireEntry: true }),
 		);
 		expect(result.current.waitingForEntry).toBe(true);
 		expect(result.current.entryPending).toBe(false);
+		expect(result.current.entryLoading).toBe(false);
 		act(() => vi.advanceTimersByTime(60000));
 		expect(mocks.sockets).toHaveLength(0);
 		expect(mocks.readHost).not.toHaveBeenCalled();
 		expect(mocks.saveName).not.toHaveBeenCalled();
 		act(() => expect(result.current.enter("  Ｅｒｉｃ  ")).toBe(true));
 		expect(result.current.entryPending).toBe(true);
+		expect(result.current.entryLoading).toBe(false);
 		opened();
 		expect(sent("join")).toEqual([
 			{ type: "join", name: "Eric", updateName: true, hostToken: token },

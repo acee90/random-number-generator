@@ -684,7 +684,10 @@ export default function LunchRoomPage({
 										? "방장이 추첨을 시작하면 함께 룰렛을 봅니다."
 										: "방장이 오프라인입니다. 방장이 돌아오면 추첨을 시작할 수 있습니다.";
 
-	if (!closed && (room.waitingForEntry || room.entryPending))
+	if (
+		!closed &&
+		(room.entryLoading || room.waitingForEntry || room.entryPending)
+	)
 		return (
 			<div className="random-lab lunch-room">
 				<SiteHeader active="lunch" />
@@ -692,10 +695,12 @@ export default function LunchRoomPage({
 					<RoomEntryGate
 						key={roomId}
 						roomId={roomId}
+						loading={room.entryLoading}
 						pending={room.entryPending}
 						error={room.error}
 						onEnter={room.enter}
 						onClearError={room.clearError}
+						onReconnect={room.reconnect}
 					/>
 				</main>
 			</div>
