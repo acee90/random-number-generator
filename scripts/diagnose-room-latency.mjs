@@ -8,6 +8,7 @@ const defaults = {
 	origin: "https://jeommechu.dev",
 	samples: 5,
 	timeoutMs: 20_000,
+	idleMs: 0,
 };
 const runTimeoutMs = 180_000;
 const hostName = "진단방장";
@@ -20,6 +21,7 @@ const publicCodes = new Set([
 	"INVALID_ORIGIN",
 	"INVALID_SAMPLES",
 	"INVALID_TIMEOUT",
+	"INVALID_IDLE",
 	"RUN_TIMEOUT",
 	"INTERRUPTED",
 	"HTTP_REQUEST_FAILED",
@@ -50,16 +52,17 @@ function options(args) {
 		const arg = args[index];
 		if (arg === "--help" || arg === "-h") {
 			console.log(
-				"Usage: node scripts/diagnose-room-latency.mjs [--origin http(s)://host] [--samples 5] [--timeout-ms 20000]\n" +
+				"Usage: node scripts/diagnose-room-latency.mjs [--origin http(s)://host] [--samples 5] [--timeout-ms 20000] [--idle-ms 20000]\n" +
 					"Creates one isolated room, checks nicknames, opens two sockets, measures ping and chat, then closes all sockets. No draws.\n" +
 					"Samples: 1-10. Per-request timeout: 1000-30000ms. Entire run: at most 180 seconds plus socket cleanup.\n" +
+					"Optional idle: 15000-30000ms before a separate post-idle HTTP check and before opening sockets; default 0 (disabled). Idle does not prove hibernation.\n" +
 					"Origin must have no credentials, path, query or fragment. Existing room IDs and credentials are not accepted.\n" +
 					"JSON output excludes room IDs, names, message contents, IPs, URLs and credentials. Test data expires under the room TTL.",
 			);
 			return null;
 		}
 		ensure(
-			["--origin", "--samples", "--timeout-ms"].includes(arg) &&
+			["--origin", "--samples", "--timeout-ms", "--idle-ms"].includes(arg) &&
 				!seen.has(arg) &&
 				index + 1 < args.length,
 			"INVALID_CLI_ARGUMENT",
@@ -68,6 +71,7 @@ function options(args) {
 		const value = args[++index];
 		if (arg === "--origin") config.origin = value;
 		else if (arg === "--samples") config.samples = Number(value);
+		else if (arg === "--idle-ms") config.idleMs = Number(value);
 		else config.timeoutMs = Number(value);
 	}
 	let url;
@@ -97,6 +101,12 @@ function options(args) {
 			config.timeoutMs <= 30_000,
 		"INVALID_TIMEOUT",
 	);
+	ensure(
+		Number.isInteger(config.idleMs) &&
+			(config.idleMs === 0 ||
+				(config.idleMs >= 15_000 && config.idleMs <= 30_000)),
+		"INVALID_IDLE",
+	);
 	return { ...config, origin: url.origin };
 }
 function distribution(values) {
@@ -120,6 +130,15 @@ function metadata(headers) {
 	const ray = headers.get("cf-ray");
 	const result = {};
 	if (ray && /^[a-f0-9]{16,32}-[A-Z]{3}$/i.test(ray)) result.cfRay = ray;
+	const placement = headers.get("x-room-worker-placement");
+	if (placement && /^(local|remote)-[A-Z]{3}$/.test(placement))
+		result.workerPlacement = placement;
+	const requestColo = headers.get("x-room-request-colo");
+	if (requestColo && /^[A-Z]{3}$/.test(requestColo))
+		result.requestColo = requestColo;
+	const locationHint = headers.get("x-room-location-hint");
+	if (locationHint && /^(apac-ne|default)$/.test(locationHint))
+		result.roomLocationHint = locationHint;
 	const timing = headers.get("server-timing") ?? "";
 	const durations = {};
 	for (const item of timing.split(",")) {
@@ -145,6 +164,8 @@ async function run(config) {
 		create: [],
 		baseline: [],
 		nickname: [],
+		baselineAfterIdle: [],
+		nicknameAfterIdle: [],
 		socketOpen: [],
 		joinAck: [],
 		ping: [],
@@ -152,6 +173,7 @@ async function run(config) {
 		chatPeerEcho: [],
 	};
 	const serverTimings = { nickname: [], room: [], worker: [] };
+	const afterIdleServerTimings = { nickname: [], room: [], worker: [] };
 	let stage = "trace";
 	const deadline = setTimeout(
 		() => controller.abort(fault("RUN_TIMEOUT")),
@@ -164,7 +186,7 @@ async function run(config) {
 		timings[metric].push(ms);
 		emit("sample", { metric, durationMs: Math.round(ms * 10) / 10, ...extra });
 	};
-	async function http(path, body, metric) {
+	async function http(path, body, metric, extra = {}) {
 		controller.signal.throwIfAborted();
 		const start = performance.now();
 		try {
@@ -204,12 +226,19 @@ async function run(config) {
 			const text = Buffer.concat(chunks).toString("utf8");
 			if (metric)
 				record(metric, performance.now() - start, {
+					...extra,
 					status: response.status,
 					...meta,
 				});
-			if (metric === "nickname" && meta.serverTimingMs)
+			const timingTarget =
+				metric === "nickname"
+					? serverTimings
+					: metric === "nicknameAfterIdle"
+						? afterIdleServerTimings
+						: null;
+			if (timingTarget && meta.serverTimingMs)
 				for (const [name, ms] of Object.entries(meta.serverTimingMs))
-					serverTimings[name].push(ms);
+					timingTarget[name].push(ms);
 			return { status: response.status, text, meta };
 		} catch (error) {
 			if (controller.signal.aborted) throw controller.signal.reason;
@@ -422,15 +451,13 @@ async function run(config) {
 			"INVALID_CREATE_RESPONSE",
 		);
 		const guestProof = { guestToken: `diagnostic-${randomUUID()}` };
-		for (let index = 0; index < config.samples; index++) {
-			stage = "baseline";
-			const baseline = await http("/api/lunch/rooms", undefined, "baseline");
-			ensure(baseline.status === 405, "BASELINE_FAILED");
-			stage = "nickname";
+		async function checkNickname(metric, phase) {
+			stage = metric;
 			const result = await http(
 				`/api/lunch/rooms/${created.roomId}/nickname-availability`,
 				{ name: guestName, ...guestProof },
-				"nickname",
+				metric,
+				{ phase },
 			);
 			ensure(result.status === 200, "NICKNAME_CHECK_FAILED");
 			const available = json(result);
@@ -438,6 +465,33 @@ async function run(config) {
 				available.name === guestName && available.available === true,
 				"NICKNAME_CHECK_FAILED",
 			);
+		}
+		for (let index = 0; index < config.samples; index++) {
+			const phase = index === 0 ? "post-create" : "warm";
+			stage = "baseline";
+			const baseline = await http("/api/lunch/rooms", undefined, "baseline", {
+				phase,
+			});
+			ensure(baseline.status === 405, "BASELINE_FAILED");
+			await checkNickname("nickname", phase);
+		}
+		if (config.idleMs) {
+			stage = "idle";
+			const idleStart = performance.now();
+			emit("idle_start", { requestedMs: config.idleMs });
+			await pause(config.idleMs);
+			emit("idle_complete", {
+				elapsedMs: Math.round(performance.now() - idleStart),
+			});
+			stage = "baselineAfterIdle";
+			const baseline = await http(
+				"/api/lunch/rooms",
+				undefined,
+				"baselineAfterIdle",
+				{ phase: "after-idle" },
+			);
+			ensure(baseline.status === 405, "BASELINE_FAILED");
+			await checkNickname("nicknameAfterIdle", "after-idle");
 		}
 		stage = "host_join";
 		const host = await join(
@@ -484,6 +538,7 @@ async function run(config) {
 		}
 		emit("summary", {
 			elapsedMs: Math.round(performance.now() - started),
+			idleMs: config.idleMs,
 			timings: Object.fromEntries(
 				Object.entries(timings).map(([name, values]) => [
 					name,
@@ -496,7 +551,13 @@ async function run(config) {
 					distribution(values),
 				]),
 			),
-			note: "Single network and one isolated room; small samples are not a load test or SLA. HTTP includes transport and decoding; nickname excludes the UI debounce. Server timing scopes overlap and are not additive. CF-Ray/colo identifies request processing, not Durable Object location. Chat echo measures server acknowledgement, not optimistic UI rendering.",
+			afterIdleServerTimingMs: Object.fromEntries(
+				Object.entries(afterIdleServerTimings).map(([name, values]) => [
+					name,
+					distribution(values),
+				]),
+			),
+			note: "Single network and one isolated room; small samples are not a load test or SLA. HTTP includes transport and decoding; nickname excludes the UI debounce. Server timing scopes overlap and are not additive. CF-Ray/request colo identifies request processing, workerPlacement identifies placed Worker processing, and roomLocationHint is configuration only; none proves Durable Object location. Post-create and after-idle phases do not prove a cold start or hibernation. Chat echo measures server acknowledgement, not optimistic UI rendering.",
 		});
 	} catch (error) {
 		emit("failed", {

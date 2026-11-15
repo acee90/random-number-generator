@@ -1,11 +1,17 @@
 import handler from "@tanstack/react-start/server-entry";
 import { handleLunchRoomRequest } from "./server/lunchRoomHttp";
+import {
+	type DiagnosticEnvironment,
+	roomPlacementDiagnostics,
+} from "./server/roomPlacementDiagnostics";
 
 export { LunchRoomServer } from "./rooms/LunchRoomServer";
 
 export default {
-	async fetch(request, env) {
+	async fetch(request, env: Env & DiagnosticEnvironment) {
 		const response = await handleLunchRoomRequest(request, env);
-		return response ?? handler.fetch(request);
+		return response
+			? roomPlacementDiagnostics(request, response, env)
+			: handler.fetch(request);
 	},
 } satisfies ExportedHandler<Env>;

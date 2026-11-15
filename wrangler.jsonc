@@ -24,6 +24,15 @@
 		{ "tag": "lunch-rooms-v1", "new_sqlite_classes": ["LunchRoomServer"] }
 	],
 	"previews": {
+		"placement": { "mode": "off" },
+		"vars": {
+			"LUNCH_ROOM_DIAGNOSTICS": "enabled"
+		},
+		"observability": {
+			"enabled": true,
+			"redact_query_string": true,
+			"traces": { "enabled": true, "head_sampling_rate": 1 }
+		},
 		"durable_objects": {
 			"bindings": [{ "name": "LunchRooms", "class_name": "LunchRoomServer" }]
 		},
