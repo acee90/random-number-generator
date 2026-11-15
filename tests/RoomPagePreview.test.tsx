@@ -158,7 +158,9 @@ describe("Storybook room page with the local transport adapter", () => {
 		expect(apply.matches(":disabled")).toBe(false);
 		fireEvent.click(apply);
 		expect(screen.getByText("선택 11곳 · 적용 11곳")).toBeTruthy();
-		expect(screen.getByText("11곳 · 같은 확률")).toBeTruthy();
+		expect(
+			screen.getByRole("button", { name: "점심 메뉴 추첨하기" }).textContent,
+		).toContain("11곳");
 		expect(
 			document
 				.querySelector(".lunch-wheel")

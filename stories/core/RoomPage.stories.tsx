@@ -13,6 +13,7 @@ type RoomPagePreviewArgs = {
 	isHost: boolean;
 	candidateCount: number;
 	voteDelayMs?: number;
+	entryLoading?: boolean;
 };
 
 function PagePreviewControls() {
@@ -50,7 +51,7 @@ function RoomPagePreview(args: RoomPagePreviewArgs) {
 	return (
 		<RoomPageFixtureProvider {...args}>
 			<div className="sb-room-page-preview">
-				<PagePreviewControls />
+				{!args.entryLoading && <PagePreviewControls />}
 				<LunchRoomPage roomId={previewRoomId} />
 			</div>
 		</RoomPageFixtureProvider>
@@ -80,10 +81,11 @@ const meta = {
 			options: [6, 12, 30, 107],
 		},
 		voteDelayMs: { table: { disable: true } },
+		entryLoading: { table: { disable: true } },
 	},
 	render: (args) => (
 		<RoomPagePreview
-			key={`${args.initialPhase}:${args.isHost}:${args.candidateCount}:${args.voteDelayMs}`}
+			key={`${args.initialPhase}:${args.isHost}:${args.candidateCount}:${args.voteDelayMs}:${args.entryLoading}`}
 			{...args}
 		/>
 	),
@@ -93,6 +95,10 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const HostIdle: Story = { name: "방장 · 추첨 전" };
+export const EntryLoading: Story = {
+	name: "방 생성 후 입장 준비",
+	args: { entryLoading: true },
+};
 export const HostResult: Story = {
 	name: "방장 · 추첨 결과",
 	args: { initialPhase: "result" },

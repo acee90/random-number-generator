@@ -295,6 +295,7 @@ beforeEach(() => {
 		nickname: "참가자",
 		waitingForEntry: false,
 		entryPending: false,
+		entryLoading: false,
 		enter: vi.fn(() => true),
 		error: "",
 		startPending: false,
@@ -458,6 +459,141 @@ describe("synchronized lunch room UI", () => {
 		expect(candidates?.textContent).not.toContain(sampleLunchPlaces[0].name);
 	});
 
+	it("shows only entry preparation while resolving an automatic join, then opens the accepted room", async () => {
+		localStorage.setItem("randomlab:lunch-room-name", "방 만든 사람");
+		room = {
+			...room,
+			snapshot: null,
+			self: null,
+			waitingForEntry: true,
+			entryLoading: true,
+			connection: "connecting",
+		};
+		vi.mocked(useLunchRoom).mockReturnValue(room);
+		const view = render(<LunchRoomPage roomId={roomId} />);
+		expect(
+			screen.getByRole("heading", { level: 1, name: "입장 준비 중…" }),
+		).toBeTruthy();
+		expect(screen.queryByRole("form", { name: "추첨방 입장" })).toBeNull();
+		expect(screen.queryByRole("textbox")).toBeNull();
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(350);
+		});
+		expect(fetchNicknameAvailability).not.toHaveBeenCalled();
+		expect(room.enter).not.toHaveBeenCalled();
+		updateRoom(view, { waitingForEntry: false, entryPending: true });
+		expect(screen.getByRole("heading", { name: "입장 준비 중…" })).toBeTruthy();
+		expect(screen.queryByRole("form")).toBeNull();
+		expect(screen.queryByRole("textbox")).toBeNull();
+		updateRoom(view, {
+			snapshot: snapshot(),
+			self: { id: "host-client", isHost: true },
+			connection: "connected",
+			waitingForEntry: false,
+			entryPending: false,
+			entryLoading: false,
+		});
+		expect(screen.queryByRole("heading", { name: "입장 준비 중…" })).toBeNull();
+		expect(screen.queryByRole("form", { name: "추첨방 입장" })).toBeNull();
+		expect(screen.getByRole("heading", { name: "채팅" })).toBeTruthy();
+		expect(room.enter).not.toHaveBeenCalled();
+	});
+
+	it("returns an automatically rejected nickname to the editable gate and allows another name", async () => {
+		localStorage.setItem("randomlab:lunch-room-name", "방 만든 사람");
+		room = {
+			...room,
+			snapshot: null,
+			self: null,
+			waitingForEntry: false,
+			entryPending: true,
+			entryLoading: true,
+			connection: "connecting",
+		};
+		vi.mocked(useLunchRoom).mockReturnValue(room);
+		const view = render(<LunchRoomPage roomId={roomId} />);
+		updateRoom(view, {
+			waitingForEntry: true,
+			entryPending: false,
+			entryLoading: false,
+			error: "이미 사용 중인 닉네임입니다. 다른 이름을 입력해 주세요.",
+		});
+		const input = screen.getByRole("textbox", {
+			name: "닉네임",
+		}) as HTMLInputElement;
+		expect(input.value).toBe("방 만든 사람");
+		expect(input.disabled).toBe(false);
+		expect(document.activeElement).toBe(input);
+		expect(screen.getByRole("alert").textContent).toContain("이미 사용 중");
+		expect(screen.queryByRole("heading", { name: "입장 준비 중…" })).toBeNull();
+		fireEvent.change(input, { target: { value: "새 방장 이름" } });
+		updateRoom(view, { error: "" });
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(350);
+		});
+		fireEvent.submit(screen.getByRole("form", { name: "추첨방 입장" }));
+		expect(room.enter).toHaveBeenCalledExactlyOnceWith("새 방장 이름");
+	});
+
+	it("offers a connection retry during automatic entry without opening or submitting a nickname form", () => {
+		room = {
+			...room,
+			snapshot: null,
+			self: null,
+			waitingForEntry: false,
+			entryPending: true,
+			entryLoading: true,
+			connection: "reconnecting",
+			error: "연결하지 못했습니다. 다시 연결해 주세요.",
+		};
+		vi.mocked(useLunchRoom).mockReturnValue(room);
+		const view = render(<LunchRoomPage roomId={roomId} />);
+		expect(screen.getByRole("alert").textContent).toContain(
+			"연결하지 못했습니다",
+		);
+		fireEvent.click(screen.getByRole("button", { name: "다시 연결" }));
+		expect(room.reconnect).toHaveBeenCalledOnce();
+		expect(screen.queryByRole("form")).toBeNull();
+		expect(screen.queryByRole("textbox")).toBeNull();
+		expect(room.enter).not.toHaveBeenCalled();
+		updateRoom(view, { error: "", connection: "connecting" });
+		expect(screen.getByRole("heading", { name: "입장 준비 중…" })).toBeTruthy();
+		expect(screen.queryByRole("button", { name: "다시 연결" })).toBeNull();
+		expect(screen.queryByRole("form")).toBeNull();
+	});
+
+	it.each([
+		"expired",
+		"missing",
+	] as const)("prioritizes the %s terminal screen over automatic entry preparation", (kind) => {
+		room = {
+			...room,
+			snapshot: kind === "expired" ? snapshot({ status: "closed" }) : null,
+			self: null,
+			waitingForEntry: true,
+			entryPending: true,
+			entryLoading: true,
+			connection: "closed",
+			error: "이 방에 입장할 수 없습니다.",
+		};
+		vi.mocked(useLunchRoom).mockReturnValue(room);
+		render(<LunchRoomPage roomId={roomId} />);
+		expect(
+			screen.getByRole("heading", {
+				name:
+					kind === "expired"
+						? "이 방의 이용이 끝났습니다"
+						: "방에 참가할 수 없습니다",
+			}),
+		).toBeTruthy();
+		expect(screen.queryByRole("heading", { name: "입장 준비 중…" })).toBeNull();
+		expect(screen.queryByRole("form")).toBeNull();
+		expect(screen.queryByRole("textbox")).toBeNull();
+		expect(screen.queryByRole("button", { name: "다시 연결" })).toBeNull();
+		expect(screen.getByRole("link", { name: "새 방 만들기" })).toBeTruthy();
+		expect(room.enter).not.toHaveBeenCalled();
+	});
+
 	it("asks for a nickname without rendering or joining the room before explicit entry", () => {
 		room = {
 			...room,
@@ -528,6 +664,13 @@ describe("synchronized lunch room UI", () => {
 		fireEvent.submit(screen.getByRole("form", { name: "추첨방 입장" }));
 		expect(room.enter).toHaveBeenCalledExactlyOnceWith("동료");
 		updateRoom(view, { entryPending: true });
+		expect(screen.queryByRole("heading", { name: "입장 준비 중…" })).toBeNull();
+		expect(screen.getByRole("textbox", { name: "닉네임" })).toBe(input);
+		expect(
+			screen
+				.getByRole("form", { name: "추첨방 입장" })
+				.getAttribute("aria-busy"),
+		).toBe("true");
 		expect((input as HTMLInputElement).disabled).toBe(true);
 		expect(
 			(screen.getByRole("button", { name: "입장 중…" }) as HTMLButtonElement)
@@ -736,6 +879,113 @@ describe("synchronized lunch room UI", () => {
 		expect(list.scrollTop).toBe(600);
 	});
 
+	it("collapses the chat without unmounting its draft and restores the same controls with disclosure focus", () => {
+		render(<LunchRoomPage roomId={roomId} />);
+		const input = screen.getByRole("textbox", {
+			name: "메시지",
+		}) as HTMLTextAreaElement;
+		const log = screen.getByRole("log", { name: "방 채팅 메시지" });
+		const profile = screen.getByRole("button", { name: /^내 프로필:/ });
+		const toggle = screen.getByRole("button", { name: "채팅 접기" });
+		const bodyId = toggle.getAttribute("aria-controls");
+		expect(bodyId).toBeTruthy();
+		const body = document.getElementById(bodyId ?? "");
+		expect(body).not.toBeNull();
+		expect(toggle.tagName).toBe("BUTTON");
+		expect(toggle.getAttribute("aria-expanded")).toBe("true");
+		expect(body?.contains(log)).toBe(true);
+		expect(body?.contains(input)).toBe(true);
+		expect(body?.contains(profile)).toBe(true);
+		const draft = "이 메뉴 어때요?\n같이 먹어요.";
+		fireEvent.change(input, { target: { value: draft } });
+		fireEvent.click(screen.getByRole("button", { name: "참가자 2명" }));
+		expect(screen.getByRole("dialog", { name: "참가자" })).toBeTruthy();
+		toggle.focus();
+		// Native button keyboard activation dispatches a click with detail 0.
+		fireEvent.click(toggle, { detail: 0 });
+		expect(screen.getByRole("button", { name: "채팅 펼치기" })).toBe(toggle);
+		expect(toggle.getAttribute("aria-expanded")).toBe("false");
+		expect(toggle.getAttribute("aria-controls")).toBe(bodyId);
+		expect(body?.hidden).toBe(true);
+		expect(document.activeElement).toBe(toggle);
+		expect(log.isConnected).toBe(true);
+		expect(input.isConnected).toBe(true);
+		expect(profile.isConnected).toBe(true);
+		expect(input.value).toBe(draft);
+		expect(screen.queryByRole("log", { name: "방 채팅 메시지" })).toBeNull();
+		expect(screen.queryByRole("textbox", { name: "메시지" })).toBeNull();
+		expect(screen.queryByRole("button", { name: /^내 프로필:/ })).toBeNull();
+		expect(screen.queryByRole("dialog", { name: "참가자" })).toBeNull();
+		expect(room.sendChat).not.toHaveBeenCalled();
+		fireEvent.click(toggle, { detail: 0 });
+		expect(screen.getByRole("button", { name: "채팅 접기" })).toBe(toggle);
+		expect(toggle.getAttribute("aria-expanded")).toBe("true");
+		expect(body?.hidden).toBe(false);
+		expect(document.activeElement).toBe(toggle);
+		expect(screen.getByRole("log", { name: "방 채팅 메시지" })).toBe(log);
+		expect(screen.getByRole("textbox", { name: "메시지" })).toBe(input);
+		expect(screen.getByRole("button", { name: /^내 프로필:/ })).toBe(profile);
+		expect(screen.queryByRole("dialog", { name: "참가자" })).toBeNull();
+		expect(input.value).toBe(draft);
+		fireEvent.keyDown(input, { key: "Enter" });
+		expect(room.sendChat).toHaveBeenCalledExactlyOnceWith(draft);
+	});
+
+	it("keeps receiving messages while chat is collapsed and reports their unread count in the header", () => {
+		const first = {
+			id: "already-read-message",
+			participantId: "host-client",
+			name: "방장",
+			text: "이전에 읽던 메시지",
+			timestamp: baseTime,
+		};
+		room.snapshot = snapshot({ messages: [first] });
+		const view = render(<LunchRoomPage roomId={roomId} />);
+		const log = screen.getByRole("log", { name: "방 채팅 메시지" });
+		const toggle = screen.getByRole("button", { name: "채팅 접기" });
+		const header = toggle.closest(".room-chat-header") as HTMLElement;
+		Object.defineProperties(log, {
+			clientHeight: { configurable: true, value: 100 },
+			scrollHeight: { configurable: true, value: 600 },
+		});
+		log.scrollTop = 100;
+		fireEvent.scroll(log);
+		const messages = [
+			first,
+			{
+				...first,
+				id: "unread-message-one",
+				text: "아직 읽지 않은 메시지",
+				timestamp: baseTime + 1000,
+			},
+		];
+		updateRoom(view, { snapshot: snapshot({ messages }) });
+		expect(
+			screen.getByRole("button", { name: "새 메시지 1개 보기" }),
+		).toBeTruthy();
+		fireEvent.click(toggle);
+		expect(log.isConnected).toBe(true);
+		expect(within(log).getByText(messages[1].text)).toBeTruthy();
+		expect(within(header).getByText(/새 메시지 1개/)).toBeTruthy();
+		const latest = {
+			...first,
+			id: "collapsed-message-two",
+			text: "접은 동안 도착한 메시지",
+			timestamp: baseTime + 2000,
+		};
+		updateRoom(view, {
+			snapshot: snapshot({ messages: [...messages, latest] }),
+		});
+		expect(within(header).getByText(/새 메시지 2개/)).toBeTruthy();
+		expect(screen.queryByRole("log", { name: "방 채팅 메시지" })).toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: "채팅 펼치기" }));
+		expect(screen.getByRole("log", { name: "방 채팅 메시지" })).toBe(log);
+		expect(within(log).getByText(latest.text)).toBeTruthy();
+		expect(log.scrollTop).toBe(100);
+		fireEvent.click(screen.getByRole("button", { name: "새 메시지 2개 보기" }));
+		expect(log.scrollTop).toBe(600);
+	});
+
 	it.each([
 		false,
 		true,
@@ -849,6 +1099,11 @@ describe("synchronized lunch room UI", () => {
 		).toEqual(["룰렛", "결과 0"]);
 		const candidates = screen.getByRole("region", { name: "추첨 후보" });
 		const wheel = screen.getByRole("region", { name: "룰렛" });
+		expect(
+			within(wheel)
+				.getByRole("heading", { level: 2, name: "룰렛" })
+				.classList.contains("sr-only"),
+		).toBe(true);
 		expect(
 			within(wheel)
 				.getByRole("button", { name: "방장이 추첨을 시작할 때까지 대기" })
@@ -1166,7 +1421,7 @@ describe("synchronized lunch room UI", () => {
 		expect(room.updateCandidates).toHaveBeenCalledTimes(1);
 	});
 
-	it("shows room lifetime, host-offline notice and a profile below the conversation", () => {
+	it("keeps connection information by the title and room lifetime behind its disclosure", () => {
 		room.snapshot = snapshot({
 			participants: [{ id: "guest-client", name: "참가자", isHost: false }],
 		});
@@ -1174,6 +1429,22 @@ describe("synchronized lunch room UI", () => {
 		expect(
 			screen.getByText(/^방장이 오프라인입니다\. 채팅하며 기다릴 수 있고/),
 		).toBeTruthy();
+		const titleBlock = screen
+			.getByRole("heading", { level: 1, name: "오늘 점심 함께 골라요" })
+			.closest(".room-title-block") as HTMLElement;
+		expect(titleBlock).not.toBeNull();
+		expect(within(titleBlock).getByText("연결됨")).toBeTruthy();
+		expect(within(titleBlock).getByText("참가 1명")).toBeTruthy();
+		expect(screen.queryByText("실시간 연결됨")).toBeNull();
+		const infoToggle = screen
+			.getByText("방 정보")
+			.closest("summary") as HTMLElement;
+		expect(infoToggle).not.toBeNull();
+		const details = infoToggle.closest("details") as HTMLDetailsElement;
+		expect(details.open).toBe(false);
+		expect(details.querySelectorAll(".room-lifetime time")).toHaveLength(2);
+		fireEvent.click(infoToggle);
+		expect(details.open).toBe(true);
 		expect(screen.getByText(/방장이 나가도 생성 후 24시간/)).toBeTruthy();
 		const times = document.querySelectorAll(".room-lifetime time");
 		expect(times).toHaveLength(2);
@@ -1626,9 +1897,12 @@ describe("synchronized lunch room UI", () => {
 		).toBe(true);
 	});
 
-	it("opens a native history action in a nonmodal dialog and keeps desktop chat keyboard-accessible", async () => {
+	it("opens a nonmodal history dialog and expands collapsed desktop chat before moving keyboard focus", async () => {
 		room.snapshot = snapshot({ history: [draw(baseTime - 8000)] });
 		render(<LunchRoomPage roomId={roomId} />);
+		const chat = screen.getByRole("textbox", { name: "메시지" });
+		fireEvent.click(screen.getByRole("button", { name: "채팅 접기" }));
+		expect(screen.queryByRole("textbox", { name: "메시지" })).toBeNull();
 		fireEvent.click(screen.getByRole("button", { name: "결과" }));
 		const trigger = screen.getByRole("button", {
 			name: `${sampleLunchPlaces[1].name} 상세 기록 열기`,
@@ -1650,7 +1924,12 @@ describe("synchronized lunch room UI", () => {
 		fireEvent.click(
 			within(dialog).getByRole("button", { name: "채팅으로 이동" }),
 		);
-		const chat = screen.getByRole("textbox", { name: "메시지" });
+		expect(screen.getByRole("textbox", { name: "메시지" })).toBe(chat);
+		expect(
+			screen
+				.getByRole("button", { name: "채팅 접기" })
+				.getAttribute("aria-expanded"),
+		).toBe("true");
 		expect(document.activeElement).toBe(chat);
 		fireEvent.change(chat, { target: { value: "기록을 보며 채팅" } });
 		fireEvent.keyDown(chat, { key: "Enter" });

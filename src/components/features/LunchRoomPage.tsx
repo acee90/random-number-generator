@@ -1,8 +1,10 @@
 import {
 	Check,
+	ChevronDown,
 	ChevronUp,
 	Copy,
 	Crown,
+	Info,
 	Pause,
 	Pencil,
 	Play,
@@ -93,6 +95,7 @@ export default function LunchRoomPage({
 	const room = useLunchRoom(roomId, asGuest, { requireEntry: true });
 	const [view, setView] = useState<RoomView>("wheel");
 	const [message, setMessage] = useState("");
+	const [chatCollapsed, setChatCollapsed] = useState(false);
 	const [nameDraft, setNameDraft] = useState("");
 	const [nameError, setNameError] = useState("");
 	const [chatPopover, setChatPopover] = useState<"profile" | "members" | null>(
@@ -130,6 +133,7 @@ export default function LunchRoomPage({
 	const membersButtonRef = useRef<HTMLButtonElement>(null);
 	const membersTitleRef = useRef<HTMLHeadingElement>(null);
 	const chatInputRef = useRef<HTMLTextAreaElement>(null);
+	const focusChatAfterExpand = useRef(false);
 	const composingRef = useRef(false);
 	const restoreNicknameFocusRef = useRef(false);
 	const connectionEventIdRef = useRef(0);
@@ -518,15 +522,26 @@ export default function LunchRoomPage({
 		previousMessagesRef.current = new Set(messages.map((entry) => entry.id));
 		const list = chatListRef.current;
 		if (!list) return;
+		if (chatCollapsed) {
+			if (added > 0) setUnread((count) => count + added);
+			return;
+		}
 		if (nearBottomRef.current) {
 			list.scrollTop = list.scrollHeight;
 			setUnread(0);
 		} else if (added > 0) setUnread((count) => count + added);
-	}, [messages]);
+	}, [messages, chatCollapsed]);
+	useEffect(() => {
+		if (!chatCollapsed && focusChatAfterExpand.current) {
+			focusChatAfterExpand.current = false;
+			chatInputRef.current?.focus();
+		}
+	}, [chatCollapsed]);
 	useEffect(() => {
 		const list = chatListRef.current;
 		if (
 			!list ||
+			chatCollapsed ||
 			closed ||
 			room.waitingForEntry ||
 			room.entryPending ||
@@ -540,7 +555,7 @@ export default function LunchRoomPage({
 		});
 		observer.observe(list);
 		return () => observer.disconnect();
-	}, [closed, room.waitingForEntry, room.entryPending]);
+	}, [closed, room.waitingForEntry, room.entryPending, chatCollapsed]);
 	function changeView(next: RoomView) {
 		setSelectedDraw(null);
 		focusResultRef.current = false;
@@ -684,7 +699,10 @@ export default function LunchRoomPage({
 										? "방장이 추첨을 시작하면 함께 룰렛을 봅니다."
 										: "방장이 오프라인입니다. 방장이 돌아오면 추첨을 시작할 수 있습니다.";
 
-	if (!closed && (room.waitingForEntry || room.entryPending))
+	if (
+		!closed &&
+		(room.entryLoading || room.waitingForEntry || room.entryPending)
+	)
 		return (
 			<div className="random-lab lunch-room">
 				<SiteHeader active="lunch" />
@@ -692,10 +710,12 @@ export default function LunchRoomPage({
 					<RoomEntryGate
 						key={roomId}
 						roomId={roomId}
+						loading={room.entryLoading}
 						pending={room.entryPending}
 						error={room.error}
 						onEnter={room.enter}
 						onClearError={room.clearError}
+						onReconnect={room.reconnect}
 					/>
 				</main>
 			</div>
@@ -709,27 +729,101 @@ export default function LunchRoomPage({
 			<SiteHeader active="lunch" />
 			<main id="main-content" className="room-main">
 				<div className="room-heading">
-					<div>
+					<div className="room-title-block">
 						<h1>
 							{closed ? "점심 추첨방" : (snapshot?.title ?? "점심 추첨방")}
 						</h1>
+						{!closed && (
+							<div className="room-connection" data-connected={connected}>
+								{connected ? (
+									<Wifi size={15} aria-hidden="true" />
+								) : (
+									<WifiOff size={15} aria-hidden="true" />
+								)}
+								<span>
+									{connected
+										? "연결됨"
+										: room.connection === "reconnecting"
+											? "연결 끊김 · 다시 연결 중"
+											: "연결 중"}
+								</span>
+								<span>참가 {participants.length}명</span>
+								{room.self?.isHost && (
+									<span className="room-host-badge">
+										<Crown size={13} aria-hidden="true" /> 방장
+									</span>
+								)}
+								{!connected && (
+									<button
+										type="button"
+										className="text-button"
+										onClick={room.reconnect}
+									>
+										다시 연결
+									</button>
+								)}
+							</div>
+						)}
 					</div>
 					{!closed && (
-						<button
-							type="button"
-							className="room-outline-button"
-							disabled={!inviteUrl}
-							onClick={(event) =>
-								void copy(inviteUrl, "invite", event.currentTarget)
-							}
-						>
-							{copied === "invite" ? (
-								<Check size={17} aria-hidden="true" />
-							) : (
-								<Copy size={17} aria-hidden="true" />
+						<div className="room-heading-actions">
+							<button
+								type="button"
+								className="room-outline-button"
+								disabled={!inviteUrl}
+								onClick={(event) =>
+									void copy(inviteUrl, "invite", event.currentTarget)
+								}
+							>
+								{copied === "invite" ? (
+									<Check size={17} aria-hidden="true" />
+								) : (
+									<Copy size={17} aria-hidden="true" />
+								)}
+								{copied === "invite" ? "링크 복사됨" : "초대 링크 복사"}
+							</button>
+							{snapshot && (
+								<details className="room-info">
+									<summary title="방 정보">
+										<Info size={18} aria-hidden="true" />
+										<span className="sr-only">방 정보</span>
+									</summary>
+
+									<div className="room-lifetime">
+										<span>
+											생성{" "}
+											<time
+												dateTime={new Date(snapshot.createdAt).toISOString()}
+											>
+												{new Date(snapshot.createdAt).toLocaleString("ko-KR", {
+													month: "2-digit",
+													day: "2-digit",
+													hour: "2-digit",
+													minute: "2-digit",
+												})}
+											</time>
+										</span>
+										<span>
+											종료{" "}
+											<time
+												dateTime={new Date(snapshot.expiresAt).toISOString()}
+											>
+												{new Date(snapshot.expiresAt).toLocaleString("ko-KR", {
+													month: "2-digit",
+													day: "2-digit",
+													hour: "2-digit",
+													minute: "2-digit",
+												})}
+											</time>
+										</span>
+										<p>
+											방장이 나가도 생성 후 24시간, 표시된 종료 시각까지 방이
+											유지됩니다.
+										</p>
+									</div>
+								</details>
 							)}
-							{copied === "invite" ? "링크 복사됨" : "초대 링크 복사"}
-						</button>
+						</div>
 					)}
 				</div>
 				{closed ? (
@@ -752,65 +846,6 @@ export default function LunchRoomPage({
 					</section>
 				) : (
 					<>
-						<div className="room-connection" data-connected={connected}>
-							{connected ? (
-								<Wifi size={15} aria-hidden="true" />
-							) : (
-								<WifiOff size={15} aria-hidden="true" />
-							)}
-							<span>
-								{connected
-									? "실시간 연결됨"
-									: room.connection === "reconnecting"
-										? "연결 끊김 · 다시 연결 중"
-										: "연결 중"}
-							</span>
-							<span>참가 {participants.length}명</span>
-							{room.self?.isHost && (
-								<span className="room-host-badge">
-									<Crown size={13} aria-hidden="true" /> 방장
-								</span>
-							)}
-							{!connected && (
-								<button
-									type="button"
-									className="text-button"
-									onClick={room.reconnect}
-								>
-									다시 연결
-								</button>
-							)}
-						</div>
-						{snapshot && (
-							<div className="room-lifetime">
-								<span>
-									생성{" "}
-									<time dateTime={new Date(snapshot.createdAt).toISOString()}>
-										{new Date(snapshot.createdAt).toLocaleString("ko-KR", {
-											month: "2-digit",
-											day: "2-digit",
-											hour: "2-digit",
-											minute: "2-digit",
-										})}
-									</time>
-								</span>
-								<span>
-									종료{" "}
-									<time dateTime={new Date(snapshot.expiresAt).toISOString()}>
-										{new Date(snapshot.expiresAt).toLocaleString("ko-KR", {
-											month: "2-digit",
-											day: "2-digit",
-											hour: "2-digit",
-											minute: "2-digit",
-										})}
-									</time>
-								</span>
-								<p>
-									방장이 나가도 생성 후 24시간, 표시된 종료 시각까지 방이
-									유지됩니다.
-								</p>
-							</div>
-						)}
 						{connected && !hostOnline && (
 							<p className="room-host-offline">
 								방장이 오프라인입니다. 채팅하며 기다릴 수 있고, 방은 종료
@@ -824,7 +859,7 @@ export default function LunchRoomPage({
 						>
 							{room.error}
 						</p>
-						<div className="room-layout">
+						<div className="room-layout" data-chat-collapsed={chatCollapsed}>
 							{/* biome-ignore lint/a11y/useSemanticElements: This existing div ref is shared with the record dialog. */}
 							<div
 								className="room-primary-column"
@@ -878,10 +913,9 @@ export default function LunchRoomPage({
 									hidden={view !== "wheel"}
 									aria-labelledby={`${id}-wheel`}
 								>
-									<div className="room-panel-heading">
-										<h2 id={`${id}-wheel`}>룰렛</h2>
-										<span>{places.length}곳 · 같은 확률</span>
-									</div>
+									<h2 id={`${id}-wheel`} className="sr-only">
+										룰렛
+									</h2>
 									<div className="room-wheel-stage">
 										<div
 											className={`room-wheel-area ${showResult ? "is-covered" : ""}`}
@@ -1249,12 +1283,44 @@ export default function LunchRoomPage({
 							</div>
 							<aside
 								className="room-chat-panel"
+								data-collapsed={chatCollapsed}
 								aria-labelledby={`${id}-chat`}
 								onFocusCapture={keepChatFocus}
 								onPointerDownCapture={keepChatFocus}
 							>
 								<div className="room-chat-header">
-									<h2 id={`${id}-chat`}>채팅</h2>
+									<h2 id={`${id}-chat`} aria-label="채팅">
+										<button
+											type="button"
+											className="room-chat-toggle"
+											aria-label={chatCollapsed ? "채팅 펼치기" : "채팅 접기"}
+											aria-expanded={!chatCollapsed}
+											aria-controls={`${id}-chat-content`}
+											aria-describedby={
+												unread > 0 ? `${id}-chat-unread` : undefined
+											}
+											onClick={() => {
+												setChatPopover(null);
+												setChatCollapsed((value) => !value);
+											}}
+										>
+											채팅{" "}
+											{unread > 0 && (
+												<span
+													className="room-chat-unread"
+													id={`${id}-chat-unread`}
+													aria-live="polite"
+												>
+													새 메시지 {unread}개
+												</span>
+											)}
+											{chatCollapsed ? (
+												<ChevronUp size={17} aria-hidden="true" />
+											) : (
+												<ChevronDown size={17} aria-hidden="true" />
+											)}
+										</button>
+									</h2>
 									<button
 										type="button"
 										ref={membersButtonRef}
@@ -1339,69 +1405,35 @@ export default function LunchRoomPage({
 										</section>
 									)}
 								</div>
-								<ul
-									className="room-chat-list"
-									ref={chatListRef}
-									role="log"
-									aria-label="방 채팅 메시지"
-									aria-live="polite"
-									aria-relevant="additions"
-									// biome-ignore lint/a11y/noNoninteractiveTabindex: The chat log scrolls independently and needs keyboard access.
-									tabIndex={0}
-									onScroll={(event) => {
-										const list = event.currentTarget;
-										nearBottomRef.current =
-											list.scrollHeight - list.scrollTop - list.clientHeight <
-											48;
-										if (nearBottomRef.current) setUnread(0);
-									}}
+								<div
+									id={`${id}-chat-content`}
+									className="room-chat-body"
+									hidden={chatCollapsed}
 								>
-									{messages.map((entry, index) => {
-										if (entry.event || entry.participantId === "system")
-											return (
-												<li key={entry.id} className="room-chat-system">
-													<p>{entry.text}</p>
-													<time
-														dateTime={new Date(entry.timestamp).toISOString()}
-													>
-														{new Date(entry.timestamp).toLocaleTimeString(
-															"ko-KR",
-															{ hour: "2-digit", minute: "2-digit" },
-														)}
-													</time>
-												</li>
-											);
-										const mine =
-											entry.participantId === room.self?.id ||
-											(ownIdsRoomRef.current === roomId &&
-												ownParticipantIdsRef.current.has(entry.participantId));
-										const continuation = sameMessageGroup(
-											messages[index - 1],
-											entry,
-										);
-										const lastInGroup = !sameMessageGroup(
-											entry,
-											messages[index + 1],
-										);
-										return (
-											<li
-												key={entry.id}
-												className={`room-chat-bubble ${mine ? "is-mine" : "is-other"} ${continuation ? "is-continuation" : ""}`}
-											>
-												{!continuation ? (
-													<strong className="room-message-author">
-														{entry.name}
-													</strong>
-												) : (
-													<span className="sr-only">
-														{entry.name}의 메시지:{" "}
-													</span>
-												)}
-												<div className="room-message-row">
-													<p className="room-message-content">{entry.text}</p>
-													{lastInGroup && (
+									<ul
+										className="room-chat-list"
+										ref={chatListRef}
+										role="log"
+										aria-label="방 채팅 메시지"
+										aria-live="polite"
+										aria-relevant="additions"
+										// biome-ignore lint/a11y/noNoninteractiveTabindex: The chat log scrolls independently and needs keyboard access.
+										tabIndex={0}
+										onScroll={(event) => {
+											if (chatCollapsed) return;
+											const list = event.currentTarget;
+											nearBottomRef.current =
+												list.scrollHeight - list.scrollTop - list.clientHeight <
+												48;
+											if (nearBottomRef.current) setUnread(0);
+										}}
+									>
+										{messages.map((entry, index) => {
+											if (entry.event || entry.participantId === "system")
+												return (
+													<li key={entry.id} className="room-chat-system">
+														<p>{entry.text}</p>
 														<time
-															className="room-message-time"
 															dateTime={new Date(entry.timestamp).toISOString()}
 														>
 															{new Date(entry.timestamp).toLocaleTimeString(
@@ -1409,227 +1441,273 @@ export default function LunchRoomPage({
 																{ hour: "2-digit", minute: "2-digit" },
 															)}
 														</time>
-													)}
-												</div>
-											</li>
-										);
-									})}
-									{messages.length === 0 && (
-										<li className="room-chat-empty">
-											함께 먹고 싶은 메뉴를 이야기해 보세요.
-										</li>
-									)}
-								</ul>
-								{unread > 0 && (
-									<button
-										type="button"
-										className="room-new-messages"
-										onClick={() => {
-											const list = chatListRef.current;
-											if (list) list.scrollTop = list.scrollHeight;
-											nearBottomRef.current = true;
-											setUnread(0);
-										}}
-									>
-										새 메시지 {unread}개 보기
-									</button>
-								)}
-								<form
-									className="room-chat-form"
-									onSubmit={(event) => {
-										event.preventDefault();
-										submitChat();
-									}}
-								>
-									<label className="sr-only" htmlFor={`${id}-message`}>
-										메시지
-									</label>
-									<div className="room-composer-row">
-										<textarea
-											id={`${id}-message`}
-											ref={chatInputRef}
-											value={message}
-											maxLength={500}
-											rows={1}
-											disabled={!connected}
-											aria-describedby={`${id}-composer-help`}
-											onChange={(event) => setMessage(event.target.value)}
-											onCompositionStart={() => {
-												composingRef.current = true;
-											}}
-											onCompositionEnd={() => {
-												composingRef.current = false;
-											}}
-											onKeyDown={(event) => {
-												if (
-													event.key === "Enter" &&
-													!event.shiftKey &&
-													!composingRef.current &&
-													!event.nativeEvent.isComposing &&
-													event.nativeEvent.keyCode !== 229
-												) {
-													event.preventDefault();
-													submitChat();
-												}
-											}}
-											placeholder={
-												connected ? "메시지 보내기" : "연결을 기다리는 중…"
-											}
-										/>
-										<button
-											type="submit"
-											className="room-send-button"
-											aria-label="메시지 보내기"
-											disabled={!connected || !message.trim()}
-										>
-											<Send
-												size={18}
-												strokeWidth={2}
-												absoluteStrokeWidth
-												aria-hidden="true"
-											/>
-										</button>
-									</div>
-									<div className="room-composer-meta">
-										<span id={`${id}-composer-help`}>
-											Enter 전송 · Shift+Enter 줄바꿈
-										</span>
-										<span>{message.length}/500</span>
-									</div>
-								</form>
-								<div className="room-chat-footer">
-									<button
-										type="button"
-										ref={nicknameButtonRef}
-										className="room-profile-trigger"
-										aria-label={`내 프로필: ${room.nickname || "참가자"}, ${selfPresenceLabel}`}
-										aria-expanded={editingName}
-										aria-controls={`${id}-profile-popover`}
-										onClick={() => {
-											if (editingName) {
-												setChatPopover(null);
-												return;
-											}
-											setNameDraft(room.nickname);
-											setNameError("");
-											setChatPopover("profile");
-										}}
-									>
-										<span className="room-profile-avatar" aria-hidden="true">
-											{Array.from(room.nickname || "참가자")[0]}
-											<span
-												className="room-presence-dot"
-												data-status={selfPresence}
-											/>
-										</span>
-										<span className="room-profile-text">
-											<strong>{room.nickname || "참가자"}</strong>
-											<small>{selfPresenceLabel}</small>
-										</span>
-										<ChevronUp size={15} aria-hidden="true" />
-									</button>
-									{editingName && (
-										<section
-											id={`${id}-profile-popover`}
-											ref={profilePopoverRef}
-											className="room-chat-popover room-profile-popover"
-											role="dialog"
-											aria-labelledby={`${id}-profile-title`}
-										>
-											<div className="room-popover-heading">
-												<h3 id={`${id}-profile-title`}>
-													<Pencil size={14} aria-hidden="true" /> 내 프로필
-												</h3>
-												<button
-													type="button"
-													className="room-chat-icon-button"
-													aria-label="프로필 닫기"
-													onClick={() => {
-														restoreNicknameFocusRef.current = true;
-														setChatPopover(null);
-													}}
+													</li>
+												);
+											const mine =
+												entry.participantId === room.self?.id ||
+												(ownIdsRoomRef.current === roomId &&
+													ownParticipantIdsRef.current.has(
+														entry.participantId,
+													));
+											const continuation = sameMessageGroup(
+												messages[index - 1],
+												entry,
+											);
+											const lastInGroup = !sameMessageGroup(
+												entry,
+												messages[index + 1],
+											);
+											return (
+												<li
+													key={entry.id}
+													className={`room-chat-bubble ${mine ? "is-mine" : "is-other"} ${continuation ? "is-continuation" : ""}`}
 												>
-													<X size={16} aria-hidden="true" />
-												</button>
-											</div>
-											<form
-												className="room-name-form"
-												onSubmit={(event) => {
-													event.preventDefault();
-													const value = nameDraft.trim();
+													{!continuation ? (
+														<strong className="room-message-author">
+															{entry.name}
+														</strong>
+													) : (
+														<span className="sr-only">
+															{entry.name}의 메시지:{" "}
+														</span>
+													)}
+													<div className="room-message-row">
+														<p className="room-message-content">{entry.text}</p>
+														{lastInGroup && (
+															<time
+																className="room-message-time"
+																dateTime={new Date(
+																	entry.timestamp,
+																).toISOString()}
+															>
+																{new Date(entry.timestamp).toLocaleTimeString(
+																	"ko-KR",
+																	{ hour: "2-digit", minute: "2-digit" },
+																)}
+															</time>
+														)}
+													</div>
+												</li>
+											);
+										})}
+										{messages.length === 0 && (
+											<li className="room-chat-empty">
+												함께 먹고 싶은 메뉴를 이야기해 보세요.
+											</li>
+										)}
+									</ul>
+									{unread > 0 && (
+										<button
+											type="button"
+											className="room-new-messages"
+											onClick={() => {
+												const list = chatListRef.current;
+												if (list) list.scrollTop = list.scrollHeight;
+												nearBottomRef.current = true;
+												setUnread(0);
+											}}
+										>
+											새 메시지 {unread}개 보기
+										</button>
+									)}
+									<form
+										className="room-chat-form"
+										onSubmit={(event) => {
+											event.preventDefault();
+											submitChat();
+										}}
+									>
+										<label className="sr-only" htmlFor={`${id}-message`}>
+											메시지
+										</label>
+										<div className="room-composer-row">
+											<textarea
+												id={`${id}-message`}
+												ref={chatInputRef}
+												value={message}
+												maxLength={500}
+												rows={1}
+												disabled={!connected}
+												aria-describedby={`${id}-composer-help`}
+												onChange={(event) => setMessage(event.target.value)}
+												onCompositionStart={() => {
+													composingRef.current = true;
+												}}
+												onCompositionEnd={() => {
+													composingRef.current = false;
+												}}
+												onKeyDown={(event) => {
 													if (
-														!value ||
-														value.length > lunchRoomLimits.maxNicknameLength
+														event.key === "Enter" &&
+														!event.shiftKey &&
+														!composingRef.current &&
+														!event.nativeEvent.isComposing &&
+														event.nativeEvent.keyCode !== 229
 													) {
-														setNameError(
-															`닉네임을 1~${lunchRoomLimits.maxNicknameLength}자로 입력해 주세요.`,
-														);
-														nicknameRef.current?.focus();
-														return;
-													}
-													setNameError("");
-													if (room.rename(value)) {
-														restoreNicknameFocusRef.current = true;
-														setChatPopover(null);
+														event.preventDefault();
+														submitChat();
 													}
 												}}
+												placeholder={
+													connected ? "메시지 보내기" : "연결을 기다리는 중…"
+												}
+											/>
+											<button
+												type="submit"
+												className="room-send-button"
+												aria-label="메시지 보내기"
+												disabled={!connected || !message.trim()}
 											>
-												<label htmlFor={`${id}-name`}>닉네임</label>
-												<span className="room-name-count">
-													{nameDraft.length}/{lunchRoomLimits.maxNicknameLength}
-												</span>
-												<input
-													id={`${id}-name`}
-													ref={nicknameRef}
-													autoComplete="nickname"
-													maxLength={lunchRoomLimits.maxNicknameLength}
-													value={nameDraft}
-													disabled={!connected}
-													aria-invalid={Boolean(nameError)}
-													aria-describedby={
-														nameError ? `${id}-name-error` : undefined
-													}
-													onChange={(event) => {
-														setNameDraft(event.target.value);
-														setNameError("");
-													}}
+												<Send
+													size={18}
+													strokeWidth={2}
+													absoluteStrokeWidth
+													aria-hidden="true"
 												/>
-												<p
-													id={`${id}-name-error`}
-													role="alert"
-													className={
-														nameError ? "room-error" : "room-empty-error"
-													}
-												>
-													{nameError}
-												</p>
-												<div className="room-profile-actions">
-													<button
-														type="submit"
-														className="room-profile-save"
-														disabled={!connected}
-													>
-														변경
-													</button>
+											</button>
+										</div>
+										<div className="room-composer-meta">
+											<span id={`${id}-composer-help`}>
+												Enter 전송 · Shift+Enter 줄바꿈
+											</span>
+											<span>{message.length}/500</span>
+										</div>
+									</form>
+									<div className="room-chat-footer">
+										<button
+											type="button"
+											ref={nicknameButtonRef}
+											className="room-profile-trigger"
+											aria-label={`내 프로필: ${room.nickname || "참가자"}, ${selfPresenceLabel}`}
+											aria-expanded={editingName}
+											aria-controls={`${id}-profile-popover`}
+											onClick={() => {
+												if (editingName) {
+													setChatPopover(null);
+													return;
+												}
+												setNameDraft(room.nickname);
+												setNameError("");
+												setChatPopover("profile");
+											}}
+										>
+											<span className="room-profile-avatar" aria-hidden="true">
+												{Array.from(room.nickname || "참가자")[0]}
+												<span
+													className="room-presence-dot"
+													data-status={selfPresence}
+												/>
+											</span>
+											<span className="room-profile-text">
+												<strong>{room.nickname || "참가자"}</strong>
+												<small>{selfPresenceLabel}</small>
+											</span>
+											<ChevronUp size={15} aria-hidden="true" />
+										</button>
+										{editingName && (
+											<section
+												id={`${id}-profile-popover`}
+												ref={profilePopoverRef}
+												className="room-chat-popover room-profile-popover"
+												role="dialog"
+												aria-labelledby={`${id}-profile-title`}
+											>
+												<div className="room-popover-heading">
+													<h3 id={`${id}-profile-title`}>
+														<Pencil size={14} aria-hidden="true" /> 내 프로필
+													</h3>
 													<button
 														type="button"
-														className="room-name-cancel"
+														className="room-chat-icon-button"
+														aria-label="프로필 닫기"
 														onClick={() => {
-															setNameDraft(room.nickname);
-															setNameError("");
 															restoreNicknameFocusRef.current = true;
 															setChatPopover(null);
 														}}
 													>
-														취소
+														<X size={16} aria-hidden="true" />
 													</button>
 												</div>
-											</form>
-											<p className="room-roster-note">
-												현재 상태: {selfPresenceLabel}
-											</p>
-										</section>
-									)}
+												<form
+													className="room-name-form"
+													onSubmit={(event) => {
+														event.preventDefault();
+														const value = nameDraft.trim();
+														if (
+															!value ||
+															value.length > lunchRoomLimits.maxNicknameLength
+														) {
+															setNameError(
+																`닉네임을 1~${lunchRoomLimits.maxNicknameLength}자로 입력해 주세요.`,
+															);
+															nicknameRef.current?.focus();
+															return;
+														}
+														setNameError("");
+														if (room.rename(value)) {
+															restoreNicknameFocusRef.current = true;
+															setChatPopover(null);
+														}
+													}}
+												>
+													<label htmlFor={`${id}-name`}>닉네임</label>
+													<span className="room-name-count">
+														{nameDraft.length}/
+														{lunchRoomLimits.maxNicknameLength}
+													</span>
+													<input
+														id={`${id}-name`}
+														ref={nicknameRef}
+														autoComplete="nickname"
+														maxLength={lunchRoomLimits.maxNicknameLength}
+														value={nameDraft}
+														disabled={!connected}
+														aria-invalid={Boolean(nameError)}
+														aria-describedby={
+															nameError ? `${id}-name-error` : undefined
+														}
+														onChange={(event) => {
+															setNameDraft(event.target.value);
+															setNameError("");
+														}}
+													/>
+													<p
+														id={`${id}-name-error`}
+														role="alert"
+														className={
+															nameError ? "room-error" : "room-empty-error"
+														}
+													>
+														{nameError}
+													</p>
+													<div className="room-profile-actions">
+														<button
+															type="submit"
+															className="room-profile-save"
+															disabled={!connected}
+														>
+															변경
+														</button>
+														<button
+															type="button"
+															className="room-name-cancel"
+															onClick={() => {
+																setNameDraft(room.nickname);
+																setNameError("");
+																restoreNicknameFocusRef.current = true;
+																setChatPopover(null);
+															}}
+														>
+															취소
+														</button>
+													</div>
+												</form>
+												<p className="room-roster-note">
+													현재 상태: {selfPresenceLabel}
+												</p>
+											</section>
+										)}
+									</div>
 								</div>
 							</aside>
 						</div>
@@ -1643,6 +1721,12 @@ export default function LunchRoomPage({
 					returnFocusRef={selectedDrawTriggerRef}
 					fallbackFocusRef={historyTitleRef}
 					chatInputRef={chatInputRef}
+					onChatFocus={() => {
+						if (chatCollapsed) {
+							focusChatAfterExpand.current = true;
+							setChatCollapsed(false);
+						} else chatInputRef.current?.focus();
+					}}
 					onClose={() => setSelectedDraw(null)}
 				/>
 			)}
