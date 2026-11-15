@@ -41,21 +41,7 @@
 
 .lunch-history-return,
 .lunch-history-copy {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
 	flex-shrink: 0;
-	gap: 6px;
-	min-block-size: 44px;
-	padding: 8px 12px;
-	border: 1px solid var(--section-line);
-	border-block-end-width: 3px;
-	border-radius: var(--control-radius);
-	background: #fff;
-	color: var(--ink);
-	font-size: 13px;
-	line-height: 1.4;
-	font-weight: 750;
 }
 
 .lunch-history-storage-error {
@@ -152,13 +138,6 @@
 	font-weight: 650;
 	color: var(--ink);
 	margin-block: 0 8px;
-}
-
-@media (hover: hover) {
-	.lunch-history-return:hover,
-	.lunch-history-copy:hover {
-		background: #edf2e3;
-	}
 }
 
 @media (max-width: 600px) {

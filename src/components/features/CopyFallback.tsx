@@ -1,5 +1,8 @@
 import { Copy, X } from "lucide-react";
 import { useEffect, useId, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import "./copy-fallback.css";
 
 interface CopyFallbackProps {
@@ -27,21 +30,23 @@ export default function CopyFallback({
 		>
 			<div className="copy-fallback-heading">
 				<strong>자동 복사가 안 됐습니다.</strong>
-				<button
+				<Button
+					variant="ghost"
+					size="sm"
 					type="button"
 					className="text-button"
 					aria-label="복사 도움말 닫기"
 					onClick={onClose}
 				>
 					<X size={16} aria-hidden="true" /> 닫기
-				</button>
+				</Button>
 			</div>
 			<p id={`${id}-help`}>
 				아래 내용을 직접 복사해 주세요. 컴퓨터에서는 Ctrl+C 또는 ⌘C를 누르고,
 				휴대폰에서는 길게 눌러 복사할 수 있습니다.
 			</p>
-			<label htmlFor={`${id}-text`}>복사할 결과</label>
-			<textarea
+			<Label htmlFor={`${id}-text`}>복사할 결과</Label>
+			<Textarea
 				ref={fieldRef}
 				id={`${id}-text`}
 				value={text}
@@ -49,9 +54,15 @@ export default function CopyFallback({
 				rows={Math.min(5, Math.max(2, text.split("\n").length))}
 				aria-describedby={`${id}-help`}
 			/>
-			<button type="button" className="result-copy" onClick={onRetry}>
+			<Button
+				variant="outline"
+				size="sm"
+				type="button"
+				className="result-copy"
+				onClick={onRetry}
+			>
 				<Copy size={16} aria-hidden="true" /> 다시 복사
-			</button>
+			</Button>
 		</section>
 	);
 }

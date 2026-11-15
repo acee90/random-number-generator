@@ -14,27 +14,6 @@
 	gap: 8px;
 	margin-block-end: 24px;
 }
-.candidate-editor-name > label {
-	font-size: 14px;
-	font-weight: 750;
-}
-.candidate-editor input[type="text"] {
-	inline-size: 100%;
-	min-inline-size: 0;
-	min-block-size: 44px;
-	padding: 9px 12px;
-	border: 1px solid #8b967d;
-	border-radius: var(--control-radius, 2px);
-	background: #fff;
-	color: var(--ink);
-	font-size: 16px;
-	line-height: 1.5;
-}
-.candidate-editor input[aria-invalid="true"] {
-	border-color: #a43f29;
-	box-shadow: inset 0 0 0 1px #a43f29;
-}
-.candidate-editor :is(input, button):focus-visible,
 .candidate-editor h2:focus-visible,
 .candidate-editor-error:focus-visible {
 	outline: 3px solid #527427;
@@ -58,30 +37,6 @@
 	font-size: 18px;
 	font-weight: 800;
 	line-height: 1.5;
-}
-.candidate-editor button {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	gap: 6px;
-	min-inline-size: 44px;
-	min-block-size: 44px;
-	padding: 9px 12px;
-	border: 1px solid var(--section-line, #68715e);
-	border-radius: var(--control-radius, 2px);
-	background: #fff;
-	color: var(--ink);
-	font-size: 14px;
-	font-weight: 700;
-	line-height: 1.5;
-}
-.candidate-editor button:disabled {
-	background: #f1f3eb;
-	color: var(--muted);
-	cursor: default;
-}
-.candidate-editor button > svg {
-	flex-shrink: 0;
 }
 .candidate-editor-columns,
 .candidate-editor-row {
@@ -157,15 +112,10 @@
 	background: #f4f5f0;
 	color: #646b5e;
 }
-.candidate-editor .candidate-editor-delete {
-	padding: 9px;
-	color: #8d4c31;
-}
 .candidate-editor .candidate-editor-add {
 	inline-size: 100%;
 	margin-block-start: 12px;
 	border-style: dashed;
-	background: #f7f9f1;
 }
 .candidate-editor-error {
 	margin: 0;
@@ -201,15 +151,6 @@
 .candidate-editor-footer strong {
 	color: var(--ink);
 	font-variant-numeric: tabular-nums;
-}
-.candidate-editor .candidate-editor-save {
-	min-block-size: 52px;
-	padding: 12px 20px;
-	border-color: var(--ink);
-	border-block-end-width: 4px;
-	background: var(--lime);
-	font-size: 16px;
-	font-weight: 800;
 }
 @media (max-width: 600px) {
 	.candidate-editor-tools {
@@ -278,23 +219,5 @@
 	}
 	.candidate-editor .candidate-editor-save {
 		flex: 2;
-	}
-}
-@media (hover: hover) and (pointer: fine) {
-	.candidate-editor button:not(:disabled):hover {
-		background: #edf2e3;
-	}
-	.candidate-editor .candidate-editor-save:hover {
-		background: #cbe953;
-	}
-}
-@media (prefers-reduced-motion: no-preference) {
-	.candidate-editor button {
-		transition:
-			background-color 120ms,
-			translate 120ms ease-out;
-	}
-	.candidate-editor button:not(:disabled):active {
-		translate: 0 2px;
 	}
 }

@@ -7,6 +7,9 @@ import {
 	UserRound,
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useNicknameAvailability } from "@/hooks/useNicknameAvailability";
 import {
 	clampLunchRoomNickname,
@@ -87,19 +90,21 @@ export default function RoomEntryGate({
 							{error}
 						</p>
 						{onReconnect && (
-							<button
+							<Button
+								variant="default"
+								size="lg"
 								type="button"
 								className="room-entry-submit"
 								onClick={onReconnect}
 							>
 								다시 연결
-							</button>
+							</Button>
 						)}
 					</>
 				)}
-				<a className="room-entry-back" href="/">
-					홈으로 돌아가기
-				</a>
+				<Button asChild variant="link" size="sm" className="room-entry-back">
+					<a href="/">홈으로 돌아가기</a>
+				</Button>
 			</section>
 		);
 
@@ -135,12 +140,12 @@ export default function RoomEntryGate({
 				}}
 			>
 				<div className="room-entry-field-heading">
-					<label htmlFor={`${id}-name`}>닉네임</label>
+					<Label htmlFor={`${id}-name`}>닉네임</Label>
 					<span aria-hidden="true">
 						{name.length}/{lunchRoomLimits.maxNicknameLength}
 					</span>
 				</div>
-				<input
+				<Input
 					id={`${id}-name`}
 					ref={inputRef}
 					value={name}
@@ -199,7 +204,9 @@ export default function RoomEntryGate({
 					{!pending &&
 						(availability.status === "error" ||
 							availability.status === "taken") && (
-							<button
+							<Button
+								variant="link"
+								size="sm"
 								type="button"
 								className="room-entry-recheck"
 								onClick={() => {
@@ -208,7 +215,7 @@ export default function RoomEntryGate({
 								}}
 							>
 								다시 확인
-							</button>
+							</Button>
 						)}
 				</output>
 				{message && (
@@ -216,7 +223,9 @@ export default function RoomEntryGate({
 						{message}
 					</p>
 				)}
-				<button
+				<Button
+					variant="default"
+					size="lg"
 					type="submit"
 					className="room-entry-submit"
 					disabled={!canEnter}
@@ -231,11 +240,11 @@ export default function RoomEntryGate({
 						<ArrowRight size={18} aria-hidden="true" />
 					)}
 					{pending ? "입장 중…" : "입장하기"}
-				</button>
+				</Button>
 			</form>
-			<a className="room-entry-back" href="/">
-				홈으로 돌아가기
-			</a>
+			<Button asChild variant="link" size="sm" className="room-entry-back">
+				<a href="/">홈으로 돌아가기</a>
+			</Button>
 		</section>
 	);
 }

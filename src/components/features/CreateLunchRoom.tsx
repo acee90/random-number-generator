@@ -1,7 +1,17 @@
-import * as Dialog from "@radix-ui/react-dialog";
 import { useRouter } from "@tanstack/react-router";
 import { LoaderCircle, Users, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import {
+	Dialog,
+	DialogClose,
+	DialogContent,
+	DialogDescription,
+	DialogTitle,
+	DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
 	clampLunchRoomNickname,
 	isLunchRoomId,
@@ -134,8 +144,8 @@ export default function CreateLunchRoom({
 			onSubmit={(event) => void create(event)}
 			aria-busy={pending}
 		>
-			<label htmlFor={`${id}-title`}>방 이름</label>
-			<input
+			<Label htmlFor={`${id}-title`}>방 이름</Label>
+			<Input
 				id={`${id}-title`}
 				value={title}
 				onChange={(event) => setTitle(event.target.value)}
@@ -143,8 +153,8 @@ export default function CreateLunchRoom({
 				maxLength={60}
 				disabled={pending}
 			/>
-			<label htmlFor={`${id}-name`}>{inline ? "닉네임" : "내 이름"}</label>
-			<input
+			<Label htmlFor={`${id}-name`}>{inline ? "닉네임" : "내 이름"}</Label>
+			<Input
 				id={`${id}-name`}
 				value={name}
 				onChange={(event) => setName(event.target.value)}
@@ -166,7 +176,9 @@ export default function CreateLunchRoom({
 					{error}
 				</p>
 			)}
-			<button
+			<Button
+				variant="default"
+				size="lg"
 				type="submit"
 				className="lunch-create-submit"
 				disabled={
@@ -179,7 +191,7 @@ export default function CreateLunchRoom({
 			>
 				{pending && <LoaderCircle size={18} aria-hidden="true" />}{" "}
 				{pending ? "방 만드는 중…" : "방 만들고 입장하기"}
-			</button>
+			</Button>
 		</form>
 	);
 	if (inline)
@@ -193,7 +205,7 @@ export default function CreateLunchRoom({
 			</section>
 		);
 	return (
-		<Dialog.Root
+		<Dialog
 			open={open}
 			onOpenChange={(next) => {
 				if (!pending) {
@@ -202,43 +214,45 @@ export default function CreateLunchRoom({
 				}
 			}}
 		>
-			<Dialog.Trigger asChild>
-				<button
+			<DialogTrigger asChild>
+				<Button
+					variant="secondary"
+					size="default"
 					type="button"
 					className="lunch-create-trigger"
 					disabled={disabled}
 				>
 					<Users size={17} aria-hidden="true" /> 방 만들기
-				</button>
-			</Dialog.Trigger>
-			<Dialog.Portal>
-				<Dialog.Overlay className="lunch-create-backdrop" />
-				<Dialog.Content
-					className="lunch-create-dialog"
-					onEscapeKeyDown={(event) => {
-						if (pending) event.preventDefault();
-					}}
-					onPointerDownOutside={(event) => {
-						if (pending) event.preventDefault();
-					}}
-				>
-					<Dialog.Title>함께 점심 추첨하기</Dialog.Title>
-					<Dialog.Description>
-						참가 링크를 공유하면 같은 룰렛을 보며 채팅할 수 있습니다.
-					</Dialog.Description>
-					<Dialog.Close asChild>
-						<button
-							type="button"
-							className="lunch-create-close"
-							aria-label="닫기"
-							disabled={pending}
-						>
-							<X size={20} />
-						</button>
-					</Dialog.Close>
-					{fields}
-				</Dialog.Content>
-			</Dialog.Portal>
-		</Dialog.Root>
+				</Button>
+			</DialogTrigger>
+			<DialogContent
+				showCloseButton={false}
+				className="lunch-create-dialog"
+				onEscapeKeyDown={(event) => {
+					if (pending) event.preventDefault();
+				}}
+				onPointerDownOutside={(event) => {
+					if (pending) event.preventDefault();
+				}}
+			>
+				<DialogTitle>함께 점심 추첨하기</DialogTitle>
+				<DialogDescription>
+					참가 링크를 공유하면 같은 룰렛을 보며 채팅할 수 있습니다.
+				</DialogDescription>
+				<DialogClose asChild>
+					<Button
+						variant="ghost"
+						size="icon"
+						type="button"
+						className="lunch-create-close"
+						aria-label="닫기"
+						disabled={pending}
+					>
+						<X size={20} />
+					</Button>
+				</DialogClose>
+				{fields}
+			</DialogContent>
+		</Dialog>
 	);
 }

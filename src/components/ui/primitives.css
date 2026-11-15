@@ -1,0 +1,222 @@
+/* Shared shadcn/ui presentation. Features own layout and game-specific states. */
+.ui-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	font: inherit;
+	line-height: 1.4;
+	cursor: pointer;
+}
+.ui-button > svg {
+	flex-shrink: 0;
+	pointer-events: none;
+}
+.ui-button:where(:not([data-variant="plain"])) {
+	border: 1px solid var(--input);
+	border-block-end-width: 3px;
+	border-radius: var(--control-radius);
+	background: #fff;
+	color: var(--accent-foreground);
+	font-size: 14px;
+	font-weight: 700;
+	text-align: center;
+	text-decoration: none;
+}
+.ui-button:where(:not([data-variant="plain"])):where(:not([data-size="auto"])) {
+	min-block-size: 44px;
+	padding: 10px 16px;
+}
+.ui-button:where([data-variant="default"]) {
+	border-color: var(--ink);
+	background: var(--primary);
+	color: var(--primary-foreground);
+	font-weight: 800;
+}
+.ui-button:where([data-variant="secondary"]) {
+	background: var(--secondary);
+	color: var(--secondary-foreground);
+}
+.ui-button:where([data-variant="destructive"]) {
+	border-color: var(--destructive);
+	background: var(--destructive);
+	color: var(--destructive-foreground);
+}
+.ui-button:where([data-variant="ghost"], [data-variant="link"]) {
+	border-color: transparent;
+	border-block-end-width: 1px;
+	background: transparent;
+}
+.ui-button:where([data-variant="link"]) {
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+.ui-button:where([data-size="sm"]):where(:not([data-variant="plain"])) {
+	padding: 8px 12px;
+	font-size: 13px;
+}
+.ui-button:where([data-size="lg"]):where(:not([data-variant="plain"])) {
+	min-block-size: 52px;
+	padding: 12px 20px;
+	border-block-end-width: 4px;
+	font-size: 16px;
+}
+.ui-button:where([data-size="icon"], [data-size="icon-sm"]) {
+	inline-size: 44px;
+	min-inline-size: 44px;
+	padding: 10px;
+}
+.ui-button:where([data-size="icon-lg"]) {
+	inline-size: 52px;
+	min-block-size: 52px;
+	padding: 12px;
+}
+.ui-button:disabled,
+.ui-button[aria-disabled="true"] {
+	cursor: not-allowed;
+	opacity: 0.5;
+}
+.ui-button:focus-visible,
+.ui-input:focus-visible,
+.ui-textarea:focus-visible,
+.ui-native-select:focus-visible {
+	outline: 3px solid var(--ring);
+	outline-offset: 3px;
+}
+.ui-input:where(:not([type="checkbox"], [type="radio"], [type="range"])),
+.ui-textarea,
+.ui-native-select {
+	inline-size: 100%;
+	min-inline-size: 0;
+	min-block-size: 44px;
+	padding: 9px 12px;
+	border: 1px solid var(--input);
+	border-radius: var(--control-radius);
+	background: #fff;
+	color: var(--foreground);
+	font: inherit;
+	font-size: 16px;
+	line-height: 1.5;
+}
+.ui-textarea {
+	resize: vertical;
+}
+.ui-native-select {
+	inline-size: auto;
+	padding-inline-end: 24px;
+}
+:is(.ui-input, .ui-textarea, .ui-native-select):disabled {
+	cursor: not-allowed;
+	background: var(--surface);
+	color: var(--muted);
+}
+:is(.ui-input, .ui-textarea, .ui-native-select)[aria-invalid="true"] {
+	border-color: var(--destructive);
+	box-shadow: inset 0 0 0 1px var(--destructive);
+}
+.ui-label {
+	font-size: 14px;
+	font-weight: 700;
+	line-height: 1.5;
+}
+.ui-dialog-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 1000;
+	background: rgb(27 33 21 / 45%);
+}
+.ui-dialog-content {
+	position: fixed;
+	inset-block-start: 50%;
+	inset-inline-start: 50%;
+	z-index: 1001;
+	translate: -50% -50%;
+	inline-size: min(480px, calc(100vw - 32px));
+	max-block-size: calc(100dvh - 32px);
+	padding: 24px;
+	border: 2px solid var(--ink);
+	border-radius: var(--panel-radius);
+	background: var(--paper);
+	color: var(--ink);
+	overflow-y: auto;
+}
+.ui-dialog-header {
+	display: grid;
+	gap: 12px;
+	margin-block-end: 20px;
+}
+.ui-dialog-title {
+	margin: 0;
+	font-size: 23px;
+	font-weight: 800;
+	letter-spacing: -0.04em;
+	line-height: 1.4;
+	overflow-wrap: anywhere;
+}
+.ui-dialog-description {
+	margin: 0;
+	font-size: 15px;
+	line-height: 1.6;
+	color: var(--muted);
+	overflow-wrap: anywhere;
+}
+.ui-dialog-footer {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-block-start: 24px;
+}
+.ui-dialog-close {
+	position: absolute;
+	inset-block-start: 8px;
+	inset-inline-end: 8px;
+}
+@media (max-width: 480px) {
+	.ui-dialog-content {
+		padding: 20px;
+	}
+	.ui-dialog-footer > .ui-button {
+		flex: 1;
+	}
+}
+@media (hover: hover) and (pointer: fine) {
+	.ui-button:where(
+			:not(:disabled):not([aria-disabled="true"]):not(
+					[data-variant="plain"]
+				):hover
+		) {
+		background: var(--accent);
+	}
+	.ui-button:where([data-variant="default"]:not(:disabled):hover) {
+		background: var(--primary-hover);
+	}
+	.ui-button:where([data-variant="destructive"]:not(:disabled):hover) {
+		background: #8d3020;
+	}
+}
+@media (prefers-reduced-motion: no-preference) {
+	.ui-button:where(:not([data-variant="plain"])) {
+		transition:
+			background-color 120ms,
+			translate 120ms ease-out;
+	}
+	.ui-button:not(:disabled):where(:not([data-variant="plain"])):active {
+		translate: 0 2px;
+	}
+	.ui-dialog-overlay[data-state="open"] {
+		animation: ui-dialog-fade 120ms ease-out;
+	}
+	.ui-dialog-content[data-state="open"] {
+		animation: ui-dialog-fade 120ms ease-out;
+	}
+}
+@keyframes ui-dialog-fade {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}

@@ -65,6 +65,9 @@
 .room-feedback-actions button:disabled {
 	cursor: default;
 }
+.room-feedback-actions button[data-voted="true"] {
+	opacity: 1;
+}
 
 .room-feedback-actions button[data-selected="true"] {
 	border-color: #3f5e25;
@@ -335,11 +338,6 @@
 	.room-feedback-burst {
 		display: none;
 	}
-}
-
-.room-feedback-actions button:focus-visible {
-	outline: 3px solid #527427;
-	outline-offset: 3px;
 }
 
 .room-feedback-note {

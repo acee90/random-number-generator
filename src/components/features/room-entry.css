@@ -68,11 +68,6 @@
 	gap: 12px;
 }
 
-.room-entry-field-heading label {
-	font-size: 14px;
-	font-weight: 700;
-}
-
 .room-entry-field-heading span {
 	font-size: 12px;
 	font-variant-numeric: tabular-nums;
@@ -80,19 +75,7 @@
 }
 
 .room-entry-form input {
-	inline-size: 100%;
-	min-inline-size: 0;
 	min-block-size: 52px;
-	padding: 12px;
-	border: 1px solid var(--section-line, #68715e);
-	border-radius: var(--control-radius, 2px);
-	background: #fff;
-	color: var(--ink);
-	font-size: 17px;
-}
-
-.room-entry-form input[aria-invalid="true"] {
-	border-color: #a13322;
 }
 
 .room-entry-hint,
@@ -140,59 +123,14 @@
 
 .room-entry-recheck {
 	flex-shrink: 0;
-	min-block-size: 44px;
-	padding: 4px 6px;
-	font-size: 12px;
-	font-weight: 650;
-	text-decoration: underline;
-	text-underline-offset: 3px;
 }
-
 .room-entry-submit {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 8px;
 	inline-size: 100%;
-	min-block-size: 52px;
 	margin-block-start: 12px;
-	padding: 12px 16px;
-	border: 1px solid var(--ink);
-	border-block-end-width: 4px;
-	border-radius: var(--control-radius, 2px);
-	background: var(--lime);
-	color: var(--ink);
-	font-size: 16px;
-	font-weight: 800;
 }
-
-.room-entry-submit:disabled {
-	cursor: default;
-	background: #edf2e3;
-	border-color: #c3cdb5;
-	color: #59634d;
-}
-
 .room-entry-back {
 	display: flex;
-	align-items: center;
-	justify-content: center;
-	min-block-size: 44px;
 	margin-block-start: 20px;
-	text-align: center;
-	font-size: 13px;
-	line-height: 1.6;
-	color: #556247;
-	text-decoration: underline;
-	text-underline-offset: 3px;
-}
-
-.room-entry-submit:focus-visible,
-.room-entry-recheck:focus-visible,
-.room-entry-form input:focus-visible,
-.room-entry-back:focus-visible {
-	outline: 3px solid #627c34;
-	outline-offset: 3px;
 }
 
 @keyframes room-entry-spin {
@@ -202,28 +140,10 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-	.room-entry-submit {
-		transition:
-			translate 120ms ease-out,
-			background-color 150ms ease-out;
-	}
-	.room-entry-submit:not(:disabled):active {
-		translate: 0 2px;
-	}
 	.room-entry-spinner {
 		animation: room-entry-spin 850ms linear infinite;
 	}
 }
-@media (hover: hover) and (pointer: fine) {
-	.room-entry-submit:not(:disabled):hover {
-		background: #e4efcc;
-	}
-	.room-entry-back:hover,
-	.room-entry-recheck:hover {
-		color: #3f5e25;
-	}
-}
-
 @media (max-width: 480px) {
 	.room-entry-card {
 		padding: 22px;

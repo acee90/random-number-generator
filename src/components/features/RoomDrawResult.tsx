@@ -1,5 +1,6 @@
 import { ArrowRight } from "lucide-react";
 import { type RefObject, useEffect, useId, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
 	isRoomDrawVoter,
 	type RoomDraw,
@@ -165,15 +166,17 @@ export default function RoomDrawResult({
 				)}
 				{isHost && (
 					<div className="room-result-actions">
-						<button
+						<Button
+							variant="default"
+							size="lg"
 							type="button"
-							className="generate-button"
+							className="room-next-round"
 							disabled={!canNext || nextPending}
 							onClick={onNext}
 						>
 							{nextPending ? "투표 종료 중…" : "투표 종료하고 다음 게임"}
 							<ArrowRight size={18} aria-hidden="true" />
-						</button>
+						</Button>
 					</div>
 				)}
 			</section>

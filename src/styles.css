@@ -1,16 +1,30 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "./components/ui/primitives.css";
 @custom-variant dark (&:is(.dark *));
 @theme inline {
-	--color-background: #f7f7f2;
-	--color-foreground: #262923;
-	--color-primary: #292d24;
-	--color-primary-foreground: #fff;
-	--color-input: #d5d8ce;
-	--color-ring: #596c2c;
-	--radius-sm: 2px;
-	--radius-md: 2px;
-	--radius-lg: 2px;
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--foreground);
+	--color-popover: var(--card);
+	--color-popover-foreground: var(--foreground);
+	--color-muted: var(--surface);
+	--color-muted-foreground: var(--muted);
+	--color-destructive: var(--destructive);
+	--color-destructive-foreground: var(--destructive-foreground);
+	--color-border: var(--line);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+	--radius-sm: var(--control-radius);
+	--radius-md: var(--control-radius);
+	--radius-lg: var(--panel-radius);
 	--radius-xl: 4px;
 }
 :root {
@@ -23,6 +37,20 @@
 	--panel-radius: 2px;
 	--lime: #d6f266;
 	--paper: #f7f7f2;
+	--background: var(--paper);
+	--foreground: var(--ink);
+	--primary: var(--lime);
+	--primary-foreground: var(--ink);
+	--primary-hover: #cbe953;
+	--secondary: var(--surface);
+	--secondary-foreground: var(--ink);
+	--accent: #edf2e3;
+	--accent-foreground: #3f5e25;
+	--card: #fff;
+	--input: #8b967d;
+	--ring: #527427;
+	--destructive: #a13d27;
+	--destructive-foreground: #fff;
 	color-scheme: light;
 }
 * {
@@ -105,21 +133,6 @@ a {
 }
 .brand-period {
 	color: #718437;
-}
-.text-button {
-	border: 0;
-	padding: 12px 0;
-	background: transparent;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	gap: 8px;
-	font-size: 14px;
-	font-weight: 550;
-	color: #556247;
-}
-.text-button:disabled {
-	color: #818779;
 }
 .page-heading {
 	padding: 26px 0 24px;
@@ -261,13 +274,9 @@ a {
 	width: 100%;
 	min-width: 0;
 	min-height: 60px;
-	border: 1px solid #8b967d;
-	border-radius: var(--control-radius);
-	background: #fff;
 	font-size: 25px;
 	font-weight: 600;
 	font-variant-numeric: tabular-nums;
-	color: var(--ink);
 }
 .range-dash {
 	margin-bottom: 21px;
@@ -288,16 +297,12 @@ a {
 	gap: 8px;
 }
 .count-input input {
-	border: 1px solid #8b967d;
-	border-radius: var(--control-radius);
 	width: 85px;
 	min-height: 44px;
 	padding: 6px;
 	text-align: center;
 	font-size: 22px;
 	font-weight: 650;
-	background: #fff;
-	color: var(--ink);
 }
 .count-input > span {
 	font-size: 14px;
@@ -383,18 +388,8 @@ a {
 }
 .generate-button {
 	margin-top: 25px;
-	background: var(--lime);
-	color: #263619;
-	border: 1px solid var(--ink);
-	border-block-end-width: 4px;
-	border-radius: var(--control-radius);
-	min-height: 64px;
 	display: flex;
 	justify-content: space-between;
-	align-items: center;
-	padding: 15px 20px;
-	font-size: 20px;
-	font-weight: 750;
 }
 .generate-button > span {
 	display: flex;
@@ -405,9 +400,7 @@ a {
 	width: 23px;
 	height: 23px;
 }
-.generate-button:disabled {
-	opacity: 0.72;
-}
+
 .button-caption {
 	color: #6b785e;
 	font-size: 12px;
@@ -593,20 +586,7 @@ a {
 	color: #647952;
 	font-size: 12px;
 }
-.result-copy {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 9px;
-	min-height: 48px;
-	font-size: 16px;
-	font-weight: 600;
-	border: 1px solid #aabf8d;
-	padding: 11px 22px;
-	background: #fff;
-	color: #3f5e25;
-	border-radius: var(--control-radius);
-}
+
 .lottery-rules {
 	background: transparent;
 	border: 0;
@@ -640,6 +620,7 @@ a {
 	border: 0;
 }
 .game-options button {
+	display: block;
 	padding: 14px 0 12px;
 	min-height: 76px;
 	font-size: 25px;
@@ -675,11 +656,7 @@ a {
 	appearance: none;
 	padding: 15px 40px 15px 14px;
 	min-height: 56px;
-	border: 1px solid #8b9c77;
-	border-radius: var(--control-radius);
-	background: #fff;
 	font-size: 17px;
-	color: var(--ink);
 }
 .select-wrap > svg {
 	position: absolute;
@@ -972,17 +949,7 @@ a {
 	width: 28px;
 	color: #5d7844;
 }
-.icon-button {
-	display: grid;
-	place-items: center;
-	width: 44px;
-	height: 44px;
-	padding: 0;
-	border: 1px solid #b4c69c;
-	border-radius: var(--control-radius);
-	background: #fff;
-	color: #526f35;
-}
+
 .history-item > .icon-button {
 	position: absolute;
 	right: 16px;
@@ -1024,20 +991,8 @@ a {
 	top: 12px;
 }
 @media (hover: hover) {
-	.text-button:not(:disabled):hover {
-		color: #293c15;
-		text-decoration: underline;
-		text-underline-offset: 4px;
-	}
 	.tool-tab:not(.is-active):not(:disabled):hover {
 		background: #dbe3cd;
-	}
-	.generate-button:not(:disabled):hover {
-		background: #cbe953;
-	}
-	.result-copy:hover,
-	.icon-button:hover {
-		background: #f0f6e1;
 	}
 	.game-options button:not(.selected):hover,
 	.example-card:not(:disabled):hover {
@@ -1046,12 +1001,12 @@ a {
 	}
 }
 @media (prefers-reduced-motion: no-preference) {
-	button {
+	button:not(.ui-button) {
 		transition:
 			background-color 150ms,
 			scale 150ms ease-out;
 	}
-	button:active:not(:disabled) {
+	button:not(.ui-button):active:not(:disabled) {
 		scale: 0.96;
 	}
 	.spin {
@@ -1252,10 +1207,6 @@ a {
 		min-height: 58px;
 		font-size: 24px;
 	}
-	.generate-button {
-		min-height: 64px;
-		font-size: 20px;
-	}
 	.toggle-options {
 		grid-template-columns: 1fr;
 		gap: 17px;
@@ -1286,9 +1237,6 @@ a {
 	}
 	.number-result {
 		gap: 10px;
-	}
-	.result-copy {
-		font-size: 16px;
 	}
 	.empty-result h3 {
 		font-size: 20px;
@@ -1482,18 +1430,6 @@ html {
 }
 .ticket-copy,
 .history-row-copy {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	gap: 7px;
-	min-height: 44px;
-	border: 1px solid #b3c699;
-	border-radius: var(--control-radius);
-	padding: 9px 12px;
-	color: #456829;
-	background: #fff;
-	font-size: 13px;
-	font-weight: 550;
 	flex-shrink: 0;
 }
 .ticket-copy {
@@ -1509,9 +1445,7 @@ html {
 	min-width: 0;
 	overflow-wrap: anywhere;
 }
-.history-row-copy {
-	font-size: 12px;
-}
+
 .ticket-copy-hint,
 .all-groups-note {
 	font-size: 13px;
@@ -1585,12 +1519,6 @@ html {
 	color: #43602b;
 	text-decoration: underline;
 	text-underline-offset: 3px;
-}
-@media (hover: hover) {
-	.ticket-copy:hover,
-	.history-row-copy:hover {
-		background: #edf6dc;
-	}
 }
 @media (max-width: 1100px) {
 	.ticket-copy {

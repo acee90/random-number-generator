@@ -35,6 +35,10 @@ import RoomDrawDialog, {
 import RoomDrawResult from "@/components/features/RoomDrawResult";
 import RoomEntryGate from "@/components/features/RoomEntryGate";
 import SiteHeader from "@/components/layout/SiteHeader";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useLunchRoom } from "@/hooks/useLunchRoom";
 import { useRoomTimeline } from "@/hooks/useRoomTimeline";
 import {
@@ -602,37 +606,41 @@ export default function LunchRoomPage({
 				<legend className="sr-only">
 					{readOnly ? "목록 보기 분류" : "추첨 후보 분류"}
 				</legend>
-				{(["전체", ...lunchCategories] as const).map((category) => (
-					<button
-						key={category}
-						type="button"
-						aria-pressed={
-							category === "전체"
-								? lunchCategories.every((item) => categories.includes(item))
-								: categories.includes(category)
-						}
-						onClick={() => {
-							if (readOnly)
-								setGuestCategories((previous) =>
-									category === "전체"
-										? lunchCategories
-										: previous.includes(category)
-											? previous.filter((item) => item !== category)
-											: [...previous, category],
-								);
-							else {
-								setCandidateSelection((previous) =>
-									category === "전체"
-										? selectAllRoomCandidateCategories(previous)
-										: toggleRoomCandidateCategory(previous, category),
-								);
-								setCandidateError("");
-							}
-						}}
-					>
-						{category}
-					</button>
-				))}
+				{(["전체", ...lunchCategories] as const).map((category) => {
+					const selected =
+						category === "전체"
+							? lunchCategories.every((item) => categories.includes(item))
+							: categories.includes(category);
+					return (
+						<Button
+							variant={selected ? "default" : "outline"}
+							size="sm"
+							key={category}
+							type="button"
+							aria-pressed={selected}
+							onClick={() => {
+								if (readOnly)
+									setGuestCategories((previous) =>
+										category === "전체"
+											? lunchCategories
+											: previous.includes(category)
+												? previous.filter((item) => item !== category)
+												: [...previous, category],
+									);
+								else {
+									setCandidateSelection((previous) =>
+										category === "전체"
+											? selectAllRoomCandidateCategories(previous)
+											: toggleRoomCandidateCategory(previous, category),
+									);
+									setCandidateError("");
+								}
+							}}
+						>
+							{category}
+						</Button>
+					);
+				})}
 			</fieldset>
 		);
 	}
@@ -754,20 +762,24 @@ export default function LunchRoomPage({
 									</span>
 								)}
 								{!connected && (
-									<button
+									<Button
+										variant="ghost"
+										size="sm"
 										type="button"
-										className="text-button"
+										className="room-text-action"
 										onClick={room.reconnect}
 									>
 										다시 연결
-									</button>
+									</Button>
 								)}
 							</div>
 						)}
 					</div>
 					{!closed && (
 						<div className="room-heading-actions">
-							<button
+							<Button
+								variant="outline"
+								size="default"
 								type="button"
 								className="room-outline-button"
 								disabled={!inviteUrl}
@@ -781,13 +793,15 @@ export default function LunchRoomPage({
 									<Copy size={17} aria-hidden="true" />
 								)}
 								{copied === "invite" ? "링크 복사됨" : "초대 링크 복사"}
-							</button>
+							</Button>
 							{snapshot && (
 								<details className="room-info">
-									<summary title="방 정보">
-										<Info size={18} aria-hidden="true" />
-										<span className="sr-only">방 정보</span>
-									</summary>
+									<Button asChild variant="outline" size="icon">
+										<summary title="방 정보">
+											<Info size={18} aria-hidden="true" />
+											<span className="sr-only">방 정보</span>
+										</summary>
+									</Button>
 
 									<div className="room-lifetime">
 										<span>
@@ -837,12 +851,12 @@ export default function LunchRoomPage({
 						<p>
 							{room.error || "방이 만료되었거나 더 이상 이용할 수 없습니다."}
 						</p>
-						<a className="generate-button" href="/create">
-							새 방 만들기
-						</a>
-						<a className="room-outline-button" href="/solo">
-							혼자 추첨하기
-						</a>
+						<Button asChild size="lg" className="room-terminal-action">
+							<a href="/create">새 방 만들기</a>
+						</Button>
+						<Button asChild variant="outline">
+							<a href="/solo">혼자 추첨하기</a>
+						</Button>
 					</section>
 				) : (
 					<>
@@ -889,15 +903,19 @@ export default function LunchRoomPage({
 									</section>
 								)}
 								<nav className="room-primary-tabs" aria-label="추첨 도구">
-									<button
+									<Button
+										variant="plain"
+										size="auto"
 										type="button"
 										aria-pressed={view === "wheel"}
 										aria-controls={`${id}-draw-panel`}
 										onClick={() => changeView("wheel")}
 									>
 										룰렛
-									</button>
-									<button
+									</Button>
+									<Button
+										variant="plain"
+										size="auto"
 										type="button"
 										aria-pressed={view === "history"}
 										aria-controls={`${id}-history-panel`}
@@ -905,7 +923,7 @@ export default function LunchRoomPage({
 									>
 										결과{" "}
 										<span aria-hidden="true">{completedHistory.length}</span>
-									</button>
+									</Button>
 								</nav>
 								<section
 									id={`${id}-draw-panel`}
@@ -980,7 +998,9 @@ export default function LunchRoomPage({
 										{status}
 									</output>
 									{spinning && !reducedMotion && (
-										<button
+										<Button
+											variant="outline"
+											size="sm"
 											type="button"
 											className="room-motion-button"
 											onClick={() => setMotionOff((off) => !off)}
@@ -991,7 +1011,7 @@ export default function LunchRoomPage({
 												<Pause size={14} aria-hidden="true" />
 											)}
 											{motionOff ? "애니메이션 켜기" : "애니메이션 끄기"}
-										</button>
+										</Button>
 									)}
 									{spinning && reducedMotion && (
 										<p className="room-motion-note">
@@ -1028,7 +1048,9 @@ export default function LunchRoomPage({
 												const kind: CopyKind = `history:${entry.id}`;
 												return (
 													<li key={entry.id} className="room-history-item">
-														<button
+														<Button
+															variant="ghost"
+															size="auto"
 															type="button"
 															className="room-history-open"
 															aria-expanded={selectedDraw?.id === entry.id}
@@ -1078,8 +1100,10 @@ export default function LunchRoomPage({
 																	}
 																</span>
 															)}
-														</button>
-														<button
+														</Button>
+														<Button
+															variant="outline"
+															size="default"
 															type="button"
 															className="room-outline-button room-history-copy"
 															aria-label={`${place.name} 기록 ${copied === kind ? "복사됨" : "복사"}`}
@@ -1097,7 +1121,7 @@ export default function LunchRoomPage({
 																<Copy size={15} aria-hidden="true" />
 															)}
 															{copied === kind ? "복사됨" : "복사"}
-														</button>
+														</Button>
 													</li>
 												);
 											})}
@@ -1152,9 +1176,11 @@ export default function LunchRoomPage({
 												</p>
 												{candidateCategoryButtons(false)}
 												<div className="room-candidate-toolbar-actions">
-													<button
+													<Button
+														variant="ghost"
+														size="sm"
 														type="button"
-														className="text-button"
+														className="room-text-action"
 														disabled={candidateControlsDisabled}
 														onClick={() => {
 															setCandidateSelection(selectAllRoomCandidates());
@@ -1162,10 +1188,12 @@ export default function LunchRoomPage({
 														}}
 													>
 														모두 선택
-													</button>
-													<button
+													</Button>
+													<Button
+														variant="ghost"
+														size="sm"
 														type="button"
-														className="text-button"
+														className="room-text-action"
 														disabled={candidateControlsDisabled}
 														onClick={() => {
 															setCandidateSelection(clearRoomCandidates());
@@ -1173,8 +1201,10 @@ export default function LunchRoomPage({
 														}}
 													>
 														선택 해제
-													</button>
-													<button
+													</Button>
+													<Button
+														variant="outline"
+														size="default"
 														type="button"
 														className="room-outline-button"
 														disabled={
@@ -1194,10 +1224,12 @@ export default function LunchRoomPage({
 														}}
 													>
 														변경 취소
-													</button>
-													<button
+													</Button>
+													<Button
+														variant="default"
+														size="default"
 														type="submit"
-														className="generate-button"
+														className="room-candidate-submit"
 														disabled={
 															candidateControlsDisabled || !candidatesChanged
 														}
@@ -1210,7 +1242,7 @@ export default function LunchRoomPage({
 														{room.candidatesPending
 															? "후보 적용 중…"
 															: "후보 적용"}
-													</button>
+													</Button>
 												</div>
 												<output
 													className="room-candidate-feedback"
@@ -1290,7 +1322,9 @@ export default function LunchRoomPage({
 							>
 								<div className="room-chat-header">
 									<h2 id={`${id}-chat`} aria-label="채팅">
-										<button
+										<Button
+											variant="plain"
+											size="auto"
 											type="button"
 											className="room-chat-toggle"
 											aria-label={chatCollapsed ? "채팅 펼치기" : "채팅 접기"}
@@ -1319,9 +1353,11 @@ export default function LunchRoomPage({
 											) : (
 												<ChevronDown size={17} aria-hidden="true" />
 											)}
-										</button>
+										</Button>
 									</h2>
-									<button
+									<Button
+										variant="ghost"
+										size="sm"
 										type="button"
 										ref={membersButtonRef}
 										className="room-chat-members-button"
@@ -1341,7 +1377,7 @@ export default function LunchRoomPage({
 											aria-hidden="true"
 										/>
 										<span>{members.length}</span>
-									</button>
+									</Button>
 									{chatPopover === "members" && (
 										<section
 											id={`${id}-members-popover`}
@@ -1358,7 +1394,9 @@ export default function LunchRoomPage({
 												>
 													참가자
 												</h3>
-												<button
+												<Button
+													variant="ghost"
+													size="icon"
 													type="button"
 													className="room-chat-icon-button"
 													aria-label="참가자 목록 닫기"
@@ -1368,7 +1406,7 @@ export default function LunchRoomPage({
 													}}
 												>
 													<X size={16} aria-hidden="true" />
-												</button>
+												</Button>
 											</div>
 											<p className="room-roster-summary">
 												접속 {participants.length}명 · 전체 {members.length}명
@@ -1497,7 +1535,9 @@ export default function LunchRoomPage({
 										)}
 									</ul>
 									{unread > 0 && (
-										<button
+										<Button
+											variant="secondary"
+											size="sm"
 											type="button"
 											className="room-new-messages"
 											onClick={() => {
@@ -1508,7 +1548,7 @@ export default function LunchRoomPage({
 											}}
 										>
 											새 메시지 {unread}개 보기
-										</button>
+										</Button>
 									)}
 									<form
 										className="room-chat-form"
@@ -1517,11 +1557,11 @@ export default function LunchRoomPage({
 											submitChat();
 										}}
 									>
-										<label className="sr-only" htmlFor={`${id}-message`}>
+										<Label className="sr-only" htmlFor={`${id}-message`}>
 											메시지
-										</label>
+										</Label>
 										<div className="room-composer-row">
-											<textarea
+											<Textarea
 												id={`${id}-message`}
 												ref={chatInputRef}
 												value={message}
@@ -1552,7 +1592,9 @@ export default function LunchRoomPage({
 													connected ? "메시지 보내기" : "연결을 기다리는 중…"
 												}
 											/>
-											<button
+											<Button
+												variant="default"
+												size="icon"
 												type="submit"
 												className="room-send-button"
 												aria-label="메시지 보내기"
@@ -1564,7 +1606,7 @@ export default function LunchRoomPage({
 													absoluteStrokeWidth
 													aria-hidden="true"
 												/>
-											</button>
+											</Button>
 										</div>
 										<div className="room-composer-meta">
 											<span id={`${id}-composer-help`}>
@@ -1574,7 +1616,9 @@ export default function LunchRoomPage({
 										</div>
 									</form>
 									<div className="room-chat-footer">
-										<button
+										<Button
+											variant="ghost"
+											size="auto"
 											type="button"
 											ref={nicknameButtonRef}
 											className="room-profile-trigger"
@@ -1603,7 +1647,7 @@ export default function LunchRoomPage({
 												<small>{selfPresenceLabel}</small>
 											</span>
 											<ChevronUp size={15} aria-hidden="true" />
-										</button>
+										</Button>
 										{editingName && (
 											<section
 												id={`${id}-profile-popover`}
@@ -1616,7 +1660,9 @@ export default function LunchRoomPage({
 													<h3 id={`${id}-profile-title`}>
 														<Pencil size={14} aria-hidden="true" /> 내 프로필
 													</h3>
-													<button
+													<Button
+														variant="ghost"
+														size="icon"
 														type="button"
 														className="room-chat-icon-button"
 														aria-label="프로필 닫기"
@@ -1626,7 +1672,7 @@ export default function LunchRoomPage({
 														}}
 													>
 														<X size={16} aria-hidden="true" />
-													</button>
+													</Button>
 												</div>
 												<form
 													className="room-name-form"
@@ -1650,12 +1696,12 @@ export default function LunchRoomPage({
 														}
 													}}
 												>
-													<label htmlFor={`${id}-name`}>닉네임</label>
+													<Label htmlFor={`${id}-name`}>닉네임</Label>
 													<span className="room-name-count">
 														{nameDraft.length}/
 														{lunchRoomLimits.maxNicknameLength}
 													</span>
-													<input
+													<Input
 														id={`${id}-name`}
 														ref={nicknameRef}
 														autoComplete="nickname"
@@ -1681,14 +1727,18 @@ export default function LunchRoomPage({
 														{nameError}
 													</p>
 													<div className="room-profile-actions">
-														<button
+														<Button
+															variant="default"
+															size="sm"
 															type="submit"
 															className="room-profile-save"
 															disabled={!connected}
 														>
 															변경
-														</button>
-														<button
+														</Button>
+														<Button
+															variant="ghost"
+															size="sm"
 															type="button"
 															className="room-name-cancel"
 															onClick={() => {
@@ -1699,7 +1749,7 @@ export default function LunchRoomPage({
 															}}
 														>
 															취소
-														</button>
+														</Button>
 													</div>
 												</form>
 												<p className="room-roster-note">

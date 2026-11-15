@@ -10,6 +10,7 @@ import {
 } from "react";
 import CopyFallback from "@/components/features/CopyFallback";
 import RoomDrawFeedback from "@/components/features/RoomDrawFeedback";
+import { Button } from "@/components/ui/button";
 import type { RoomDraw } from "@/lib/lunchRoom";
 import { getSourceDisplayName } from "@/services/randomService";
 
@@ -278,11 +279,15 @@ export default function RoomDrawDialog({
 									이 회차에 저장된 후보와 참가자 정보를 표시합니다.
 								</Dialog.Description>
 							</div>
-							<Dialog.Close
-								className="room-chat-icon-button"
-								aria-label="상세 기록 닫기"
-							>
-								<X size={18} aria-hidden="true" />
+							<Dialog.Close asChild>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon"
+									aria-label="상세 기록 닫기"
+								>
+									<X size={18} aria-hidden="true" />
+								</Button>
 							</Dialog.Close>
 						</div>
 						<div className="room-record-body">
@@ -311,7 +316,9 @@ export default function RoomDrawDialog({
 						</div>
 						<div className="room-record-actions">
 							{!modal && (
-								<button
+								<Button
+									variant="outline"
+									size="default"
 									type="button"
 									className="room-outline-button"
 									onClick={() =>
@@ -319,9 +326,11 @@ export default function RoomDrawDialog({
 									}
 								>
 									채팅으로 이동
-								</button>
+								</Button>
 							)}
-							<button
+							<Button
+								variant="outline"
+								size="default"
 								type="button"
 								className="room-outline-button"
 								ref={copyButtonRef}
@@ -333,8 +342,12 @@ export default function RoomDrawDialog({
 									<Copy size={16} aria-hidden="true" />
 								)}
 								{copied ? "전체 기록 복사됨" : "전체 기록 복사"}
-							</button>
-							<Dialog.Close className="room-outline-button">닫기</Dialog.Close>
+							</Button>
+							<Dialog.Close asChild>
+								<Button type="button" variant="outline">
+									닫기
+								</Button>
+							</Dialog.Close>
 						</div>
 					</Dialog.Content>
 				</div>

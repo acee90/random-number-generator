@@ -8,6 +8,9 @@ import {
 	X,
 } from "lucide-react";
 import { useId, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import "./lotto-strategy.css";
 
 export type LottoMode = "random" | "spread" | "fixed";
@@ -146,9 +149,9 @@ export default function LottoStrategyControls({
 		const entryId = `${id}-${kind}-entry`;
 		return (
 			<div className="lotto-number-entry">
-				<label htmlFor={entryId}>{label} 한 번에 추가</label>
+				<Label htmlFor={entryId}>{label} 한 번에 추가</Label>
 				<div className="lotto-entry-controls">
-					<textarea
+					<Textarea
 						id={entryId}
 						name={`lotto-${kind}-numbers`}
 						ref={kind === "fixed" ? fixedEntryRef : excludedEntryRef}
@@ -174,7 +177,9 @@ export default function LottoStrategyControls({
 							if (!event.nativeEvent.isComposing) addNumbers(kind);
 						}}
 					/>
-					<button
+					<Button
+						variant="outline"
+						size="sm"
 						type="button"
 						className={`lotto-fixed-clear lotto-entry-add ${kind === "excluded" ? "lotto-excluded-clear" : ""}`}
 						disabled={disabled}
@@ -182,7 +187,7 @@ export default function LottoStrategyControls({
 						onClick={() => addNumbers(kind)}
 					>
 						추가
-					</button>
+					</Button>
 				</div>
 				<p id={`${entryId}-help`} className="lotto-entry-help">
 					쉼표나 공백으로 구분하세요. 선택한 번호에 추가됩니다.
@@ -234,7 +239,7 @@ export default function LottoStrategyControls({
 					{choices.map((choice) => {
 						const Icon = choice.icon;
 						return (
-							<label
+							<Label
 								key={choice.value}
 								className={`lotto-mode-card ${mode === choice.value ? "is-selected" : ""}`}
 								data-disabled={disabled || undefined}
@@ -254,7 +259,7 @@ export default function LottoStrategyControls({
 								<span className="lotto-mode-description">
 									{choice.description}
 								</span>
-							</label>
+							</Label>
 						);
 					})}
 				</div>
@@ -279,14 +284,16 @@ export default function LottoStrategyControls({
 						<p id={`${id}-fixed-help`}>
 							모든 게임에 넣을 번호를 1~5개 선택하세요.
 						</p>
-						<button
+						<Button
+							variant="outline"
+							size="sm"
 							type="button"
 							className="lotto-fixed-clear"
 							disabled={disabled || fixedCount === 0}
 							onClick={() => onFixedNumbersChange([])}
 						>
 							<RotateCcw size={14} aria-hidden="true" /> 전체 해제
-						</button>
+						</Button>
 					</div>
 					<div className="lotto-fixed-selection">
 						<output className="lotto-fixed-count" aria-live="polite">
@@ -299,7 +306,9 @@ export default function LottoStrategyControls({
 						) : (
 							<div className="lotto-selected-chips">
 								{fixedNumbers.map((number) => (
-									<button
+									<Button
+										variant="plain"
+										size="auto"
 										key={number}
 										type="button"
 										className="lotto-selected-chip"
@@ -309,7 +318,7 @@ export default function LottoStrategyControls({
 									>
 										{number}
 										<X size={12} aria-hidden="true" />
-									</button>
+									</Button>
 								))}
 							</div>
 						)}
@@ -323,7 +332,9 @@ export default function LottoStrategyControls({
 							const selected = fixedNumbers.includes(number);
 							const excluded = excludedNumbers.includes(number);
 							return (
-								<button
+								<Button
+									variant="plain"
+									size="auto"
 									type="button"
 									key={number}
 									className={`lotto-number-choice ${selected ? "is-selected" : ""} ${excluded ? "is-unavailable" : ""}`}
@@ -347,7 +358,7 @@ export default function LottoStrategyControls({
 											aria-hidden="true"
 										/>
 									)}
-								</button>
+								</Button>
 							);
 						})}
 					</div>
@@ -357,7 +368,7 @@ export default function LottoStrategyControls({
 							선택할 수 있습니다.
 						</p>
 					)}
-					<label className="lotto-spread-remainder">
+					<Label className="lotto-spread-remainder">
 						<input
 							type="checkbox"
 							checked={spreadRemainder}
@@ -374,7 +385,7 @@ export default function LottoStrategyControls({
 									: `고정 번호를 제외한 ${6 - fixedCount}개씩을 무작위로 채우며, 게임 간 같은 번호가 나올 수 있습니다.`}
 							</span>
 						</span>
-					</label>
+					</Label>
 				</fieldset>
 			)}
 			<details className="lotto-excluded-details">
@@ -398,14 +409,16 @@ export default function LottoStrategyControls({
 							선택한 번호는 모든 게임에서 제외합니다. 고정 번호와 함께 선택할 수
 							없습니다.
 						</p>
-						<button
+						<Button
+							variant="outline"
+							size="sm"
 							type="button"
 							className="lotto-fixed-clear lotto-excluded-clear"
 							disabled={disabled || excludedCount === 0}
 							onClick={() => onExcludedNumbersChange([])}
 						>
 							<RotateCcw size={14} aria-hidden="true" /> 제외 전체 해제
-						</button>
+						</Button>
 					</div>
 					<div className="lotto-fixed-selection">
 						<output className="lotto-excluded-count" aria-live="polite">
@@ -414,7 +427,9 @@ export default function LottoStrategyControls({
 						{excludedCount > 0 && (
 							<div className="lotto-selected-chips">
 								{excludedNumbers.map((number) => (
-									<button
+									<Button
+										variant="plain"
+										size="auto"
 										key={number}
 										type="button"
 										className="lotto-selected-chip lotto-excluded-chip"
@@ -424,7 +439,7 @@ export default function LottoStrategyControls({
 									>
 										{number}
 										<X size={12} aria-hidden="true" />
-									</button>
+									</Button>
 								))}
 							</div>
 						)}
@@ -438,7 +453,9 @@ export default function LottoStrategyControls({
 							const selected = excludedNumbers.includes(number);
 							const fixed = mode === "fixed" && fixedNumbers.includes(number);
 							return (
-								<button
+								<Button
+									variant="plain"
+									size="auto"
 									key={number}
 									type="button"
 									className={`lotto-number-choice lotto-excluded-choice ${selected ? "is-excluded" : ""} ${fixed ? "is-unavailable" : ""}`}
@@ -469,7 +486,7 @@ export default function LottoStrategyControls({
 											aria-hidden="true"
 										/>
 									)}
-								</button>
+								</Button>
 							);
 						})}
 					</div>

@@ -1,4 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import type {
 	CandidateListDraft,
 	SavedCandidateList,
@@ -76,9 +80,9 @@ export function RoomCandidateFlow() {
 	return (
 		<div className="cl-room-preview">
 			<aside className="cl-room-fixture" aria-label="방 상태 예제 조작">
-				<label>
+				<Label>
 					방 상태
-					<select
+					<NativeSelect
 						value={phase}
 						onChange={(event) => setPhase(event.currentTarget.value as Phase)}
 					>
@@ -87,24 +91,24 @@ export function RoomCandidateFlow() {
 								{label}
 							</option>
 						))}
-					</select>
-				</label>
-				<label>
-					<input
+					</NativeSelect>
+				</Label>
+				<Label>
+					<Input
 						type="checkbox"
 						checked={isHost}
 						onChange={(event) => setIsHost(event.currentTarget.checked)}
 					/>
 					방장으로 보기
-				</label>
-				<label>
-					<input
+				</Label>
+				<Label>
+					<Input
 						type="checkbox"
 						checked={failApply}
 						onChange={(event) => setFailApply(event.currentTarget.checked)}
 					/>
 					방 적용 실패
-				</label>
+				</Label>
 			</aside>
 			<section className="cl-room-context" aria-label="현재 방 상태">
 				<div>
@@ -118,13 +122,14 @@ export function RoomCandidateFlow() {
 					{list.items.filter((item) => item.included).length}개
 				</output>
 				{phase === "voting" && isHost && (
-					<button
+					<Button
 						type="button"
-						className="cl-button cl-primary"
+						className="cl-primary"
+						size="lg"
 						onClick={finishVote}
 					>
 						투표 종료하고 다음 게임
-					</button>
+					</Button>
 				)}
 			</section>
 			<CandidateListFlow

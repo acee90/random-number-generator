@@ -5,6 +5,8 @@ import CreateLunchRoom from "@/components/features/CreateLunchRoom";
 import LunchHistoryPanel from "@/components/features/LunchHistoryPanel";
 import { LunchWheel } from "@/components/features/LunchWheel";
 import SiteHeader from "@/components/layout/SiteHeader";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import {
 	getWheelRotation,
 	type LunchCategory,
@@ -248,15 +250,19 @@ export default function LunchPicker({
 					{error}
 				</p>
 				<nav className="lunch-view-switch" aria-label="점심 추첨 화면">
-					<button
+					<Button
+						variant="plain"
+						size="auto"
 						type="button"
 						aria-pressed={activePanel === "wheel"}
 						disabled={busy}
 						onClick={() => openPanel("wheel")}
 					>
 						룰렛·결과
-					</button>
-					<button
+					</Button>
+					<Button
+						variant="plain"
+						size="auto"
 						type="button"
 						aria-pressed={activePanel === "candidates"}
 						aria-expanded={activePanel === "candidates"}
@@ -267,8 +273,10 @@ export default function LunchPicker({
 						}
 					>
 						후보 {candidates.length}곳
-					</button>
-					<button
+					</Button>
+					<Button
+						variant="plain"
+						size="auto"
 						type="button"
 						aria-pressed={activePanel === "history"}
 						aria-expanded={activePanel === "history"}
@@ -278,7 +286,7 @@ export default function LunchPicker({
 						}
 					>
 						추첨 기록 {history.length}
-					</button>
+					</Button>
 				</nav>
 				<div className="lunch-layout">
 					<section
@@ -324,13 +332,15 @@ export default function LunchPicker({
 												: ""}
 								</output>
 								{phase === "spinning" ? (
-									<button
+									<Button
+										variant="outline"
+										size="sm"
 										type="button"
 										className="lunch-secondary-button"
 										onClick={finishSpin}
 									>
 										결과 바로 보기
-									</button>
+									</Button>
 								) : (
 									!busy && (
 										<p className="lunch-wheel-help">
@@ -348,7 +358,9 @@ export default function LunchPicker({
 									>
 										<div className="lunch-result-heading">
 											<span className="lunch-stage-label">이번 추첨 결과</span>
-											<button
+											<Button
+												variant="outline"
+												size="sm"
 												type="button"
 												className="result-copy"
 												ref={copyButtonRef}
@@ -360,7 +372,7 @@ export default function LunchPicker({
 													<Copy size={17} aria-hidden="true" />
 												)}
 												{copied ? "복사됨" : "결과 복사"}
-											</button>
+											</Button>
 										</div>
 										<h3 id={`${id}-result`} ref={resultTitleRef} tabIndex={-1}>
 											{result.place.name}
@@ -402,21 +414,25 @@ export default function LunchPicker({
 											/>
 										)}
 										<div className="lunch-result-actions">
-											<button
+											<Button
+												variant="default"
+												size="lg"
 												type="button"
 												className="generate-button"
 												onClick={() => void draw()}
 											>
 												<Shuffle size={20} aria-hidden="true" />한 번 더
 												추첨하기
-											</button>
-											<button
+											</Button>
+											<Button
+												variant="outline"
+												size="sm"
 												type="button"
 												className="lunch-secondary-button"
 												onClick={dismissResult}
 											>
 												룰렛 다시 보기
-											</button>
+											</Button>
 										</div>
 									</section>
 								</div>
@@ -448,7 +464,9 @@ export default function LunchPicker({
 							<fieldset className="lunch-categories">
 								<legend className="sr-only">음식 분류</legend>
 								{(["전체", ...lunchCategories] as const).map((item) => (
-									<button
+									<Button
+										variant="plain"
+										size="auto"
 										type="button"
 										key={item}
 										aria-pressed={
@@ -468,11 +486,13 @@ export default function LunchPicker({
 										}}
 									>
 										{item}
-									</button>
+									</Button>
 								))}
 							</fieldset>
 							<div className="lunch-selection-actions">
-								<button
+								<Button
+									variant="ghost"
+									size="sm"
 									type="button"
 									className="text-button"
 									onClick={() => {
@@ -487,8 +507,10 @@ export default function LunchPicker({
 								>
 									<RotateCcw size={14} aria-hidden="true" />
 									모두 선택
-								</button>
-								<button
+								</Button>
+								<Button
+									variant="ghost"
+									size="sm"
 									type="button"
 									className="text-button"
 									onClick={() => {
@@ -502,7 +524,7 @@ export default function LunchPicker({
 									}}
 								>
 									선택 해제
-								</button>
+								</Button>
 							</div>
 							<p className="lunch-list-cue">
 								음식점 목록 · 스크롤해서 후보 확인
@@ -514,7 +536,7 @@ export default function LunchPicker({
 								tabIndex={0}
 							>
 								{visible.map((place) => (
-									<label
+									<Label
 										className={`lunch-place ${excludedIds.includes(place.id) ? "is-excluded" : ""}`}
 										key={place.id}
 									>
@@ -543,7 +565,7 @@ export default function LunchPicker({
 												{place.distanceMeters}m
 											</span>
 										)}
-									</label>
+									</Label>
 								))}
 							</section>
 							{candidates.length === 0 && (

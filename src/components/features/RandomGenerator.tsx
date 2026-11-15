@@ -26,6 +26,10 @@ import LottoStrategyControls, {
 	type LottoMode,
 } from "@/components/features/LottoStrategyControls";
 import SiteHeader from "@/components/layout/SiteHeader";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Switch } from "@/components/ui/switch";
 import { type Draw, isDraw, type Mode, type Row } from "@/lib/drawHistory";
 import {
@@ -752,9 +756,9 @@ export default function RandomGenerator({
 							{mode === "number" ? (
 								<>
 									<div className="range-fields">
-										<label htmlFor={`${id}-min`}>
+										<Label htmlFor={`${id}-min`}>
 											최소값
-											<input
+											<Input
 												ref={minInputRef}
 												id={`${id}-min`}
 												aria-invalid={
@@ -775,11 +779,11 @@ export default function RandomGenerator({
 													})
 												}
 											/>
-										</label>
+										</Label>
 										<span className="range-dash">—</span>
-										<label htmlFor={`${id}-max`}>
+										<Label htmlFor={`${id}-max`}>
 											최대값
-											<input
+											<Input
 												ref={maxInputRef}
 												id={`${id}-max`}
 												aria-invalid={
@@ -800,13 +804,13 @@ export default function RandomGenerator({
 													})
 												}
 											/>
-										</label>
+										</Label>
 									</div>
 									<div className="count-controls">
 										<div className="count-heading">
-											<label htmlFor={`${id}-count`}>생성 개수</label>
+											<Label htmlFor={`${id}-count`}>생성 개수</Label>
 											<div className="count-input">
-												<input
+												<Input
 													ref={countInputRef}
 													id={`${id}-count`}
 													aria-invalid={
@@ -857,9 +861,9 @@ export default function RandomGenerator({
 									</div>
 									<div className="toggle-options">
 										<div>
-											<label htmlFor={`${id}-duplicates`}>
+											<Label htmlFor={`${id}-duplicates`}>
 												중복 허용<span>결과에 같은 숫자를 허용합니다</span>
-											</label>
+											</Label>
 											<Switch
 												id={`${id}-duplicates`}
 												checked={settings.allowDuplicates}
@@ -873,10 +877,10 @@ export default function RandomGenerator({
 											/>
 										</div>
 										<div>
-											<label htmlFor={`${id}-sort`}>
+											<Label htmlFor={`${id}-sort`}>
 												작은 숫자부터 정렬
 												<span>결과를 오름차순으로 정렬합니다</span>
-											</label>
+											</Label>
 											<Switch
 												id={`${id}-sort`}
 												checked={settings.sortResult}
@@ -901,7 +905,9 @@ export default function RandomGenerator({
 												aria-labelledby={`${id}-games`}
 											>
 												{[1, 2, 3, 4, 5].map((value) => (
-													<button
+													<Button
+														variant="plain"
+														size="auto"
 														type="button"
 														key={value}
 														aria-pressed={gameCount === value}
@@ -914,7 +920,7 @@ export default function RandomGenerator({
 													>
 														{value}
 														<span>게임</span>
-													</button>
+													</Button>
 												))}
 											</fieldset>
 											{mode === "pension" && group === "all" && (
@@ -925,13 +931,13 @@ export default function RandomGenerator({
 											)}
 										</div>
 										{mode === "pension" && (
-											<label
+											<Label
 												className="group-select-label"
 												htmlFor={`${id}-group`}
 											>
 												조 선택
 												<div className="select-wrap">
-													<select
+													<NativeSelect
 														id={`${id}-group`}
 														value={group}
 														onChange={(event) => {
@@ -950,10 +956,10 @@ export default function RandomGenerator({
 																{value}조
 															</option>
 														))}
-													</select>
+													</NativeSelect>
 													<ChevronDown size={16} />
 												</div>
-											</label>
+											</Label>
 										)}
 									</div>
 									{mode === "lotto" && (
@@ -1010,7 +1016,9 @@ export default function RandomGenerator({
 								{error}
 							</p>
 						)}
-						<button
+						<Button
+							variant="default"
+							size="lg"
 							className="generate-button"
 							type="submit"
 							disabled={busy || !ready}
@@ -1033,7 +1041,7 @@ export default function RandomGenerator({
 										: "번호 뽑기"}
 							</span>
 							{!busy && <ArrowRight size={19} />}
-						</button>
+						</Button>
 						<p className="button-caption">
 							{mode === "number"
 								? "설정한 범위에서 숫자를 생성합니다"
@@ -1081,7 +1089,9 @@ export default function RandomGenerator({
 											className={`number-result ${draw.rows[0].numbers.length === 1 ? "single-number" : "multiple-numbers"}`}
 										>
 											{draw.rows[0].numbers.map((number, index) => (
-												<button
+												<Button
+													variant="plain"
+													size="auto"
 													type="button"
 													key={`${draw.id}-${index}-${number}`}
 													className={`number-item ${copied === `${draw.id}-number-${index}` ? "is-copied" : ""}`}
@@ -1106,7 +1116,7 @@ export default function RandomGenerator({
 														<Check size={12} />
 														복사됨
 													</span>
-												</button>
+												</Button>
 											))}
 										</div>
 									) : (
@@ -1151,7 +1161,9 @@ export default function RandomGenerator({
 														))}
 													</div>
 												</div>
-												<button
+												<Button
+													variant="outline"
+													size="sm"
 													type="button"
 													className="ticket-copy"
 													onClick={(event) =>
@@ -1174,7 +1186,7 @@ export default function RandomGenerator({
 															? "복사됨"
 															: "번호 복사"}
 													</span>
-												</button>
+												</Button>
 											</div>
 										))
 									)}
@@ -1184,7 +1196,9 @@ export default function RandomGenerator({
 										</p>
 									)}
 									<div className="result-actions">
-										<button
+										<Button
+											variant="outline"
+											size="sm"
 											type="button"
 											className="result-copy"
 											onClick={(event) => void copy(draw, event.currentTarget)}
@@ -1199,7 +1213,7 @@ export default function RandomGenerator({
 												: mode === "number"
 													? "전체 결과 복사"
 													: "전체 번호 복사"}
-										</button>
+										</Button>
 										<DrawDownload
 											draw={draw}
 											sourceLabel={getSourceDisplayName(draw.source)}
@@ -1208,7 +1222,9 @@ export default function RandomGenerator({
 											}
 										/>
 										{mode === "lotto" && draw.lottoOptions && (
-											<button
+											<Button
+												variant="ghost"
+												size="sm"
 												type="button"
 												className="text-button"
 												disabled={busy}
@@ -1217,7 +1233,7 @@ export default function RandomGenerator({
 											>
 												설정 다시 사용{" "}
 												<ArrowUpRight size={16} aria-hidden="true" />
-											</button>
+											</Button>
 										)}
 										<span>
 											{restoredCurrent
@@ -1299,7 +1315,9 @@ export default function RandomGenerator({
 						</div>
 						<div className="example-grid">
 							{examples[mode].map((example) => (
-								<button
+								<Button
+									variant="plain"
+									size="auto"
 									type="button"
 									className={`example-card ${appliedExample === example.title ? "is-applied" : ""}`}
 									key={example.title}
@@ -1315,7 +1333,7 @@ export default function RandomGenerator({
 											: "이 설정 사용"}
 										<ArrowUpRight size={16} />
 									</span>
-								</button>
+								</Button>
 							))}
 						</div>
 					</section>
@@ -1330,7 +1348,9 @@ export default function RandomGenerator({
 							<span className="history-count">{recent.length}</span>
 						</div>
 						{removed ? (
-							<button
+							<Button
+								variant="ghost"
+								size="sm"
 								type="button"
 								className="text-button"
 								onClick={() => {
@@ -1341,9 +1361,11 @@ export default function RandomGenerator({
 							>
 								<RotateCcw size={14} />
 								삭제 취소
-							</button>
+							</Button>
 						) : (
-							<button
+							<Button
+								variant="ghost"
+								size="sm"
 								type="button"
 								className="text-button clear-history"
 								disabled={!recent.length}
@@ -1359,7 +1381,7 @@ export default function RandomGenerator({
 							>
 								<Trash2 size={14} />
 								기록 지우기
-							</button>
+							</Button>
 						)}
 					</div>
 					{storageNotice && (
@@ -1389,7 +1411,9 @@ export default function RandomGenerator({
 										</p>
 									)}
 									{item.kind === "lotto" && item.lottoOptions && (
-										<button
+										<Button
+											variant="ghost"
+											size="sm"
 											type="button"
 											className="text-button"
 											disabled={busy}
@@ -1398,7 +1422,7 @@ export default function RandomGenerator({
 										>
 											설정 다시 사용{" "}
 											<ArrowUpRight size={16} aria-hidden="true" />
-										</button>
+										</Button>
 									)}
 									<div className="history-numbers">
 										{item.rows.map((row, index) => (
@@ -1410,7 +1434,9 @@ export default function RandomGenerator({
 													{rowText(row, item.kind)}
 												</span>
 												{item.kind !== "number" && (
-													<button
+													<Button
+														variant="outline"
+														size="sm"
 														type="button"
 														className="history-row-copy"
 														aria-label={`이전 ${String.fromCharCode(65 + index)}게임 ${item.kind === "pension" ? "여섯 자리 " : ""}번호 복사`}
@@ -1433,12 +1459,14 @@ export default function RandomGenerator({
 																? "복사됨"
 																: "번호 복사"}
 														</span>
-													</button>
+													</Button>
 												)}
 											</div>
 										))}
 									</div>
-									<button
+									<Button
+										variant="ghost"
+										size="icon"
 										className="icon-button"
 										type="button"
 										aria-label={`${new Date(item.timestamp).toLocaleTimeString("ko-KR")} 생성 결과 전체 복사`}
@@ -1449,7 +1477,7 @@ export default function RandomGenerator({
 										) : (
 											<Copy size={17} />
 										)}
-									</button>
+									</Button>
 									{renderCopyFallback(item.id)}
 								</article>
 							))}
