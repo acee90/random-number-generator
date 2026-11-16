@@ -1,0 +1,35 @@
+{
+  "date": "2026-11-15",
+  "scope": "local-prototype-DOM",
+  "method": "JSDOM; deterministic random; manual animation callbacks; per-pane dialog stub",
+  "runtimeErrors": [],
+  "checks": [
+    {
+      "name": "두 역할 동시 표시·ON 누적·룰렛 진행 중 새 당첨 후보 비노출",
+      "status": "passed"
+    },
+    {
+      "name": "OFF 토글 무변경·역할 내 확인창·취소 후 제외 목록/대기/초점 유지",
+      "status": "passed"
+    },
+    {
+      "name": "ON 1·2·3→OFF 4→ON이면 4만 제외·공개 마스킹·완료/보관 중복 반영 없음",
+      "status": "passed"
+    },
+    {
+      "name": "OFF 반복은 최신 당첨자만·수동 초기화 확인/취소·현재 결과/기록 보존·재삽입 없음",
+      "status": "passed"
+    },
+    {
+      "name": "제외 목록 초기화와 직접 제외 상태 분리",
+      "status": "passed"
+    },
+    {
+      "name": "확인 중 조건 변경 시 오래된 승인 거절·runtime 오류 없음",
+      "status": "passed"
+    }
+  ],
+  "limitations": [
+    "실제 서버 실패/다중 연결·모바일 렌더·네이티브 모달/키보드 QA는 미검증"
+  ]
+}

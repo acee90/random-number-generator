@@ -1,0 +1,365 @@
+<div id="candidate-setup-wireframe" lang="ko" aria-label="후보 만들기 흐름">
+  <div class="cs-caption"><span>처음 방에 들어왔을 때</span><span>방장 · 참가자 동시 보기</span></div>
+  <ol class="cs-journey" aria-label="최초 준비 흐름">
+    <li>방 생성 <span>완료</span></li><li data-journey="setup" aria-current="step">후보 만들기</li><li data-journey="ready">룰렛 대기</li>
+  </ol>
+  <div class="cs-roles">
+    <section class="cs-window" aria-label="방장 화면">
+      <header class="cs-appbar"><strong>점메추.</strong><span class="cs-role">방장</span></header>
+      <div class="cs-room"><h2>오늘 점심 추첨</h2><span>참가 2명</span></div>
+      <main id="cs-host"></main>
+    </section>
+    <section class="cs-window" aria-label="참가자 화면">
+      <header class="cs-appbar"><strong>점메추.</strong><span class="cs-role">참가자</span></header>
+      <div class="cs-room"><h2>오늘 점심 추첨</h2><span>참가 2명</span></div>
+      <div id="cs-guest"></div>
+    </section>
+  </div>
+  <p id="cs-announcement" class="cs-sr" role="status" aria-live="polite"></p>
+  <dialog class="cs-dialog cs-load-dialog" id="cs-load-dialog" aria-labelledby="cs-load-title" aria-describedby="cs-load-description"></dialog>
+  <dialog class="cs-dialog" id="cs-confirm" aria-labelledby="cs-confirm-title" aria-describedby="cs-confirm-description">
+    <h3 id="cs-confirm-title">현재 후보 목록을 바꿀까요?</h3>
+    <p id="cs-confirm-description">작성 중인 후보가 선택한 목록의 사본으로 바뀝니다.</p>
+    <div class="cs-actions"><button type="button" data-action="cancel-confirm">계속 편집</button><button type="button" class="cs-primary" data-action="accept-confirm">목록 바꾸기</button></div>
+  </dialog>
+</div>
+<style>
+#candidate-setup-wireframe {
+  --cs-paper: light-dark(#f7f7f2,#20231e); --cs-panel: light-dark(#ffffff,#2a2e27);
+  --cs-ink: light-dark(#272b24,#eef0e7); --cs-muted: light-dark(#646b5e,#bcc3b3);
+  --cs-line: light-dark(#d8decd,#56604d); --cs-input: light-dark(#8b967d,#a1ad92);
+  --cs-lime: light-dark(#d6f266,#d6f266); --cs-lime-ink: light-dark(#272b24,#272b24);
+  --cs-soft: light-dark(#edf2e3,#343d2c); --cs-danger: light-dark(#a13d27,#ffb69e);
+  --cs-ring: light-dark(#527427,#d6f266);
+  color: var(--cs-ink); font-family: "Pretendard","Noto Sans KR",system-ui,sans-serif;
+  font-size: 14px; line-height: 1.5; width: 100%; color-scheme: inherit;
+}
+#candidate-setup-wireframe * { box-sizing: border-box; }
+#candidate-setup-wireframe [hidden] { display: none !important; }
+#candidate-setup-wireframe h2, #candidate-setup-wireframe h3, #candidate-setup-wireframe p { margin: 0; }
+#candidate-setup-wireframe button, #candidate-setup-wireframe input { font: inherit; }
+#candidate-setup-wireframe button {
+  min-height: 44px; padding: 10px 14px; border: 1px solid var(--cs-input); border-radius: 2px;
+  background: var(--cs-panel); color: var(--cs-ink); cursor: pointer; overflow-wrap: anywhere;
+}
+#candidate-setup-wireframe button:disabled { opacity: .5; cursor: not-allowed; }
+#candidate-setup-wireframe button.cs-primary { background: var(--cs-lime); color: var(--cs-lime-ink); border-color: var(--cs-lime-ink); font-weight: 700; }
+#candidate-setup-wireframe button.cs-quiet { border-color: transparent; background: transparent; }
+#candidate-setup-wireframe button.cs-danger { color: var(--cs-danger); }
+#candidate-setup-wireframe :focus-visible { outline: 3px solid var(--cs-ring); outline-offset: 3px; }
+#candidate-setup-wireframe input:not([type="checkbox"]) {
+  min-width: 0; width: 100%; min-height: 44px; padding: 9px 10px;
+  border: 1px solid var(--cs-input); border-radius: 2px; background: var(--cs-panel); color: var(--cs-ink); font-size: 16px;
+}
+#candidate-setup-wireframe input[type="checkbox"] { width: 18px; height: 18px; flex: 0 0 auto; accent-color: var(--cs-ring); }
+#candidate-setup-wireframe .cs-caption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; padding-right: 96px; margin-bottom: 12px; color: var(--cs-muted); font-size: 12px; }
+#candidate-setup-wireframe .cs-journey { display: flex; flex-wrap: wrap; list-style: none; gap: 10px 26px; padding: 0; margin: 0 0 18px; }
+#candidate-setup-wireframe .cs-journey li { color: var(--cs-muted); padding-bottom: 5px; }
+#candidate-setup-wireframe .cs-journey li[aria-current] { color: var(--cs-ink); border-bottom: 3px solid var(--cs-ring); font-weight: 700; }
+#candidate-setup-wireframe .cs-journey li span { font-size: 12px; margin-left: 4px; }
+#candidate-setup-wireframe .cs-roles { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(0,1fr); gap: 18px; align-items: start; }
+#candidate-setup-wireframe .cs-window { min-width: 0; border: 1px solid var(--cs-input); background: var(--cs-paper); }
+#candidate-setup-wireframe .cs-appbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; border-bottom: 1px solid var(--cs-line); }
+#candidate-setup-wireframe .cs-appbar strong { font-size: 22px; letter-spacing: -.5px; }
+#candidate-setup-wireframe .cs-role { background: var(--cs-soft); padding: 3px 8px; font-size: 12px; font-weight: 700; }
+#candidate-setup-wireframe .cs-room { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 16px 18px 0; }
+#candidate-setup-wireframe .cs-room h2 { font-size: 17px; font-weight: 700; }
+#candidate-setup-wireframe .cs-room > span { font-size: 12px; color: var(--cs-muted); }
+#candidate-setup-wireframe #cs-host, #candidate-setup-wireframe #cs-guest { padding: 20px 18px 22px; }
+#candidate-setup-wireframe .cs-title { font-size: 21px; font-weight: 700; margin-bottom: 6px; letter-spacing: -.5px; }
+#candidate-setup-wireframe .cs-note { color: var(--cs-muted); font-size: 13px; }
+#candidate-setup-wireframe .cs-space { margin-top: 18px; }
+#candidate-setup-wireframe .cs-empty { display: grid; justify-items: center; gap: 10px; text-align: center; padding: 24px 10px; }
+#candidate-setup-wireframe .cs-empty-mark { width: 64px; height: 64px; display: grid; place-items: center; background: var(--cs-soft); border-radius: 50%; }
+#candidate-setup-wireframe .cs-empty-mark i { width: 26px; height: 26px; }
+#candidate-setup-wireframe .cs-choice-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px; }
+#candidate-setup-wireframe .cs-choice-grid.cs-stack { grid-template-columns: minmax(0,1fr); }
+#candidate-setup-wireframe button.cs-choice { min-height: 140px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 8px; text-align: start; padding: 18px; }
+#candidate-setup-wireframe .cs-choice strong { font-size: 17px; font-weight: 700; }
+#candidate-setup-wireframe .cs-choice span { font-size: 12px; color: var(--cs-muted); font-weight: 400; }
+#candidate-setup-wireframe .cs-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 18px; }
+#candidate-setup-wireframe .cs-actions.cs-end { justify-content: flex-end; }
+#candidate-setup-wireframe .cs-editor-head { display: flex; justify-content: space-between; flex-wrap: wrap; align-items: start; gap: 8px; }
+#candidate-setup-wireframe .cs-add { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,.7fr) auto; gap: 8px; align-items: end; margin-top: 18px; }
+#candidate-setup-wireframe label.cs-field { display: grid; gap: 5px; font-size: 12px; }
+#candidate-setup-wireframe .cs-list { list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 10px; }
+#candidate-setup-wireframe .cs-edit-row { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,.65fr) auto; gap: 8px; align-items: end; padding-bottom: 10px; border-bottom: 1px solid var(--cs-line); }
+#candidate-setup-wireframe .cs-edit-row small { grid-column: 1 / -1; color: var(--cs-muted); font-size: 12px; }
+#candidate-setup-wireframe .cs-source { width: 100%; text-align: start; display: grid; gap: 5px; padding: 16px; }
+#candidate-setup-wireframe .cs-source span { color: var(--cs-muted); font-size: 12px; }
+#candidate-setup-wireframe .cs-section-label { margin-top: 20px; margin-bottom: 8px; font-size: 12px; color: var(--cs-muted); }
+#candidate-setup-wireframe .cs-source-group { display: grid; gap: 8px; }
+#candidate-setup-wireframe .cs-count { margin-top: 18px; font-size: 13px; font-weight: 700; }
+#candidate-setup-wireframe .cs-error { margin-top: 10px; color: var(--cs-danger); font-size: 13px; }
+#candidate-setup-wireframe .cs-shared-list { display: grid; gap: 8px; padding: 0; list-style: none; margin: 16px 0; }
+#candidate-setup-wireframe .cs-shared-list li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 10px; padding: 8px 0; border-bottom: 1px solid var(--cs-line); }
+#candidate-setup-wireframe .cs-shared-list small { color: var(--cs-muted); }
+#candidate-setup-wireframe .cs-phase { display: inline-block; padding: 3px 8px; background: var(--cs-soft); font-size: 12px; margin-bottom: 10px; }
+#candidate-setup-wireframe .cs-filter { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--cs-line); }
+#candidate-setup-wireframe summary { cursor: pointer; min-height: 36px; padding-block: 6px; font-weight: 700; }
+#candidate-setup-wireframe .cs-checks { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 10px 0; }
+#candidate-setup-wireframe .cs-check { display: flex; align-items: center; gap: 8px; min-height: 36px; padding-block: 4px; }
+#candidate-setup-wireframe .cs-filter-list { display: grid; list-style: none; gap: 2px; padding: 0; margin: 8px 0; }
+#candidate-setup-wireframe .cs-wheel { width: min(100%,248px); aspect-ratio: 1; position: relative; border: 2px solid var(--cs-input); border-radius: 50%; background: conic-gradient(var(--cs-soft) 0deg 60deg,var(--cs-panel) 60deg 120deg,var(--cs-soft) 120deg 180deg,var(--cs-panel) 180deg 240deg,var(--cs-soft) 240deg 300deg,var(--cs-panel) 300deg); display: grid; place-items: center; margin: 18px auto; }
+#candidate-setup-wireframe .cs-wheel::before { content: "▼"; position: absolute; top: -12px; color: var(--cs-ink); }
+#candidate-setup-wireframe .cs-wheel-center { display: grid; gap: 4px; place-items: center; width: 108px; height: 108px; border-radius: 50%; border: 1px solid var(--cs-input); background: var(--cs-panel); }
+#candidate-setup-wireframe .cs-wheel-center strong { font-size: 23px; }
+#candidate-setup-wireframe .cs-main-action { width: 100%; }
+#candidate-setup-wireframe .cs-result { padding: 28px 0; text-align: center; }
+#candidate-setup-wireframe .cs-result h3 { font-size: 28px; margin-block: 10px; }
+#candidate-setup-wireframe .cs-toast { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; padding: 8px 10px; background: var(--cs-soft); }
+#candidate-setup-wireframe .cs-dialog { max-width: min(440px,calc(100% - 32px)); padding: 22px; border: 1px solid var(--cs-input); background: var(--cs-panel); color: var(--cs-ink); }
+#candidate-setup-wireframe .cs-dialog::backdrop { background: light-dark(#272b2466,#00000099); }
+#candidate-setup-wireframe .cs-dialog p { margin-top: 8px; }
+#candidate-setup-wireframe .cs-load-dialog { width: min(520px,calc(100% - 32px)); max-width: 520px; max-height: calc(100dvh - 32px); overflow: auto; overscroll-behavior: contain; }
+#candidate-setup-wireframe .cs-dialog-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+#candidate-setup-wireframe .cs-dialog-heading h3 { font-size: 21px; }
+#candidate-setup-wireframe .cs-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width:700px) {
+  #candidate-setup-wireframe .cs-roles { grid-template-columns: minmax(0,1fr); }
+  #candidate-setup-wireframe .cs-choice-grid { grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
+}
+@media (max-width:420px) {
+  #candidate-setup-wireframe .cs-choice-grid { grid-template-columns: minmax(0,1fr); }
+  #candidate-setup-wireframe button.cs-choice { min-height: 110px; }
+  #candidate-setup-wireframe .cs-add { grid-template-columns: minmax(0,1fr); }
+  #candidate-setup-wireframe .cs-add > button { justify-self: end; }
+  #candidate-setup-wireframe .cs-edit-row { grid-template-columns: minmax(0,1fr) auto; }
+  #candidate-setup-wireframe .cs-edit-row > label:nth-child(2) { grid-row: 2; grid-column: 1; }
+  #candidate-setup-wireframe .cs-edit-row > button { grid-row: 1; grid-column: 2; }
+}
+</style>
+<script>
+(() => {
+  const root = document.getElementById('candidate-setup-wireframe');
+  const host = root.querySelector('#cs-host');
+  const guest = root.querySelector('#cs-guest');
+  const dialog = root.querySelector('#cs-confirm');
+  const loadDialog = root.querySelector('#cs-load-dialog');
+  let loadTrigger = null;
+  const announce = root.querySelector('#cs-announcement');
+  const design = { stackChoices: false, descriptions: true };
+  const defaults = { screen:'choose', intake:'closed', items:[], sharedItems:[], hasFinalized:false, categories:null, hidden:[], excludeDrawn:false, drawn:[], winner:null, source:'직접 작성', removed:null, filterOpen:false };
+  let state = {...defaults};
+  let serial = 1;
+  let pendingSource = null;
+  let composing = false;
+  let formDraft = {name:'',category:''};
+  let guestDraft = {name:'',category:''};
+  let error = '';
+  let localRevision = 0;
+  const samples = {
+    base: {name:'기본 음식점 목록',rows:[['김치찌개','한식'],['돈가스','일식'],['우동','일식'],['파스타','양식'],['샐러드','샐러드'],['편의점','편의점']]},
+    saved: {name:'우리 팀 점심',rows:[['비빔밥','한식'],['초밥','일식'],['피자','양식'],['샌드위치','']]},
+    numbers: {name:'숫자 1~10',rows:Array.from({length:10},(_,i)=>[String(i+1),''])}
+  };
+  const esc = value => String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const category = item => item.category.trim() || '미분류';
+  const allCategories = () => [...new Set(state.items.map(category))];
+  const filtered = () => state.items.filter(item => (!state.categories || state.categories.includes(category(item))) && !state.hidden.includes(item.id));
+  const eligible = () => filtered().filter(item => !state.excludeDrawn || !state.drawn.includes(item.id));
+  const button = (action,label,kind='') => `<button type="button" data-action="${action}" class="${kind}" ${action==='load'?'aria-haspopup="dialog" aria-controls="cs-load-dialog"':''}>${label}</button>`;
+  const status = message => { announce.textContent = message; };
+  function persist() {
+    const revision=++localRevision;
+    if (window.openai?.setWidgetState) window.openai.setWidgetState({modelContent:{screen:state.screen,intake:state.intake,source:state.source,candidateCount:state.items.length,drawCount:eligible().length},privateContent:{version:3,revision,state,formDraft,guestDraft}}).catch(()=>{});
+  }
+  function restore(saved) {
+    const p=saved?.privateContent;
+    if(p?.version===3 && p.state && Array.isArray(p.state.items) && p.state.items.length<=30 && ['choose','editor','load','waiting','result'].includes(p.state.screen)) {
+      state={...defaults,...p.state}; formDraft=p.formDraft||{name:'',category:''}; guestDraft=p.guestDraft||{name:'',category:''};
+      if(state.screen==='load')state.screen=p.state.loadReturn||'choose';
+      localRevision=Math.max(localRevision,p.revision||0);
+    }
+  }
+  restore(window.openai?.widgetState);
+  function makeItem(name,cat,owner='') { return {id:`cs-${Date.now()}-${serial++}`,name,category:cat,owner}; }
+  function applyPendingHost() {
+    if(formDraft.name.trim()) { state.items.push(makeItem(formDraft.name.trim(),formDraft.category.trim())); formDraft={name:'',category:''}; }
+  }
+  function publishDraft() { state.sharedItems=state.items.map(item=>({...item})); }
+  function go(screen) { state.screen=screen; error=''; render(); persist(); }
+  function undoMarkup() { return state.removed ? `<div class="cs-toast" role="status"><span>후보를 삭제했습니다.</span>${button('undo','실행 취소','cs-quiet')}</div>` : ''; }
+  function readySummary() { return `<p class="cs-count">전체 ${state.items.length}개 · 이번 추첨 ${eligible().length}개</p>`; }
+  function categoryData() { return `<datalist id="cs-category-options">${[...new Set(['한식','일식','중식','양식','샐러드',...state.items.map(i=>i.category).filter(Boolean)])].map(c=>`<option value="${esc(c)}"></option>`).join('')}</datalist>`; }
+  function addForm(who) {
+    const value=who==='host'?formDraft:guestDraft;
+    return `<form class="cs-add" data-form="${who}">
+      <label class="cs-field">${who==='host'?'후보 이름':'추천할 후보 이름'}<input name="name" value="${esc(value.name)}" placeholder="예: 김치찌개" maxlength="80" required></label>
+      <label class="cs-field">분류 (선택)<input name="category" value="${esc(value.category)}" placeholder="예: 한식" list="cs-category-options" maxlength="24"></label>
+      <button class="${who==='guest'?'cs-primary':''}" type="button" data-submit-entry="${who}">${who==='host'?'추가':'추천하기'}</button>
+    </form>`;
+  }
+  function sourceButton(key,label,note) { return `<button class="cs-source" type="button" data-source="${key}" ${key==='base'?'autofocus':''}><strong>${label}</strong><span>${note}</span></button>`; }
+  function loadMarkup() {
+    return `<div class="cs-dialog-heading"><h3 id="cs-load-title">목록 불러오기</h3><button type="button" class="cs-quiet" data-action="close-load" aria-label="목록 불러오기 닫기">×</button></div>
+      <p class="cs-note" id="cs-load-description">목록을 선택하면 사본을 가져와 편집할 수 있어요.</p>
+      <p class="cs-section-label">기본 목록</p><div class="cs-source-group">${sourceButton('base','기본 음식점 목록','음식점 · 예시 6개 · 분류 있음')}</div>
+      <p class="cs-section-label">저장한 목록 · 예시</p><div class="cs-source-group">${sourceButton('saved','우리 팀 점심','직접 만든 목록 · 4개')}${sourceButton('numbers','숫자 1~10','직접 만든 목록 · 10개 · 분류 없음')}</div>
+      <div class="cs-actions cs-end">${button('close-load','취소')}</div>`;
+  }
+  function openLoad(trigger) { loadTrigger=trigger;loadDialog.showModal(); }
+  function closeLoad(restoreFocus=true) {
+    loadDialog.close();
+    if(restoreFocus){if(loadTrigger?.isConnected)loadTrigger.focus();else host.querySelector('[data-action="load"]')?.focus();}
+  }
+  function editor() {
+    const open=state.intake==='open'; const review=state.intake==='review';
+    return `${!state.hasFinalized&&!open&&!review?button('back-choose','이전으로','cs-quiet'):''}<span class="cs-phase">${open?'후보 추천 접수 중':review?'접수 종료 · 목록 확인':'후보 만들기'}</span>
+      <div class="cs-editor-head"><div><h3 class="cs-title">${esc(state.source)}</h3><p class="cs-note">${open?'참가자 추천을 받으며 목록을 정리할 수 있어요.':'후보 이름과 분류를 자유롭게 수정하세요.'}</p></div>${!open?button('load','목록 불러오기','cs-quiet'):''}</div>
+      ${categoryData()}${addForm('host')}
+      <p class="cs-error" role="alert" ${error?'':'hidden'}>${esc(error)}</p>
+      <p class="cs-count">전체 후보 ${state.items.length}개</p>
+      ${state.items.length?`<ul class="cs-list">${state.items.map((item,index)=>`<li class="cs-edit-row">
+        <label class="cs-field">${index+1}번 후보<input data-item="${esc(item.id)}" data-field="name" value="${esc(item.name)}" maxlength="80" aria-label="${index+1}번 후보 이름"></label>
+        <label class="cs-field">분류 (선택)<input data-item="${esc(item.id)}" data-field="category" value="${esc(item.category)}" list="cs-category-options" maxlength="24" aria-label="${index+1}번 후보 분류"></label>
+        <button type="button" class="cs-quiet cs-danger" data-remove="${esc(item.id)}" aria-label="${esc(item.name)} 후보 삭제">삭제</button>
+        ${item.owner?`<small>${esc(item.owner)} 추천</small>`:''}</li>`).join('')}</ul>`:`<div class="cs-empty"><p>아직 후보가 없어요.</p><p class="cs-note">첫 후보를 추가하거나 목록을 불러오세요.</p></div>`}
+      ${undoMarkup()}
+      <div class="cs-actions cs-end">${button(open?'close':'open',open?'접수 종료':review?'다시 접수받기':'후보 추천받기')}
+        <button type="button" class="cs-primary" data-action="finalize" ${state.items.length||formDraft.name.trim()?'':'disabled'}>마감하고 룰렛 대기</button></div>
+      ${!state.items.length?'<p class="cs-note cs-space">후보를 1개 이상 준비하면 마감할 수 있어요.</p>':''}`;
+  }
+  function wheelMarkup() { return `<div class="cs-wheel" role="img" aria-label="이번 추첨 후보 ${eligible().length}개 룰렛"><div class="cs-wheel-center"><span>이번 추첨</span><strong>${eligible().length}개</strong></div></div>`; }
+  function filterMarkup() {
+    return `<details class="cs-filter" data-filter ${state.filterOpen?'open':''}><summary>게임 필터 · 이번 추첨 ${eligible().length}개</summary>
+      <p class="cs-note">원본 ${state.items.length}개는 그대로 유지됩니다.</p>
+      ${allCategories().length>1||state.categories!==null?`<p class="cs-section-label">이번 추첨에 넣을 분류</p><div class="cs-checks">${allCategories().map(c=>`<label class="cs-check"><input type="checkbox" data-category="${esc(c)}" ${!state.categories||state.categories.includes(c)?'checked':''}>${esc(c)}</label>`).join('')}</div>`:''}
+      <ul class="cs-filter-list">${state.items.map(item=>`<li><label class="cs-check"><input type="checkbox" data-include="${esc(item.id)}" ${!state.hidden.includes(item.id)?'checked':''}>${esc(item.name)} <small class="cs-note">${esc(category(item))}</small></label></li>`).join('')}</ul>
+      ${eligible().length?button('reset-filter','필터 초기화','cs-quiet'):''}
+    </details>`;
+  }
+  function hostMarkup() {
+    if(state.screen==='choose') return `<h3 class="cs-title">후보 만들기</h3><p class="cs-note">방이 만들어졌어요. 추첨할 후보를 준비해 주세요.</p>
+      <div class="cs-empty"><div class="cs-empty-mark"><i data-lucide="list-plus" aria-hidden="true"></i></div><strong>아직 후보가 없어요.</strong><p class="cs-note">후보 0개</p></div>
+      <div class="cs-choice-grid ${design.stackChoices?'cs-stack':''}">
+        <button class="cs-choice" type="button" data-action="new"><i data-lucide="square-pen" aria-hidden="true"></i><strong>새로 작성</strong><span ${design.descriptions?'':'hidden'}>원하는 후보를 직접 입력해요.</span></button>
+        <button class="cs-choice" type="button" data-action="load" aria-haspopup="dialog" aria-controls="cs-load-dialog"><i data-lucide="folder-open" aria-hidden="true"></i><strong>목록 불러오기</strong><span ${design.descriptions?'':'hidden'}>기본 목록이나 저장한 목록을 가져와요.</span></button>
+      </div>`;
+    if(state.screen==='editor') return editor();
+    if(state.screen==='result') return `<span class="cs-phase">추첨 결과 · 예시</span><div class="cs-result"><p>이번에 뽑힌 후보</p><h3>${esc(state.winner?.name||'')}</h3><p class="cs-note">${esc(state.winner?category(state.winner):'')}</p></div>${button('next','다음 게임 대기 화면으로','cs-primary cs-main-action')}`;
+    return `<h3 class="cs-title">룰렛 대기</h3><p class="cs-note">준비된 후보로 바로 돌릴 수 있어요.</p>${readySummary()}${wheelMarkup()}
+      <button type="button" class="cs-primary cs-main-action" data-action="draw" ${eligible().length?'':'disabled'}>룰렛 돌리기</button>
+      ${!eligible().length?`<p class="cs-error">추첨할 후보가 없어요. 필터나 제외 내역을 초기화하세요.</p><div class="cs-actions">${button('reset-filter','필터 초기화')}${state.drawn.length?button('reset-drawn','당첨 제외 초기화'):''}</div>`:''}
+      ${filterMarkup()}<details class="cs-filter"><summary>후보 보기 · 전체 ${state.items.length}개</summary>${readOnlyList(state.items)}</details><div class="cs-actions">${button('edit','후보 편집')}</div>
+      <label class="cs-check cs-space"><input type="checkbox" data-no-repeat ${state.excludeDrawn?'checked':''}>중복 없이 추첨 · 뽑힌 후보 제외</label>
+      <p class="cs-note">당첨 제외 내역 ${state.drawn.length}개</p>`;
+  }
+  function guestMarkup() {
+    if(['waiting','result'].includes(state.screen)) {
+      if(state.screen==='result') return `<span class="cs-phase">추첨 결과 · 예시</span><div class="cs-result"><p>이번에 뽑힌 후보</p><h3>${esc(state.winner?.name||'')}</h3></div><p class="cs-note">방장이 다음 게임을 준비하고 있어요.</p>`;
+      return `<h3 class="cs-title">룰렛 대기</h3><p class="cs-note">방장이 룰렛을 돌리면 함께 결과를 확인해요.</p>${readySummary()}${wheelMarkup()}<details><summary>이번 추첨 후보 ${eligible().length}개 보기</summary>${readOnlyList(eligible())}</details><p class="cs-note cs-space">게임 필터는 방장이 변경할 수 있어요.</p>`;
+    }
+    const open=state.intake==='open'; const review=state.intake==='review'; const shared=state.sharedItems||[];
+    return `<span class="cs-phase">${open?'후보 추천 접수 중':review?'접수 종료 · 목록 확인':'후보 준비 중'}</span>
+      <h3 class="cs-title">${open?'후보를 추천해 주세요.':review?'방장이 목록을 확인하고 있어요.':'방장이 후보를 준비하고 있어요.'}</h3>
+      <p class="cs-note">${open?'추첨하고 싶은 후보를 추가할 수 있어요.':review?'접수가 다시 열리면 후보를 추천할 수 있어요.':'추천 접수가 열리면 후보를 추가할 수 있어요.'}</p>
+      ${open?addForm('guest'):''}
+      ${shared.length?`<p class="cs-count">공유된 후보 ${shared.length}개</p>${readOnlyList(shared,open)}`:`<div class="cs-empty"><div class="cs-empty-mark"><i data-lucide="users" aria-hidden="true"></i></div><p>후보 준비가 끝나면 룰렛이 보여요.</p></div>`}
+      ${state.removed?.fromGuest?undoMarkup():''}`;
+  }
+  function readOnlyList(items,remove=false) {
+    return `<ul class="cs-shared-list">${items.map(item=>`<li><span>${esc(item.name)} <small>${esc(category(item))}</small></span>${remove&&item.owner==='나'?`<button type="button" class="cs-quiet cs-danger" data-remove="${esc(item.id)}" aria-label="${esc(item.name)} 내 추천 삭제">삭제</button>`:''}</li>`).join('')}</ul>`;
+  }
+  function render() {
+    const active=document.activeElement;
+    const focusKey=active&&root.contains(active)?['data-category','data-include','data-no-repeat','data-action','data-remove'].find(key=>active.hasAttribute(key)):null;
+    const focusValue=focusKey?active.getAttribute(focusKey):null;
+    host.innerHTML=hostMarkup(); guest.innerHTML=guestMarkup();
+    const ready=['waiting','result'].includes(state.screen);
+    for(const [name,current] of [['setup',!ready],['ready',ready]]) {
+      const step=root.querySelector(`[data-journey="${name}"]`);if(current)step.setAttribute('aria-current','step');else step.removeAttribute('aria-current');
+    }
+    if(globalThis.lucide) globalThis.lucide.createIcons({attrs:{width:20,height:20}});
+    const detail=root.querySelector('[data-filter]'); if(detail) detail.addEventListener('toggle',()=>{if(state.filterOpen!==detail.open){state.filterOpen=detail.open;persist();}});
+    if(focusKey) [...root.querySelectorAll(`[${focusKey}]`)].find(el=>el.getAttribute(focusKey)===focusValue)?.focus({preventScroll:true});
+  }
+  function loadSource(key) {
+    closeLoad(false);
+    const src=samples[key]; state.items=src.rows.map(row=>makeItem(...row)); state.source=src.name;
+    state.categories=null; state.hidden=[]; state.drawn=[]; state.removed=null; state.intake='closed'; formDraft={name:'',category:''}; go('editor'); status(`${src.name} ${state.items.length}개를 가져왔습니다.`);
+    host.querySelector('input[name="name"]')?.focus();
+  }
+  function ask(title,description,acceptLabel,action) {
+    root.querySelector('#cs-confirm-title').textContent=title;root.querySelector('#cs-confirm-description').textContent=description;
+    root.querySelector('[data-action="accept-confirm"]').textContent=acceptLabel; pendingSource=action; dialog.showModal();
+    root.querySelector('[data-action="cancel-confirm"]').textContent=loadDialog.open?'목록 선택으로 돌아가기':'계속 편집';
+  }
+  function draw() {
+    const winner=eligible()[0]; if(!winner)return;
+    state.winner={...winner}; state.drawn=state.excludeDrawn?[...new Set([...state.drawn,winner.id])]:[winner.id]; go('result');status(`${winner.name} 당첨`);
+  }
+  root.addEventListener('click',event=>{
+    const el=event.target.closest('button');if(!el||!root.contains(el))return;
+    if(el.dataset.submitEntry){submitEntry(el.closest('form'));return;}
+    if(el.dataset.source) {
+      const key=el.dataset.source;
+      if(state.items.length||formDraft.name.trim())ask('현재 후보 목록을 바꿀까요?','작성 중인 후보가 선택한 목록의 사본으로 바뀝니다.','목록 바꾸기',()=>loadSource(key));
+      else loadSource(key);return;
+    }
+    if(el.dataset.remove) {
+      const index=state.items.findIndex(i=>i.id===el.dataset.remove); if(index<0)return;
+      const fromGuest=Boolean(el.closest('#cs-guest'));
+      state.removed={item:state.items[index],index,fromGuest}; state.items.splice(index,1);
+      if(fromGuest)state.sharedItems=state.sharedItems.filter(i=>i.id!==el.dataset.remove);
+      render();persist();status('후보를 삭제했습니다. 실행 취소할 수 있습니다.');return;
+    }
+    const action=el.dataset.action;
+    if(action==='new')go('editor');
+    else if(action==='load')openLoad(el);
+    else if(action==='close-load')closeLoad();
+    else if(action==='cancel-confirm'){pendingSource=null;dialog.close();}
+    else if(action==='accept-confirm'){const run=pendingSource;pendingSource=null;dialog.close();if(run)run();}
+    else if(action==='back-choose'){
+      const back=()=>{state.items=[];state.sharedItems=[];state.source='직접 작성';state.removed=null;formDraft={name:'',category:''};go('choose');};
+      if(state.items.length||formDraft.name.trim()||formDraft.category.trim())ask('작성 중인 후보를 비울까요?','현재 초안을 비우고 새로 작성 / 목록 불러오기 선택으로 돌아갑니다.','비우고 돌아가기',back);else back();
+    }
+    else if(action==='undo'&&state.removed){state.items.splice(state.removed.index,0,state.removed.item);if(state.removed.fromGuest)state.sharedItems.splice(state.removed.index,0,{...state.removed.item});state.removed=null;render();persist();status('후보를 복원했습니다.');}
+    else if(action==='open'||action==='close'){applyPendingHost();publishDraft();state.intake=action==='open'?'open':'review';go('editor');}
+    else if(action==='finalize'){
+      applyPendingHost();
+      if(!state.items.length)return;
+      if(state.items.some(i=>!i.name.trim())){error='비어 있는 후보 이름을 입력해 주세요.';render();return;}
+      publishDraft();state.hasFinalized=true;state.intake='closed';state.removed=null;go('waiting');status('후보 준비가 끝났습니다. 룰렛 대기로 이동했습니다.');
+    }
+    else if(action==='edit'){state.intake='closed';go('editor');}
+    else if(action==='reset-filter'){state.categories=null;state.hidden=[];render();persist();}
+    else if(action==='reset-drawn')ask('당첨 제외 내역을 초기화할까요?','뽑혔던 후보를 다시 추첨할 수 있습니다.','초기화',()=>{state.drawn=[];render();persist();});
+    else if(action==='draw'){
+      if(!state.excludeDrawn&&state.drawn.length)ask('제외 목록을 초기화하고 돌릴까요?','이전 당첨 제외 내역이 지워지고 이번 당첨 후보부터 다시 기록됩니다.','초기화하고 돌리기',draw);
+      else draw();
+    }
+    else if(action==='next')go('waiting');
+  });
+  root.addEventListener('compositionstart',()=>{composing=true;});root.addEventListener('compositionend',()=>{composing=false;});
+  root.addEventListener('input',event=>{
+    const el=event.target;
+    if(el.dataset.item){const item=state.items.find(i=>i.id===el.dataset.item);if(item)item[el.dataset.field]=el.value;persist();}
+    const form=el.closest('form[data-form]');if(form){const data=form.dataset.form==='host'?formDraft:guestDraft;data[el.name]=el.value;const finish=host.querySelector('[data-action="finalize"]');if(finish)finish.disabled=!(state.items.length||formDraft.name.trim());persist();}
+  });
+  function submitEntry(form) {
+    if(!form)return;
+    const value=form.dataset.form==='host'?formDraft:guestDraft; const name=value.name.trim();if(!name)return;
+    const item=makeItem(name,value.category.trim(),form.dataset.form==='guest'?'나':'');state.items.push(item);
+    if(form.dataset.form==='guest')state.sharedItems.push({...item});
+    if(form.dataset.form==='host')formDraft={name:'',category:''};else guestDraft={name:'',category:''};
+    render();persist();status(`${name} 후보를 추가했습니다.`);root.querySelector(`[data-form="${form.dataset.form}"] input[name="name"]`)?.focus();
+  }
+  root.addEventListener('submit',event=>{event.preventDefault();if(!composing)submitEntry(event.target.closest('[data-form]'));});
+  root.addEventListener('keydown',event=>{const form=event.target.closest('[data-form]');if(form&&event.key==='Enter'){event.preventDefault();if(!event.isComposing&&!composing)submitEntry(form);}});
+  root.addEventListener('change',event=>{
+    const el=event.target;
+    if(el.hasAttribute('data-category')){
+      const selected=state.categories?[...state.categories]:allCategories();const c=el.dataset.category;
+      state.categories=el.checked?[...new Set([...selected,c])]:selected.filter(v=>v!==c);state.filterOpen=true;render();persist();status(`이번 추첨 후보 ${eligible().length}개`);
+    }else if(el.dataset.include){state.hidden=el.checked?state.hidden.filter(id=>id!==el.dataset.include):[...new Set([...state.hidden,el.dataset.include])];state.filterOpen=true;render();persist();status(`이번 추첨 후보 ${eligible().length}개`);}
+    else if(el.hasAttribute('data-no-repeat')){state.excludeDrawn=el.checked;render();persist();}
+  });
+  dialog.addEventListener('cancel',()=>{pendingSource=null;});
+  loadDialog.addEventListener('cancel',event=>{event.preventDefault();closeLoad();});
+  window.addEventListener('openai:set_globals',event=>{const saved=event.detail?.globals?.widgetState;if(saved?.privateContent?.revision>localRevision){restore(saved);render();}});
+  loadDialog.innerHTML=loadMarkup();
+  render();
+  if(globalThis.Tweak){const tweak=new Tweak({container:root,onChange:render});tweak.addToggle(design,'stackChoices',{label:'선택 버튼 세로 배치'});tweak.addToggle(design,'descriptions',{label:'선택 버튼 설명 표시'});}
+})();
+</script>

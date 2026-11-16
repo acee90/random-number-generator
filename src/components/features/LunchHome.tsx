@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import SiteHeader from "@/components/layout/SiteHeader";
 import { Button } from "@/components/ui/button";
-import { sampleLunchPlaces } from "@/lib/lunch";
 import "./lunch-home.css";
 
 export default function LunchHome() {
@@ -69,12 +68,10 @@ export default function LunchHome() {
 								<ChevronDown size={16} aria-hidden="true" />
 							</summary>
 							<div>
+								<p>방을 만든 뒤 후보를 새로 작성하거나 목록을 불러옵니다.</p>
 								<p>
-									회사 주변 음식점 {sampleLunchPlaces.length}곳으로 시작합니다.
-								</p>
-								<p>
-									제공받은 엑셀 목록을 사용합니다. 위치 검색 기능은 준비
-									중입니다.
+									기본 음식점 목록도 불러오기에서 선택할 수 있습니다. 위치 검색
+									기능은 준비 중입니다.
 								</p>
 								<p>앱 설치나 회원가입 없이 링크로 참가할 수 있습니다.</p>
 								<p>

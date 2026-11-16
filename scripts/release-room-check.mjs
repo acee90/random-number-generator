@@ -298,6 +298,38 @@ async function run(config) {
 		client.ws.send(JSON.stringify(body));
 		return reply;
 	}
+	async function command(client, body) {
+		ensure(client.ws.readyState === WebSocket.OPEN, "CLIENT_DISCONNECTED");
+		const message = { id: uuid(), ...body };
+		const reply = waitMessage(
+			client,
+			(value) =>
+				(value.type === "ack" || value.type === "error") &&
+				value.requestId === message.id,
+		);
+		client.ws.send(JSON.stringify(message));
+		return reply;
+	}
+	async function intake(host, observer, action) {
+		const status =
+			action === "edit"
+				? "editing"
+				: action === "open"
+					? "collecting"
+					: action === "close"
+						? "reviewing"
+						: "waiting";
+		const [reply] = await Promise.all([
+			command(host, {
+				type: "intake",
+				action,
+				expectedRevision: host.snapshot.revision,
+			}),
+			waitSnapshot(observer, (snapshot) => snapshot.status === status),
+		]);
+		ensure(reply.type === "ack", "HOST_INTAKE_REJECTED");
+		ensure(host.snapshot.status === status, "INTAKE_ACK_WITHOUT_STATE");
+	}
 	async function sync(client) {
 		const sequence = client.sequence;
 		return request(
@@ -325,12 +357,23 @@ async function run(config) {
 			snapshot.listVersion === oldVersion + 1 &&
 			JSON.stringify(snapshot.candidates.map((place) => place.id)) ===
 				JSON.stringify(ids);
-		const [reply] = await Promise.all([
-			request(host, { type: "candidates", ids }, matches),
-			waitSnapshot(guest, matches),
-		]);
-		ensure(reply.type === "snapshot", "HOST_CANDIDATES_REJECTED");
-		return reply.snapshot.listVersion;
+		const candidates = ids.map(
+			(id, index) =>
+				host.snapshot.candidates.find((place) => place.id === id) ?? {
+					id,
+					name: `직접 작성 검증 후보 ${index + 1}`,
+					category: "직접 분류",
+					included: true,
+				},
+		);
+		const reply = await command(host, {
+			type: "room-edit",
+			baseListVersion: oldVersion,
+			candidates,
+		});
+		ensure(reply.type === "ack", "HOST_CANDIDATES_REJECTED");
+		await waitSnapshot(guest, matches);
+		return host.snapshot.listVersion;
 	}
 	async function start(host, observer) {
 		ensure(++startCount <= 2, "DRAW_LIMIT_EXCEEDED");
@@ -338,7 +381,14 @@ async function run(config) {
 		const [reply, observed] = await Promise.all([
 			request(
 				host,
-				{ type: "start", id },
+				{
+					type: "start",
+					id,
+					expectedRevision: host.snapshot.revision,
+					...(!host.snapshot.excludeDrawn && host.snapshot.excludedIds?.length
+						? { confirmReset: true }
+						: {}),
+				},
 				(snapshot) =>
 					snapshot.status === "fetching" || snapshot.draw?.id === id,
 			),
@@ -360,7 +410,7 @@ async function run(config) {
 	const complete = (client, id) =>
 		waitSnapshot(
 			client,
-			(snapshot) => snapshot.status === "waiting" && snapshot.draw?.id === id,
+			(snapshot) => snapshot.status === "result" && snapshot.draw?.id === id,
 			config.drawTimeoutMs,
 		);
 	async function vote(client, drawId, choice) {
@@ -379,7 +429,7 @@ async function run(config) {
 		const created = await post("/api/lunch/rooms", {
 			title: "릴리즈 #8 연결 검증",
 			hostName,
-			candidateIds: initialCandidates,
+			candidateIds: [],
 		});
 		timings.create.push(created.ms);
 		ensure(created.status === 201, "CREATE_HTTP_STATUS");
@@ -402,6 +452,13 @@ async function run(config) {
 		activeStage = "auth-and-availability";
 		let host = await join(hostName, hostProof);
 		ensure(host.self.isHost === true, "HOST_AUTHORITY_MISSING");
+		ensure(
+			host.snapshot.status === "editing" &&
+				host.snapshot.draw === null &&
+				host.snapshot.intakeId === null,
+			"NEW_ROOM_DID_NOT_START_IN_EDITING",
+		);
+		pass("new-room-starts-in-host-editing-without-opening-recommendations");
 		const hostIdentity = host.self.id;
 		const baselineMessages = host.snapshot.messages.length;
 		for (const name of [" ＱＡ　Ｍａｔｅ ", "qa mate", "QA Mate"])
@@ -416,6 +473,32 @@ async function run(config) {
 		let guest = await join(guestName, guestProof);
 		ensure(guest.self.isHost === false, "GUEST_RECEIVED_HOST_AUTHORITY");
 		const guestIdentity = guest.self.id;
+		ensure(
+			host.snapshot.status === "editing" &&
+				guest.snapshot.status === "editing" &&
+				host.snapshot.candidates.length === 0 &&
+				guest.snapshot.candidates.length === 0,
+			"NEW_ROOM_WAS_NOT_EMPTY_FOR_BOTH_ROLES",
+		);
+		const emptyFinalize = await command(host, {
+			type: "intake",
+			action: "finalize",
+			expectedRevision: host.snapshot.revision,
+		});
+		ensure(
+			emptyFinalize.code === "NO_CANDIDATES" &&
+				host.snapshot.status === "editing",
+			"EMPTY_ROOM_FINALIZED_WITHOUT_CANDIDATES",
+		);
+		await changeCandidates(host, guest, initialCandidates);
+		ensure(
+			host.snapshot.candidates.length === 3 &&
+				host.snapshot.candidates.every(
+					(candidate) => candidate.category === "직접 분류",
+				),
+			"CUSTOM_SETUP_NOT_SAVED",
+		);
+		pass("empty-create-both-roles-and-custom-setup-before-first-finalize");
 		for (const name of [" ＱＡ　Ｍａｔｅ ", "qa mate", "QA MATE"])
 			await availability(name, outsiderProof, false, "taken");
 		await availability(guestName, guestProof, true);
@@ -453,11 +536,11 @@ async function run(config) {
 			ensure(reply.type === "snapshot", "CHAT_REJECTED");
 		}
 		pass("bidirectional-chat");
-		const guestCandidates = await request(
-			guest,
-			{ type: "candidates", ids: nextCandidates },
-			() => false,
-		);
+		const guestCandidates = await command(guest, {
+			type: "room-edit",
+			baseListVersion: guest.snapshot.listVersion,
+			candidates: guest.snapshot.candidates.slice(0, 2),
+		});
 		ensure(
 			guestCandidates.code === "HOST_REQUIRED",
 			"GUEST_CHANGED_CANDIDATES",
@@ -469,8 +552,229 @@ async function run(config) {
 		);
 		ensure(guestStart.code === "HOST_REQUIRED", "GUEST_STARTED_DRAW");
 		const drawCandidates = [...initialCandidates, "seonjeongneung-05"];
-		const firstVersion = await changeCandidates(host, guest, drawCandidates);
+		let firstVersion = await changeCandidates(host, guest, drawCandidates);
 		pass("candidate-host-authority-and-version", { listVersion: firstVersion });
+		await intake(host, guest, "finalize");
+		const legacyCandidates = await request(
+			host,
+			{ type: "candidates", ids: initialCandidates },
+			() => false,
+		);
+		ensure(
+			legacyCandidates.code === "CLIENT_UPGRADE_REQUIRED" &&
+				host.snapshot.listVersion === firstVersion,
+			"LEGACY_CANDIDATES_BYPASSED_REVISION",
+		);
+		pass("legacy-candidate-protocol-cannot-bypass-versioned-edits");
+
+		activeStage = "independent-game-filter";
+		const filterSource = JSON.stringify(host.snapshot.candidates);
+		const filterVersion = host.snapshot.listVersion;
+		const firstGameFilter = {
+			categories: ["직접 분류"],
+			excludedIds: [initialCandidates[0]],
+		};
+		const waitingFilter = await command(host, {
+			type: "game-filter",
+			filter: firstGameFilter,
+			expectedRevision: host.snapshot.revision,
+		});
+		ensure(
+			waitingFilter.code === "PHASE_CONFLICT" &&
+				host.snapshot.status === "waiting" &&
+				JSON.stringify(host.snapshot.candidates) === filterSource,
+			"WAITING_GAME_FILTER_BYPASSED_PREPARATION_STAGE",
+		);
+		await intake(host, guest, "edit");
+		const forbiddenFilter = await command(guest, {
+			type: "game-filter",
+			filter: firstGameFilter,
+			expectedRevision: guest.snapshot.revision,
+		});
+		ensure(
+			forbiddenFilter.code === "HOST_REQUIRED",
+			"GUEST_CHANGED_GAME_FILTER",
+		);
+		const filtered = await command(host, {
+			type: "game-filter",
+			filter: firstGameFilter,
+			expectedRevision: host.snapshot.revision,
+		});
+		ensure(filtered.type === "ack", "HOST_GAME_FILTER_REJECTED");
+		await waitSnapshot(
+			guest,
+			(snapshot) =>
+				JSON.stringify(snapshot.gameFilter) === JSON.stringify(firstGameFilter),
+		);
+		ensure(
+			host.snapshot.status === "editing" &&
+				host.snapshot.listVersion === filterVersion &&
+				JSON.stringify(host.snapshot.candidates) === filterSource &&
+				host.snapshot.excludedIds.length === 0,
+			"GAME_FILTER_CHANGED_SOURCE_VERSION_PHASE_OR_LEDGER",
+		);
+		pass(
+			"game-filter-is-preparation-only-host-only-and-preserves-source-list-version-and-ledger",
+		);
+		await intake(host, guest, "finalize");
+
+		activeStage = "intake-and-candidate-concurrency";
+		const guestIntake = await command(guest, {
+			type: "intake",
+			action: "open",
+			expectedRevision: guest.snapshot.revision,
+		});
+		ensure(guestIntake.code === "HOST_REQUIRED", "GUEST_OPENED_INTAKE");
+		const waitingEdit = await command(host, {
+			type: "room-edit",
+			baseListVersion: host.snapshot.listVersion,
+			title: "대기에서 변경 불가",
+			candidates: host.snapshot.candidates,
+		});
+		ensure(
+			waitingEdit.code === "PHASE_CONFLICT",
+			"WAITING_ROOM_EDIT_BYPASSED_EDITING_STAGE",
+		);
+		await intake(host, guest, "edit");
+		ensure(
+			host.snapshot.intakeId === null && host.snapshot.draw === null,
+			"HOST_EDITING_OPENED_RECOMMENDATIONS_OR_DRAW",
+		);
+		pass("waiting-view-is-readonly-and-host-explicitly-enters-editing");
+		await intake(host, guest, "open");
+		const initialIntakeId = host.snapshot.intakeId;
+		const baseListVersion = host.snapshot.listVersion;
+		const recommendation = {
+			type: "recommend",
+			id: uuid(),
+			name: "연결 검증 후보",
+			intakeId: initialIntakeId,
+		};
+		const recommended = await command(guest, recommendation);
+		ensure(recommended.type === "ack", "GUEST_RECOMMENDATION_REJECTED");
+		await waitSnapshot(host, (snapshot) =>
+			snapshot.candidates.some(
+				(candidate) => candidate.name === recommendation.name,
+			),
+		);
+		const ownCandidate = host.snapshot.candidates.find(
+			(candidate) => candidate.name === recommendation.name,
+		);
+		ensure(
+			ownCandidate.ownerId === guestIdentity,
+			"CANDIDATE_OWNERSHIP_MISSING",
+		);
+		const acceptedVersion = host.snapshot.listVersion;
+		const duplicate = await command(guest, recommendation);
+		ensure(
+			duplicate.type === "ack" &&
+				guest.snapshot.listVersion === acceptedVersion &&
+				guest.snapshot.candidates.filter(
+					(candidate) => candidate.id === ownCandidate.id,
+				).length === 1,
+			"RECOMMENDATION_RETRY_DUPLICATED",
+		);
+		const forbidden = await command(guest, {
+			type: "remove-candidate",
+			candidateId: initialCandidates[0],
+			intakeId: initialIntakeId,
+		});
+		ensure(
+			forbidden.code === "CANDIDATE_FORBIDDEN",
+			"GUEST_REMOVED_ANOTHER_CANDIDATE",
+		);
+		pass(
+			"intake-host-authority-guest-recommendation-ownership-and-idempotent-ack",
+		);
+		const titleEdit = await command(host, {
+			type: "room-edit",
+			baseListVersion,
+			title: "릴리즈 lifecycle 연결 검증",
+		});
+		ensure(
+			titleEdit.type === "ack" &&
+				host.snapshot.candidates.some(
+					(candidate) => candidate.id === ownCandidate.id,
+				),
+			"TITLE_EDIT_LOST_RECOMMENDATION",
+		);
+		const staleEdit = await command(host, {
+			type: "room-edit",
+			baseListVersion,
+			candidates: host.snapshot.candidates,
+		});
+		ensure(
+			staleEdit.code === "LIST_CONFLICT",
+			"STALE_CANDIDATE_DRAFT_OVERWROTE_RECOMMENDATION",
+		);
+		pass("title-only-edit-preserves-recommendation-and-stale-list-is-rejected");
+		await intake(host, guest, "close");
+		const lateRecommendation = await command(guest, {
+			type: "recommend",
+			name: "마감 뒤 후보",
+			intakeId: initialIntakeId,
+		});
+		ensure(
+			lateRecommendation.code === "INTAKE_CLOSED",
+			"CLOSED_INTAKE_ACCEPTED_RECOMMENDATION",
+		);
+		await intake(host, guest, "open");
+		ensure(
+			host.snapshot.intakeId !== initialIntakeId,
+			"REOPEN_REUSED_INTAKE_ID",
+		);
+		const oldIntake = await command(guest, {
+			type: "recommend",
+			name: "이전 접수 후보",
+			intakeId: initialIntakeId,
+		});
+		ensure(
+			oldIntake.code === "INTAKE_CLOSED",
+			"REOPEN_ACCEPTED_OLD_INTAKE_REQUEST",
+		);
+		const beforeRemoval = host.snapshot.revision;
+		const removed = await command(guest, {
+			type: "remove-candidate",
+			candidateId: ownCandidate.id,
+			intakeId: guest.snapshot.intakeId,
+		});
+		ensure(removed.type === "ack", "OWNER_CANNOT_REMOVE_RECOMMENDATION");
+		await waitSnapshot(
+			host,
+			(snapshot) =>
+				!snapshot.candidates.some(
+					(candidate) => candidate.id === ownCandidate.id,
+				),
+		);
+		const staleFinalize = await command(host, {
+			type: "intake",
+			action: "finalize",
+			expectedRevision: beforeRemoval,
+		});
+		ensure(
+			staleFinalize.code === "REVISION_CONFLICT" &&
+				host.snapshot.status === "collecting",
+			"STALE_FINALIZE_ACCEPTED",
+		);
+		await intake(host, guest, "finalize");
+		ensure(
+			host.snapshot.draw === null &&
+				host.snapshot.candidates.length === drawCandidates.length,
+			"FINALIZE_STARTED_DRAW_OR_LOST_CANDIDATES",
+		);
+		firstVersion = host.snapshot.listVersion;
+		pass(
+			"intake-close-reopen-session-isolation-and-versioned-finalize-to-waiting",
+		);
+		const enableExclusion = await command(host, {
+			type: "options",
+			excludeDrawn: true,
+			expectedRevision: host.snapshot.revision,
+		});
+		ensure(
+			enableExclusion.type === "ack" && host.snapshot.excludeDrawn === true,
+			"EXCLUSION_OPTION_REJECTED",
+		);
 
 		activeStage = "draw-sync-and-late-join";
 		const first = await start(host, guest);
@@ -479,6 +783,9 @@ async function run(config) {
 			drawFor(guest, first.id),
 		]);
 		const firstDraw = hostDrawing.draw;
+		const firstDrawCandidates = drawCandidates.filter(
+			(id) => !firstGameFilter.excludedIds.includes(id),
+		);
 		drawSources.push(firstDraw.source);
 		ensure(
 			JSON.stringify(firstDraw) === JSON.stringify(guestDrawing.draw),
@@ -494,19 +801,32 @@ async function run(config) {
 				firstDraw.fromRotation === 0 &&
 				Number.isFinite(firstDraw.toRotation) &&
 				firstDraw.winnerIndex >= 0 &&
-				firstDraw.winnerIndex < drawCandidates.length &&
+				firstDraw.winnerIndex < firstDrawCandidates.length &&
 				firstDraw.listVersion === firstVersion,
 			"INVALID_DRAW_METADATA",
 		);
 		ensure(
-			firstDraw.probabilities?.length === drawCandidates.length &&
+			firstDraw.probabilities?.length === firstDrawCandidates.length &&
 				firstDraw.probabilities.every(
-					(value) => Math.abs(value - 1 / drawCandidates.length) < 1e-12,
+					(value) => Math.abs(value - 1 / firstDrawCandidates.length) < 1e-12,
 				) &&
 				firstDraw.participants?.length === 2 &&
 				firstDraw.participants.some((entry) => entry.id === hostIdentity) &&
 				firstDraw.participants.some((entry) => entry.id === guestIdentity),
 			"INVALID_DRAW_PROBABILITIES_OR_PARTICIPANTS",
+		);
+		ensure(
+			JSON.stringify(firstDraw.candidates.map((candidate) => candidate.id)) ===
+				JSON.stringify(firstDrawCandidates) &&
+				firstDraw.candidates.every(
+					(candidate) => candidate.category === "직접 분류",
+				) &&
+				JSON.stringify(firstDraw.gameFilter) ===
+					JSON.stringify(firstGameFilter),
+			"CUSTOM_DRAW_OR_FILTER_COPY_MISMATCH",
+		);
+		pass(
+			"custom-classifications-and-filtered-final-candidates-are-fixed-in-the-draw",
 		);
 		pass("draw-same-winner-and-7200ms-timeline", { source: firstDraw.source });
 		const late = await join(lateName, lateProof);
@@ -600,7 +920,66 @@ async function run(config) {
 
 		activeStage = "freeze-and-history";
 		const frozen = JSON.stringify(voted.draw);
-		await changeCandidates(host, guest, nextCandidates);
+		const firstWinnerId = voted.draw.candidates[voted.draw.winnerIndex].id;
+		ensure(
+			JSON.stringify(voted.excludedIds) === JSON.stringify([firstWinnerId]),
+			"ON_DRAW_DID_NOT_SAVE_WINNER_LEDGER",
+		);
+		const resultFilter = await command(host, {
+			type: "game-filter",
+			filter: { categories: null, excludedIds: [] },
+			expectedRevision: host.snapshot.revision,
+		});
+		ensure(
+			resultFilter.code === "PHASE_CONFLICT" &&
+				host.snapshot.status === "result" &&
+				JSON.stringify(host.snapshot.candidates) === filterSource &&
+				JSON.stringify(host.snapshot.gameFilter) ===
+					JSON.stringify(firstGameFilter) &&
+				JSON.stringify(host.snapshot.excludedIds) ===
+					JSON.stringify([firstWinnerId]) &&
+				JSON.stringify(host.snapshot.draw) === frozen,
+			"RESULT_GAME_FILTER_BYPASSED_PREPARATION_STAGE",
+		);
+		pass(
+			"result-game-filter-rejected-without-changing-source-drawn-exclusions-or-result",
+		);
+		const secondCandidates = [
+			firstWinnerId,
+			...nextCandidates.filter((id) => id !== firstWinnerId),
+		].slice(0, 2);
+		const resultEdit = await command(host, {
+			type: "room-edit",
+			baseListVersion: host.snapshot.listVersion,
+			candidates: host.snapshot.candidates,
+		});
+		ensure(
+			resultEdit.code === "PHASE_CONFLICT" &&
+				host.snapshot.status === "result" &&
+				JSON.stringify(host.snapshot.draw) === frozen,
+			"RESULT_EDIT_BYPASSED_EXPLICIT_WAITING_AND_EDITING",
+		);
+		const disableExclusion = await command(host, {
+			type: "options",
+			excludeDrawn: false,
+			expectedRevision: host.snapshot.revision,
+		});
+		ensure(
+			disableExclusion.type === "ack" &&
+				host.snapshot.status === "result" &&
+				JSON.stringify(host.snapshot.excludedIds) ===
+					JSON.stringify([firstWinnerId]),
+			"OFF_TOGGLE_RESET_LEDGER_OR_CLOSED_RESULT",
+		);
+		const resultStart = await command(host, {
+			type: "start",
+			expectedRevision: host.snapshot.revision,
+			confirmReset: true,
+		});
+		ensure(resultStart.code === "DRAW_BUSY", "RESULT_DIRECT_REDRAW_ACCEPTED");
+		pass(
+			"between-round-options-preserve-result-ledger-and-require-explicit-next",
+		);
 		ensure(
 			JSON.stringify(host.snapshot.draw) === frozen,
 			"CURRENT_DRAW_METADATA_MUTATED",
@@ -632,6 +1011,50 @@ async function run(config) {
 			"CLOSE_DID_NOT_FREEZE_DRAW",
 		);
 		pass("host-closes-voting-and-prepares-next-round-for-everyone");
+		await intake(host, guest, "edit");
+		const clearFilter = await command(host, {
+			type: "game-filter",
+			filter: { categories: null, excludedIds: [] },
+			expectedRevision: host.snapshot.revision,
+		});
+		ensure(
+			clearFilter.type === "ack" &&
+				host.snapshot.status === "editing" &&
+				JSON.stringify(host.snapshot.candidates) === filterSource &&
+				JSON.stringify(host.snapshot.excludedIds) ===
+					JSON.stringify([firstWinnerId]) &&
+				JSON.stringify(
+					host.snapshot.history.find((entry) => entry.id === first.id),
+				) === frozen,
+			"PREPARATION_FILTER_RESET_CHANGED_SOURCE_LEDGER_OR_HISTORY",
+		);
+		pass(
+			"preparation-filter-reset-preserves-source-drawn-exclusions-and-history",
+		);
+		await changeCandidates(host, guest, secondCandidates);
+		await intake(host, guest, "finalize");
+		ensure(
+			host.snapshot.draw === null &&
+				JSON.stringify(
+					host.snapshot.history.find((entry) => entry.id === first.id),
+				) === frozen,
+			"EXPLICIT_EDITING_CHANGED_ARCHIVED_RESULT",
+		);
+		pass(
+			"result-edit-rejected-and-next-waiting-edit-finalize-preserve-history",
+		);
+		const unconfirmedStart = await command(host, {
+			type: "start",
+			expectedRevision: host.snapshot.revision,
+		});
+		ensure(
+			unconfirmedStart.code === "RESET_CONFIRMATION_REQUIRED" &&
+				host.snapshot.status === "waiting" &&
+				JSON.stringify(host.snapshot.excludedIds) ===
+					JSON.stringify([firstWinnerId]),
+			"OFF_START_BYPASSED_RESET_CONFIRMATION",
+		);
+		pass("off-draw-requires-current-revision-and-reset-confirmation");
 
 		const second = await start(host, guest);
 		const archived = second.snapshot.history.find(
@@ -659,6 +1082,25 @@ async function run(config) {
 			complete(guest, second.id),
 		]);
 		drawSources.push(secondCompleted.draw.source);
+		const secondWinnerId =
+			secondCompleted.draw.candidates[secondCompleted.draw.winnerIndex].id;
+		ensure(
+			JSON.stringify(secondCompleted.excludedIds) ===
+				JSON.stringify([secondWinnerId]),
+			"OFF_DRAW_DID_NOT_REPLACE_WINNER_LEDGER",
+		);
+		const enableAgain = await command(host, {
+			type: "options",
+			excludeDrawn: true,
+			expectedRevision: host.snapshot.revision,
+		});
+		ensure(
+			enableAgain.type === "ack" &&
+				JSON.stringify(host.snapshot.excludedIds) ===
+					JSON.stringify([secondWinnerId]),
+			"REENABLE_EXCLUSION_CHANGED_LEDGER",
+		);
+		pass("on-accumulation-off-replacement-and-reenable-use-latest-winner");
 		const nowEligible = await vote(late, second.id, "down");
 		ensure(
 			nowEligible.type === "snapshot",
@@ -671,6 +1113,22 @@ async function run(config) {
 			) === frozen,
 			"ARCHIVED_DRAW_CHANGED_AFTER_NEXT_COMPLETION",
 		);
+		await sync(host);
+		const currentResult = JSON.stringify(host.snapshot.draw);
+		const existingHistory = JSON.stringify(host.snapshot.history);
+		const resetExclusions = await command(host, {
+			type: "reset-exclusions",
+			expectedRevision: host.snapshot.revision,
+		});
+		ensure(
+			resetExclusions.type === "ack" &&
+				host.snapshot.status === "result" &&
+				host.snapshot.excludedIds.length === 0 &&
+				JSON.stringify(host.snapshot.draw) === currentResult &&
+				JSON.stringify(host.snapshot.history) === existingHistory,
+			"MANUAL_RESET_CHANGED_RESULT_OR_HISTORY",
+		);
+		pass("manual-exclusion-reset-preserves-current-result-and-history");
 		pass("public-snapshots-contain-no-proofs-or-hashes", {
 			observations: publicSnapshotCount,
 		});

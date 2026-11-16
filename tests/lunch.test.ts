@@ -58,7 +58,7 @@ describe("provided lunch restaurant list", () => {
 		expect(
 			sampleLunchPlaces.every(
 				(place) =>
-					lunchCategories.includes(place.category) &&
+					lunchCategories.some((category) => category === place.category) &&
 					(place.distanceMeters === undefined ||
 						(Number.isInteger(place.distanceMeters) &&
 							place.distanceMeters > 0)),

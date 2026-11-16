@@ -174,7 +174,9 @@ export default function RoomDrawResult({
 							disabled={!canNext || nextPending}
 							onClick={onNext}
 						>
-							{nextPending ? "투표 종료 중…" : "투표 종료하고 다음 게임"}
+							{nextPending
+								? "대기 화면으로 이동 중…"
+								: "다음 게임 대기 화면으로"}
 							<ArrowRight size={18} aria-hidden="true" />
 						</Button>
 					</div>

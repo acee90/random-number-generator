@@ -2,6 +2,7 @@ import type { Connection } from "partyserver";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sampleLunchPlaces } from "../src/lib/lunch";
 import {
+	getEligibleRoomCandidates,
 	lunchRoomLimits,
 	parseServerMessage,
 	type RoomSnapshot,
@@ -81,6 +82,7 @@ class HarnessContext {
 	storage = new TestStorage();
 	sockets = new Set<TestSocket>();
 	tasks: Promise<unknown>[] = [];
+	finalizeInitialEditOnHostJoin = true;
 	waitUntil(task: Promise<unknown>) {
 		this.tasks.push(task);
 	}
@@ -142,6 +144,56 @@ async function send(
 ) {
 	await server.onMessage(socketConnection(socket), JSON.stringify(message));
 }
+function currentRevision(socket: TestSocket) {
+	const snapshot = latestSnapshot(socket).snapshot;
+	return snapshot.revision ?? snapshot.listVersion;
+}
+
+/** Test setup follows the same explicit editing boundary as the host UI. */
+async function editPreparedRoom(
+	server: LunchRoomServer,
+	host: TestSocket,
+	edit: { id: string; title?: string; candidates?: RoomSnapshot["candidates"] },
+) {
+	const entered = latestSnapshot(host).snapshot.status === "waiting";
+	if (entered) {
+		await send(server, host, {
+			type: "intake",
+			id: `${edit.id}-prepare`,
+			action: "edit",
+			expectedRevision: currentRevision(host),
+		});
+		expect(latestSnapshot(host).snapshot.status).toBe("editing");
+	}
+	await send(server, host, {
+		type: "room-edit",
+		baseListVersion: latestSnapshot(host).snapshot.listVersion,
+		...edit,
+	});
+	if (
+		entered &&
+		getEligibleRoomCandidates(latestSnapshot(host).snapshot).length > 0
+	) {
+		await send(server, host, {
+			type: "intake",
+			id: `${edit.id}-finish`,
+			action: "finalize",
+			expectedRevision: currentRevision(host),
+		});
+		expect(latestSnapshot(host).snapshot.status).toBe("waiting");
+	}
+}
+
+async function returnToWaiting(server: LunchRoomServer, socket: TestSocket) {
+	const draw = latestSnapshot(socket).snapshot.draw;
+	if (!draw) throw new Error("Expected a completed result");
+	await send(server, socket, {
+		type: "next",
+		id: `next-${draw.id}`,
+		drawId: draw.id,
+	});
+}
+
 async function connect(
 	server: LunchRoomServer,
 	context: HarnessContext,
@@ -160,10 +212,24 @@ async function connect(
 			...(token ? { hostToken: token } : {}),
 			...(guestToken ? { guestToken } : {}),
 		});
+	if (
+		context.finalizeInitialEditOnHostJoin &&
+		socket.state?.participant?.isHost &&
+		latestSnapshot(socket).snapshot.status === "editing"
+	) {
+		context.finalizeInitialEditOnHostJoin = false;
+		await send(server, socket, {
+			type: "intake",
+			id: "fixture-finalize-initial-edit",
+			action: "finalize",
+			expectedRevision: currentRevision(socket),
+		});
+	}
 	return socket;
 }
-async function room() {
+async function room(prepareForDraw = true) {
 	const context = new HarnessContext();
+	context.finalizeInitialEditOnHostJoin = prepareForDraw;
 	const server = createServer(context);
 	const digest = await crypto.subtle.digest(
 		"SHA-256",
@@ -472,9 +538,12 @@ describe("LunchRoomServer", () => {
 			id: "cannot-escalate-after-migration",
 		});
 		expect(hasError(resumed, "HOST_REQUIRED")).toBe(true);
+		await returnToWaiting(restored, host);
 		await send(restored, host, {
 			type: "start",
 			id: "after-nickname-migration",
+			expectedRevision: currentRevision(host),
+			confirmReset: true,
 		});
 		await context.drain();
 		expect(
@@ -504,7 +573,7 @@ describe("LunchRoomServer", () => {
 		for (const change of [
 			{ roomId: "invalid" },
 			{ hostTokenHash: "not-a-hash" },
-			{ candidateIds: [candidates[0].id] },
+			{ candidateIds: ["unknown-candidate"] },
 			{ candidateIds: [candidates[0].id, candidates[0].id] },
 			{ createdAt: Date.now() - lunchRoomLimits.ttlMs },
 		]) {
@@ -555,8 +624,10 @@ describe("LunchRoomServer", () => {
 			isHost: true,
 		});
 		await send(server, guest, {
-			type: "candidates",
-			ids: candidates.slice(0, 2).map((place) => place.id),
+			type: "room-edit",
+			id: "forged-candidates",
+			baseListVersion: latestSnapshot(host).snapshot.listVersion,
+			candidates: candidates.slice(0, 2),
 		});
 		expect(hasError(guest, "HOST_REQUIRED")).toBe(true);
 		expect(entropy).not.toHaveBeenCalled();
@@ -811,8 +882,10 @@ describe("LunchRoomServer", () => {
 		expect(hasError(second, "DRAW_BUSY")).toBe(true);
 		expect(systemEvents(first, "draw-started")).toHaveLength(1);
 		await send(server, first, {
-			type: "candidates",
-			ids: candidates.slice(0, 2).map((place) => place.id),
+			type: "room-edit",
+			id: "fetching-candidates",
+			baseListVersion: latestSnapshot(first).snapshot.listVersion,
+			candidates: candidates.slice(0, 2),
 		});
 		expect(hasError(first, "DRAW_BUSY")).toBe(true);
 		complete({ numbers: [2], source: "quantum" });
@@ -823,7 +896,7 @@ describe("LunchRoomServer", () => {
 		expect(systemEvents(second, "draw-started")).toHaveLength(1);
 	});
 
-	it("shares canonical timing and immutable candidates, then archives a completed result only when the next draw starts", async () => {
+	it("shares canonical timing and immutable candidates, then archives only on an explicit return to waiting", async () => {
 		const { server, context } = await room();
 		const host = await connect(server, context, "방장", hostToken);
 		await send(server, host, { type: "start", id: "first-draw" });
@@ -843,22 +916,40 @@ describe("LunchRoomServer", () => {
 		vi.advanceTimersByTime(1);
 		await server.onAlarm();
 		await server.onAlarm();
-		expect(latestSnapshot(host).snapshot.status).toBe("waiting");
+		expect(latestSnapshot(host).snapshot.status).toBe("result");
 		expect(latestSnapshot(host).snapshot.history).toEqual([]);
 		expect(systemEvents(host, "draw-finished")).toHaveLength(1);
 		expect(systemEvents(host, "draw-finished")[0].text).toContain(
 			candidates[1].name,
 		);
 		await send(server, host, {
-			type: "candidates",
-			ids: candidates.slice(0, 2).map((place) => place.id),
+			type: "room-edit",
+			id: "next-round-candidates",
+			baseListVersion: latestSnapshot(host).snapshot.listVersion,
+			candidates: candidates.slice(0, 2),
 		});
 		const snapshot = latestSnapshot(host).snapshot;
-		expect(snapshot.listVersion).toBe(2);
-		expect(snapshot.candidates).toHaveLength(2);
+		expect(hasError(host, "PHASE_CONFLICT")).toBe(true);
+		expect(snapshot.listVersion).toBe(1);
+		expect(snapshot.candidates).toHaveLength(3);
 		expect(snapshot.draw?.candidates).toEqual(candidates);
 		expect(snapshot.history).toEqual([]);
-		await send(server, host, { type: "start", id: "second-draw" });
+		await send(server, host, { type: "start", id: "result-cannot-start" });
+		expect(entropy).toHaveBeenCalledTimes(1);
+		expect(latestSnapshot(host).snapshot.draw).toEqual(draw);
+		await returnToWaiting(server, host);
+		expect(latestSnapshot(host).snapshot.status).toBe("waiting");
+		expect(latestSnapshot(host).snapshot.history).toEqual([draw]);
+		await editPreparedRoom(server, host, {
+			id: "prepared-next-round-candidates",
+			candidates: candidates.slice(0, 2),
+		});
+		await send(server, host, {
+			type: "start",
+			id: "second-draw",
+			expectedRevision: currentRevision(host),
+			confirmReset: true,
+		});
 		expect(latestSnapshot(host).snapshot.history).toEqual([draw]);
 		expect(latestSnapshot(host).snapshot.draw).toBeNull();
 		await context.drain();
@@ -904,9 +995,12 @@ describe("LunchRoomServer", () => {
 		await restored.onStart();
 		expect(latestSnapshot(host).snapshot.history).toEqual([]);
 		expect(latestSnapshot(host).snapshot.draw).toEqual(draw);
+		await returnToWaiting(restored, host);
 		await send(restored, host, {
 			type: "start",
 			id: "archive-captured-metadata",
+			expectedRevision: currentRevision(host),
+			confirmReset: true,
 		});
 		expect(latestSnapshot(host).snapshot.history[0]).toEqual(draw);
 		await context.drain();
@@ -1044,7 +1138,13 @@ describe("LunchRoomServer", () => {
 		expect(latestSnapshot(host).snapshot.history).toEqual([]);
 		expect(latestSnapshot(host).snapshot.draw?.id).toBe("draw-0");
 		for (let index = 1; index <= 20; index++) {
-			await send(restored, host, { type: "start", id: `draw-${index}` });
+			await returnToWaiting(restored, host);
+			await send(restored, host, {
+				type: "start",
+				id: `draw-${index}`,
+				expectedRevision: currentRevision(host),
+				confirmReset: true,
+			});
 			await context.drain();
 			vi.advanceTimersByTime(8700);
 			await restored.onAlarm();
@@ -1262,13 +1362,17 @@ describe("LunchRoomServer", () => {
 			{ type: "chat", id: "presence-chat", text: "점심 먹어요" },
 			{ type: "join", name: "새 방장" },
 			{
-				type: "candidates",
-				ids: candidates.slice(0, 2).map((place) => place.id),
+				type: "room-edit",
+				id: "presence-candidates",
+				baseListVersion: latestSnapshot(host).snapshot.listVersion,
+				candidates: candidates.slice(0, 2),
 			},
 			{ type: "start", id: "presence-draw" },
-		]) {
+		] as const) {
 			vi.advanceTimersByTime(1000);
-			await send(server, host, message);
+			if (message.type === "room-edit")
+				await editPreparedRoom(server, host, message);
+			else await send(server, host, message);
 			if (message.type === "start") await context.drain();
 			expect(member(host).lastActiveAt).toBe(Date.now());
 			expect(member(host).status).toBe("online");
@@ -1584,7 +1688,12 @@ describe("LunchRoomServer irreversible current-result votes", () => {
 		]);
 		const restored = createServer(context);
 		await restored.onStart();
-		await send(restored, host, { type: "start", id: "new-after-close" });
+		await send(restored, host, {
+			type: "start",
+			id: "new-after-close",
+			expectedRevision: currentRevision(host),
+			confirmReset: true,
+		});
 		await context.drain();
 		await send(restored, host, {
 			type: "next",
@@ -1713,7 +1822,7 @@ describe("LunchRoomServer irreversible current-result votes", () => {
 		expect(latestSnapshot(host).snapshot.draw?.votes).toMatchObject([
 			{ vote: "down", reactionMs: 0 },
 		]);
-		expect(latestSnapshot(host).snapshot.status).toBe("waiting");
+		expect(latestSnapshot(host).snapshot.status).toBe("result");
 	});
 
 	it("lets only the first opposite vote win across same-identity tabs, renaming and a persisted reconnect", async () => {
@@ -1791,7 +1900,7 @@ describe("LunchRoomServer irreversible current-result votes", () => {
 		expect(latestSnapshot(host).snapshot.draw?.votes).toEqual(firstVote);
 	});
 
-	it("keeps voting open without a timer until the next draw archives and freezes the complete result", async () => {
+	it("keeps voting open without a timer until explicit waiting return archives and freezes the complete result", async () => {
 		const { server, context, host, guest, draw } = await votingRoom();
 		vi.advanceTimersByTime(4 * 60 * 60 * 1000);
 		await send(server, guest, {
@@ -1804,7 +1913,13 @@ describe("LunchRoomServer irreversible current-result votes", () => {
 			{ reactionMs: 4 * 60 * 60 * 1000 },
 		]);
 		const frozen = structuredClone(latestSnapshot(host).snapshot.draw);
-		await send(server, host, { type: "start", id: "vote-draw-2" });
+		await returnToWaiting(server, host);
+		await send(server, host, {
+			type: "start",
+			id: "vote-draw-2",
+			expectedRevision: currentRevision(host),
+			confirmReset: true,
+		});
 		expect(latestSnapshot(host).snapshot.draw).toBeNull();
 		expect(latestSnapshot(host).snapshot.history).toEqual([frozen]);
 		await send(server, guest, {
@@ -1833,8 +1948,8 @@ describe("LunchRoomServer irreversible current-result votes", () => {
 
 	it.each([
 		"vote-first",
-		"start-first",
-	])("serializes a next-draw race so archived votes never change: %s", async (order) => {
+		"close-first",
+	])("serializes a return-to-waiting race so archived votes never change: %s", async (order) => {
 		const { server, context, host, guest, draw } = await votingRoom();
 		const vote = () =>
 			send(server, guest, {
@@ -1843,16 +1958,20 @@ describe("LunchRoomServer irreversible current-result votes", () => {
 				drawId: draw.id,
 				vote: "up",
 			});
-		const start = () =>
-			send(server, host, { type: "start", id: "racing-next-draw" });
+		const close = () =>
+			send(server, host, {
+				type: "next",
+				id: "racing-close-result",
+				drawId: draw.id,
+			});
 		await Promise.all(
-			order === "vote-first" ? [vote(), start()] : [start(), vote()],
+			order === "vote-first" ? [vote(), close()] : [close(), vote()],
 		);
 		await context.drain();
 		const archived = latestSnapshot(host).snapshot.history[0];
 		expect(archived.id).toBe(draw.id);
 		expect(archived.votes?.length ?? 0).toBe(order === "vote-first" ? 1 : 0);
-		if (order === "start-first")
+		if (order === "close-first")
 			expect(voteErrors(guest, "racing-choice")).toMatchObject([
 				{ code: "VOTE_CLOSED" },
 			]);
@@ -1875,8 +1994,14 @@ describe("LunchRoomServer irreversible current-result votes", () => {
 			vote: "up",
 		});
 		const frozen = structuredClone(latestSnapshot(host).snapshot.draw);
+		await returnToWaiting(server, host);
 		entropy.mockRejectedValueOnce(new Error("test entropy failure"));
-		await send(server, host, { type: "start", id: "failed-next-draw" });
+		await send(server, host, {
+			type: "start",
+			id: "failed-next-draw",
+			expectedRevision: currentRevision(host),
+			confirmReset: true,
+		});
 		await context.drain();
 		expect(latestSnapshot(host).snapshot).toMatchObject({
 			status: "waiting",
@@ -1892,7 +2017,12 @@ describe("LunchRoomServer irreversible current-result votes", () => {
 		expect(voteErrors(guest, "after-failure-choice")).toMatchObject([
 			{ code: "VOTE_CLOSED" },
 		]);
-		await send(server, host, { type: "start", id: "fresh-next-draw" });
+		await send(server, host, {
+			type: "start",
+			id: "fresh-next-draw",
+			expectedRevision: currentRevision(host),
+			confirmReset: true,
+		});
 		await context.drain();
 		expect(latestSnapshot(host).snapshot.history).toEqual([frozen]);
 	});
@@ -1943,7 +2073,13 @@ describe("LunchRoomServer irreversible current-result votes", () => {
 			{ code: "VOTE_CLOSED" },
 		]);
 		expect(latestSnapshot(host).snapshot.history).toEqual([draw]);
-		await send(restored, host, { type: "start", id: "after-legacy-history" });
+		await returnToWaiting(restored, host);
+		await send(restored, host, {
+			type: "start",
+			id: "after-legacy-history",
+			expectedRevision: currentRevision(host),
+			confirmReset: true,
+		});
 		await context.drain();
 		expect(latestSnapshot(host).snapshot.history).toEqual([draw]);
 	});
@@ -2155,6 +2291,11 @@ describe("LunchRoomServer nickname availability", () => {
 	});
 });
 
+function withoutPresence(snapshot: RoomSnapshot): RoomSnapshot {
+	const copy = structuredClone(snapshot);
+	delete copy.members;
+	return copy;
+}
 describe("LunchRoomServer internal nickname HTTP", () => {
 	const request = (body: unknown, init: RequestInit = {}) =>
 		new Request(
@@ -2289,11 +2430,14 @@ describe("LunchRoomServer alarm write coalescing", () => {
 		const setAlarm = vi
 			.spyOn(context.storage, "setAlarm")
 			.mockRejectedValueOnce(new Error("temporary alarm failure"));
-		await expect(send(server, host, { type: "activity" })).rejects.toThrow(
-			"temporary alarm failure",
-		);
-		await send(server, host, { type: "activity" });
+		await expect(
+			send(server, host, { type: "activity" }),
+		).resolves.toBeUndefined();
+		await context.drain();
 		expect(setAlarm).toHaveBeenCalledTimes(2);
+		expect(context.storage.alarm).toBe(Date.now() + 1000);
+		await send(server, host, { type: "activity" });
+		expect(setAlarm).toHaveBeenCalledTimes(3);
 		expect(context.storage.alarm).toBe(
 			Date.now() + lunchRoomLimits.awayAfterMs,
 		);
@@ -2315,10 +2459,1653 @@ describe("LunchRoomServer alarm write coalescing", () => {
 function storedSnapshot(context: HarnessContext) {
 	return (
 		context.storage.values.get("lunch-room:v1") as {
-			snapshot: { status: string; expiresAt: number };
+			snapshot: RoomSnapshot;
 		}
 	).snapshot;
 }
 function latestExpiry(context: HarnessContext) {
 	return storedSnapshot(context).expiresAt;
 }
+
+describe("empty setup and independent game filter service", () => {
+	const enterPreparation = async (
+		server: LunchRoomServer,
+		host: TestSocket,
+	) => {
+		await send(server, host, {
+			type: "intake",
+			id: crypto.randomUUID(),
+			action: "edit",
+			expectedRevision: currentRevision(host),
+		});
+		expect(latestSnapshot(host).snapshot.status).toBe("editing");
+	};
+	const filter = async (
+		server: LunchRoomServer,
+		host: TestSocket,
+		id: string,
+		value: NonNullable<RoomSnapshot["gameFilter"]>,
+	) => {
+		await send(server, host, {
+			type: "game-filter",
+			id,
+			expectedRevision: currentRevision(host),
+			filter: value,
+		});
+	};
+
+	it("creates empty rooms, keeps empty preparation editable and captures custom classifications in a one-candidate draw", async () => {
+		const { input } = await room(false);
+		for (const selection of [undefined, []]) {
+			const context = new HarnessContext();
+			context.finalizeInitialEditOnHostJoin = false;
+			const server = createServer(context);
+			await server.initialize({ ...input, candidateIds: selection });
+			const host = await connect(server, context, "방장", hostToken);
+			expect(latestSnapshot(host).snapshot).toMatchObject({
+				status: "editing",
+				candidates: [],
+				gameFilter: { categories: null, excludedIds: [] },
+			});
+			await send(server, host, {
+				type: "intake",
+				id: "empty-finalize",
+				action: "finalize",
+				expectedRevision: currentRevision(host),
+			});
+			expect(hasError(host, "NO_CANDIDATES")).toBe(true);
+			expect(storedSnapshot(context).status).toBe("editing");
+			await send(server, host, {
+				type: "room-edit",
+				id: "add-custom",
+				baseListVersion: 1,
+				candidates: [
+					{ id: "my-menu", name: "우리 메뉴", category: "  팀 메뉴  " },
+				],
+			});
+			await send(server, host, {
+				type: "intake",
+				id: "custom-finalize",
+				action: "finalize",
+				expectedRevision: currentRevision(host),
+			});
+			entropy.mockResolvedValue({ numbers: [0], source: "csprng" });
+			await send(server, host, {
+				type: "start",
+				id: "custom-draw",
+				expectedRevision: currentRevision(host),
+			});
+			await context.drain();
+			expect(latestSnapshot(host).snapshot.draw?.candidates).toMatchObject([
+				{ id: "my-menu", name: "우리 메뉴", category: "팀 메뉴" },
+			]);
+			expect(latestSnapshot(host).snapshot.draw?.gameFilter).toEqual({
+				categories: null,
+				excludedIds: [],
+			});
+		}
+	});
+
+	it("rejects waiting filter changes and applies revisioned host-only preparation filters without changing the source list across replay, failure, wake and join", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const guest = await connect(server, context, "참가자");
+		const waiting = structuredClone(latestSnapshot(host).snapshot);
+		await filter(server, host, "waiting-filter-denied", {
+			categories: [],
+			excludedIds: [],
+		});
+		expect(hasError(host, "PHASE_CONFLICT")).toBe(true);
+		expect(storedSnapshot(context).gameFilter).toEqual(waiting.gameFilter);
+		expect(storedSnapshot(context).revision).toBe(waiting.revision);
+		await enterPreparation(server, host);
+		const before = structuredClone(latestSnapshot(host).snapshot);
+		const command = {
+			type: "game-filter",
+			id: "filter-update",
+			expectedRevision: currentRevision(host),
+			filter: { categories: ["편의점"], excludedIds: [candidates[1].id] },
+		};
+		await send(server, guest, command);
+		expect(hasError(guest, "HOST_REQUIRED")).toBe(true);
+		await send(server, host, command);
+		const after = structuredClone(latestSnapshot(host).snapshot);
+		expect(after.status).toBe("editing");
+		expect(after.candidates).toEqual(before.candidates);
+		expect(after.listVersion).toBe(before.listVersion);
+		expect(after.revision).toBe((before.revision ?? before.listVersion) + 1);
+		expect(after.excludedIds).toEqual(before.excludedIds);
+		expect(getEligibleRoomCandidates(after).map((item) => item.id)).toEqual([
+			candidates[0].id,
+		]);
+		await send(server, host, command);
+		expect(latestSnapshot(host).snapshot.revision).toBe(after.revision);
+		await send(server, host, { ...command, id: "stale-filter" });
+		expect(hasError(host, "REVISION_CONFLICT")).toBe(true);
+		await filter(server, host, "unknown-filter-id", {
+			categories: null,
+			excludedIds: ["missing-id"],
+		});
+		expect(hasError(host, "FILTER_CANDIDATES_CHANGED")).toBe(true);
+		vi.spyOn(context.storage, "put").mockRejectedValueOnce(
+			new Error("unavailable"),
+		);
+		await filter(server, host, "failed-filter", {
+			categories: null,
+			excludedIds: [],
+		});
+		expect(hasError(host, "SAVE_FAILED")).toBe(true);
+		expect(latestSnapshot(host).snapshot.gameFilter).toEqual(after.gameFilter);
+		expect(storedSnapshot(context).gameFilter).toEqual(after.gameFilter);
+		const resumed = createServer(context);
+		await resumed.onStart();
+		expect(latestSnapshot(host).snapshot.gameFilter).toEqual(after.gameFilter);
+		const joined = await connect(resumed, context, "새참가자");
+		expect(latestSnapshot(joined).snapshot.gameFilter).toEqual(
+			after.gameFilter,
+		);
+		expect(latestSnapshot(joined).snapshot.candidates).toEqual(
+			after.candidates,
+		);
+	});
+
+	it("allows zero-result filters with direct reset recovery and preserves the draw's filter copy", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		await enterPreparation(server, host);
+		await filter(server, host, "zero-filter", {
+			categories: [],
+			excludedIds: [],
+		});
+		await send(server, host, {
+			type: "intake",
+			action: "finalize",
+			id: "empty-filter-finalize",
+			expectedRevision: currentRevision(host),
+		});
+		expect(hasError(host, "NO_CANDIDATES")).toBe(true);
+		expect(entropy).not.toHaveBeenCalled();
+		await filter(server, host, "restore-filter", {
+			categories: null,
+			excludedIds: [candidates[0].id],
+		});
+		await send(server, host, {
+			type: "intake",
+			action: "finalize",
+			id: "filtered-finalize",
+			expectedRevision: currentRevision(host),
+		});
+		entropy.mockResolvedValue({ numbers: [0], source: "quantum" });
+		await send(server, host, {
+			type: "start",
+			id: "filtered-draw",
+			expectedRevision: currentRevision(host),
+		});
+		await filter(server, host, "fetching-filter", {
+			categories: null,
+			excludedIds: [],
+		});
+		expect(hasError(host, "DRAW_BUSY")).toBe(true);
+		await context.drain();
+		const draw = structuredClone(latestSnapshot(host).snapshot.draw);
+		expect(draw?.candidates.map((item) => item.id)).toEqual([
+			candidates[1].id,
+			candidates[2].id,
+		]);
+		expect(draw?.gameFilter).toEqual({
+			categories: null,
+			excludedIds: [candidates[0].id],
+		});
+		await filter(server, host, "drawing-filter", {
+			categories: null,
+			excludedIds: [],
+		});
+		expect(hasError(host, "DRAW_BUSY")).toBe(true);
+		vi.setSystemTime((draw?.startedAt ?? 0) + lunchRoomLimits.drawDurationMs);
+		await server.onAlarm();
+		const resultFilter = structuredClone(
+			latestSnapshot(host).snapshot.gameFilter,
+		);
+		await filter(server, host, "result-filter-denied", {
+			categories: null,
+			excludedIds: [],
+		});
+		expect(hasError(host, "PHASE_CONFLICT")).toBe(true);
+		expect(latestSnapshot(host).snapshot.draw).toEqual(draw);
+		expect(latestSnapshot(host).snapshot.gameFilter).toEqual(resultFilter);
+		await returnToWaiting(server, host);
+		await filter(server, host, "next-waiting-filter-denied", {
+			categories: null,
+			excludedIds: [],
+		});
+		expect(latestSnapshot(host).snapshot.gameFilter).toEqual(resultFilter);
+		await enterPreparation(server, host);
+		await filter(server, host, "next-game-filter", {
+			categories: null,
+			excludedIds: [],
+		});
+		expect(
+			latestSnapshot(host).snapshot.history.find(
+				(item) => item.id === draw?.id,
+			),
+		).toEqual(draw);
+		expect(latestSnapshot(host).snapshot.gameFilter).toEqual({
+			categories: null,
+			excludedIds: [],
+		});
+	});
+
+	it("migrates legacy exclusions only through explicit filter writes and prunes deleted IDs", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		await editPreparedRoom(server, host, {
+			id: "legacy-edit",
+			candidates: candidates.map((item, index) => ({
+				...item,
+				included: index !== 0,
+			})),
+		});
+		expect(
+			getEligibleRoomCandidates(latestSnapshot(host).snapshot),
+		).toHaveLength(2);
+		await enterPreparation(server, host);
+		await filter(server, host, "keep-legacy-filter", {
+			categories: null,
+			excludedIds: [candidates[0].id, candidates[1].id],
+		});
+		expect(
+			getEligibleRoomCandidates(latestSnapshot(host).snapshot).map(
+				(item) => item.id,
+			),
+		).toEqual([candidates[2].id]);
+		await filter(server, host, "reset-legacy-filter", {
+			categories: null,
+			excludedIds: [],
+		});
+		expect(
+			getEligibleRoomCandidates(latestSnapshot(host).snapshot),
+		).toHaveLength(3);
+		await filter(server, host, "exclude-delete", {
+			categories: null,
+			excludedIds: [candidates[1].id],
+		});
+		await editPreparedRoom(server, host, {
+			id: "delete-filtered",
+			candidates: [latestSnapshot(host).snapshot.candidates[0]],
+		});
+		expect(storedSnapshot(context).gameFilter?.excludedIds).toEqual([]);
+		expect(
+			getEligibleRoomCandidates(latestSnapshot(host).snapshot),
+		).toHaveLength(1);
+	});
+
+	it("allows only the host to change filters in editing, collecting and reviewing", async () => {
+		const { server, context } = await room(false);
+		const host = await connect(server, context, "방장", hostToken);
+		const guest = await connect(server, context, "참가자");
+		for (const phase of ["editing", "collecting", "reviewing"]) {
+			if (phase !== "editing")
+				await send(server, host, {
+					type: "intake",
+					id: `filter-stage-${phase}`,
+					action: phase === "collecting" ? "open" : "close",
+					expectedRevision: currentRevision(host),
+				});
+			const before = structuredClone(latestSnapshot(host).snapshot);
+			await filter(server, host, `host-filter-${phase}`, {
+				categories: null,
+				excludedIds: [candidates[0].id],
+			});
+			expect(latestSnapshot(host).snapshot.status).toBe(phase);
+			expect(latestSnapshot(host).snapshot.listVersion).toBe(
+				before.listVersion,
+			);
+			expect(latestSnapshot(host).snapshot.candidates).toEqual(
+				before.candidates,
+			);
+			await send(server, guest, {
+				type: "game-filter",
+				id: `guest-filter-${phase}`,
+				expectedRevision: currentRevision(guest),
+				filter: { categories: null, excludedIds: [] },
+			});
+			expect(hasError(guest, "HOST_REQUIRED")).toBe(true);
+			expect(latestSnapshot(host).snapshot.gameFilter?.excludedIds).toEqual([
+				candidates[0].id,
+			]);
+		}
+	});
+});
+
+describe("LunchRoomServer game lifecycle", () => {
+	const revision = (socket: TestSocket) => {
+		const snapshot = latestSnapshot(socket).snapshot;
+		return snapshot.revision ?? snapshot.listVersion;
+	};
+	const requestErrors = (socket: TestSocket, requestId: string) =>
+		messages(socket).filter(
+			(message) => message.type === "error" && message.requestId === requestId,
+		);
+	const acknowledgements = (socket: TestSocket, requestId: string) =>
+		messages(socket).filter(
+			(message) => message.type === "ack" && message.requestId === requestId,
+		);
+	async function transition(
+		server: LunchRoomServer,
+		host: TestSocket,
+		action: "edit" | "open" | "close" | "finalize",
+		id: string,
+	) {
+		await send(server, host, {
+			type: "intake",
+			id,
+			action,
+			expectedRevision: revision(host),
+		});
+	}
+	async function replaceList(
+		server: LunchRoomServer,
+		host: TestSocket,
+		count: number,
+		id = "replace-list",
+	) {
+		await editPreparedRoom(server, host, {
+			id,
+			candidates: Array.from({ length: count }, (_, index) => ({
+				id: `choice-${index + 1}`,
+				name: `${index + 1}번`,
+				category: "확인 불가",
+				included: true,
+			})),
+		});
+		expect(requestErrors(host, id)).toEqual([]);
+	}
+	async function setExclusion(
+		server: LunchRoomServer,
+		host: TestSocket,
+		value: boolean,
+		id: string,
+	) {
+		await send(server, host, {
+			type: "options",
+			id,
+			expectedRevision: revision(host),
+			excludeDrawn: value,
+		});
+		expect(requestErrors(host, id)).toEqual([]);
+	}
+	async function drawResult(
+		server: LunchRoomServer,
+		context: HarnessContext,
+		host: TestSocket,
+		id: string,
+		confirmReset = false,
+	) {
+		await send(server, host, {
+			type: "start",
+			id,
+			expectedRevision: revision(host),
+			confirmReset,
+		});
+		await context.drain();
+		expect(latestSnapshot(host).snapshot.status).toBe("drawing");
+		vi.advanceTimersByTime(8700);
+		await server.onAlarm();
+		expect(latestSnapshot(host).snapshot.status).toBe("result");
+		const draw = latestSnapshot(host).snapshot.draw;
+		if (!draw) throw new Error("Expected draw result");
+		return structuredClone(draw);
+	}
+
+	it("creates a room in editing and reaches the first roulette only after the host finalizes", async () => {
+		const { server, context } = await room(false);
+		expect(storedSnapshot(context)).toMatchObject({
+			status: "editing",
+			intakeId: null,
+			draw: null,
+			history: [],
+		});
+		const host = await connect(server, context, "방장", hostToken);
+		const guest = await connect(server, context, "새 참가자");
+		const initial = structuredClone(latestSnapshot(host).snapshot);
+		expect(latestSnapshot(guest).snapshot.status).toBe("editing");
+		await send(server, host, {
+			type: "start",
+			id: "initial-edit-start",
+			expectedRevision: revision(host),
+		});
+		expect(requestErrors(host, "initial-edit-start")).toMatchObject([
+			{ code: "DRAW_BUSY" },
+		]);
+		await send(server, guest, {
+			type: "recommend",
+			id: "initial-edit-recommend",
+			name: "접수 전 후보",
+			intakeId: "not-opened",
+		});
+		expect(requestErrors(guest, "initial-edit-recommend")).toMatchObject([
+			{ code: "INTAKE_CLOSED" },
+		]);
+		await send(server, guest, {
+			type: "room-edit",
+			id: "initial-edit-guest",
+			baseListVersion: initial.listVersion,
+			title: "참가자 수정",
+		});
+		expect(requestErrors(guest, "initial-edit-guest")).toMatchObject([
+			{ code: "HOST_REQUIRED" },
+		]);
+		expect(latestSnapshot(host).snapshot).toEqual(initial);
+		await send(server, host, {
+			type: "room-edit",
+			id: "initial-edit-title",
+			baseListVersion: initial.listVersion,
+			title: "첫 게임 준비",
+		});
+		expect(acknowledgements(host, "initial-edit-title")).toHaveLength(1);
+		expect(latestSnapshot(host).snapshot).toMatchObject({
+			status: "editing",
+			title: "첫 게임 준비",
+			draw: null,
+		});
+		await transition(server, host, "finalize", "first-finalize");
+		expect(latestSnapshot(host).snapshot).toMatchObject({
+			status: "waiting",
+			intakeId: null,
+			draw: null,
+			history: [],
+		});
+		expect(latestSnapshot(guest).snapshot.status).toBe("waiting");
+		expect(entropy).not.toHaveBeenCalled();
+	});
+
+	it("requires editing for host candidate changes while preserving game-between option and reset shortcuts", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const guest = await connect(server, context, "참가자");
+		const waiting = structuredClone(latestSnapshot(host).snapshot);
+		await send(server, host, {
+			type: "room-edit",
+			id: "waiting-direct-edit",
+			baseListVersion: waiting.listVersion,
+			title: "대기 중 수정",
+			candidates: candidates.slice(0, 2),
+		});
+		expect(requestErrors(host, "waiting-direct-edit")).toMatchObject([
+			{ code: "PHASE_CONFLICT" },
+		]);
+		expect(latestSnapshot(host).snapshot).toEqual(waiting);
+		expect(storedSnapshot(context)).toMatchObject({
+			...waiting,
+			participants: [],
+		});
+		await setExclusion(server, host, true, "waiting-quick-option");
+		const draw = await drawResult(
+			server,
+			context,
+			host,
+			"editing-boundary-result",
+		);
+		const result = structuredClone(latestSnapshot(host).snapshot);
+		await send(server, host, {
+			type: "room-edit",
+			id: "result-direct-edit",
+			baseListVersion: result.listVersion,
+			candidates: candidates.slice(0, 2),
+		});
+		await transition(server, host, "edit", "result-edit-entry");
+		expect(requestErrors(host, "result-direct-edit")).toMatchObject([
+			{ code: "PHASE_CONFLICT" },
+		]);
+		expect(requestErrors(host, "result-edit-entry")).toMatchObject([
+			{ code: "PHASE_CONFLICT" },
+		]);
+		expect(latestSnapshot(host).snapshot).toEqual(result);
+		await setExclusion(server, host, false, "result-quick-option");
+		await send(server, host, {
+			type: "reset-exclusions",
+			id: "result-quick-reset",
+			expectedRevision: revision(host),
+		});
+		expect(acknowledgements(host, "result-quick-reset")).toHaveLength(1);
+		expect(latestSnapshot(host).snapshot).toMatchObject({
+			status: "result",
+			draw,
+			excludedIds: [],
+			history: [],
+		});
+		await returnToWaiting(server, host);
+		const beforeEntry = structuredClone(latestSnapshot(host).snapshot);
+		await send(server, guest, {
+			type: "intake",
+			id: "guest-edit-entry",
+			action: "edit",
+			expectedRevision: revision(guest),
+		});
+		expect(requestErrors(guest, "guest-edit-entry")).toMatchObject([
+			{ code: "HOST_REQUIRED" },
+		]);
+		await transition(server, host, "edit", "host-edit-entry");
+		expect(latestSnapshot(host).snapshot).toMatchObject({
+			status: "editing",
+			intakeId: null,
+			draw: null,
+			history: [draw],
+		});
+		expect(latestSnapshot(host).snapshot.candidates).toEqual(
+			beforeEntry.candidates,
+		);
+		expect(latestSnapshot(host).snapshot.excludedIds).toEqual(
+			beforeEntry.excludedIds,
+		);
+		await transition(server, host, "open", "editing-open-intake");
+		expect(latestSnapshot(host).snapshot.status).toBe("collecting");
+		expect(latestSnapshot(host).snapshot.intakeId).toEqual(expect.any(String));
+		expect(latestSnapshot(guest).snapshot.status).toBe("collecting");
+	});
+
+	it("changes room-title settings independently in waiting and result without modifying candidates, ledger, versions or history", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const guest = await connect(server, context, "참가자");
+		await setExclusion(server, host, true, "settings-no-repeat");
+		for (const status of ["waiting", "result"] as const) {
+			if (status === "result")
+				await drawResult(server, context, host, "settings-result");
+			const before = withoutPresence(latestSnapshot(host).snapshot);
+			const message = {
+				type: "room-edit",
+				id: `settings-title-${status}`,
+				baseListVersion: 999,
+				title: `별도 설정 ${status}`,
+			};
+			await send(server, host, message);
+			expect(acknowledgements(host, message.id)).toHaveLength(1);
+			expect(withoutPresence(latestSnapshot(host).snapshot)).toEqual({
+				...before,
+				title: message.title,
+			});
+			expect(storedSnapshot(context)).toMatchObject({
+				...before,
+				title: message.title,
+				participants: [],
+			});
+			await send(server, guest, {
+				...message,
+				id: `guest-settings-${status}`,
+				title: "권한 없는 변경",
+			});
+			expect(requestErrors(guest, `guest-settings-${status}`)).toMatchObject([
+				{ code: "HOST_REQUIRED" },
+			]);
+			expect(latestSnapshot(host).snapshot.title).toBe(message.title);
+			await send(server, host, {
+				...message,
+				id: `candidate-settings-${status}`,
+				candidates: [],
+				title: "후보 포함 우회",
+			});
+			expect(requestErrors(host, `candidate-settings-${status}`)).toMatchObject(
+				[{ code: "PHASE_CONFLICT" }],
+			);
+			expect(withoutPresence(latestSnapshot(host).snapshot)).toEqual({
+				...before,
+				title: message.title,
+			});
+		}
+	});
+	it("blocks independent title settings during entropy fetching and roulette drawing", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		let complete: (value: { numbers: number[]; source: "quantum" }) => void =
+			() => {};
+		entropy.mockReturnValueOnce(
+			new Promise((resolve) => {
+				complete = resolve;
+			}),
+		);
+		await send(server, host, { type: "start", id: "title-settings-draw" });
+		expect(latestSnapshot(host).snapshot.status).toBe("fetching");
+		for (const status of ["fetching", "drawing"] as const) {
+			if (status === "drawing") {
+				complete({ numbers: [1], source: "quantum" });
+				await context.drain();
+			}
+			const before = withoutPresence(latestSnapshot(host).snapshot);
+			await send(server, host, {
+				type: "room-edit",
+				id: `busy-title-${status}`,
+				baseListVersion: before.listVersion,
+				title: "진행 중 변경",
+			});
+			expect(requestErrors(host, `busy-title-${status}`)).toMatchObject([
+				{ code: "DRAW_BUSY" },
+			]);
+			expect(withoutPresence(latestSnapshot(host).snapshot)).toEqual(before);
+		}
+	});
+	it("acknowledges a retried editing command after finalization without reopening or applying it twice", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		await transition(server, host, "edit", "retry-edit-entry");
+		const original = latestSnapshot(host).snapshot;
+		const command = {
+			type: "room-edit",
+			id: "retry-edit-command",
+			baseListVersion: original.listVersion,
+			candidates: original.candidates.map((candidate, index) => ({
+				...candidate,
+				name: index === 0 ? "첫 후보 수정" : candidate.name,
+			})),
+		};
+		await send(server, host, command);
+		expect(acknowledgements(host, command.id)).toHaveLength(1);
+		await transition(server, host, "finalize", "retry-edit-finalize");
+		const finalized = structuredClone(latestSnapshot(host).snapshot);
+		await send(server, host, command);
+		expect(acknowledgements(host, command.id)).toHaveLength(2);
+		expect(requestErrors(host, command.id)).toEqual([]);
+		expect(latestSnapshot(host).snapshot).toEqual(finalized);
+		expect(storedSnapshot(context)).toMatchObject({
+			...finalized,
+			participants: [],
+		});
+		await send(server, host, { ...command, title: "동일 ID 다른 내용" });
+		expect(requestErrors(host, command.id)).toMatchObject([
+			{ code: "REQUEST_ID_REUSED" },
+		]);
+		expect(latestSnapshot(host).snapshot).toEqual(finalized);
+		expect(entropy).not.toHaveBeenCalled();
+	});
+
+	it("rejects stale or duplicate editing entry and restores editing after a server restart", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const oldRevision = revision(host);
+		await setExclusion(server, host, true, "edit-entry-new-condition");
+		await send(server, host, {
+			type: "intake",
+			id: "stale-edit-entry",
+			action: "edit",
+			expectedRevision: oldRevision,
+		});
+		expect(requestErrors(host, "stale-edit-entry")).toMatchObject([
+			{ code: "REVISION_CONFLICT" },
+		]);
+		expect(latestSnapshot(host).snapshot.status).toBe("waiting");
+		await transition(server, host, "edit", "editing-restore-entry");
+		const editing = structuredClone(latestSnapshot(host).snapshot);
+		await transition(server, host, "edit", "editing-duplicate-entry");
+		expect(requestErrors(host, "editing-duplicate-entry")).toMatchObject([
+			{ code: "PHASE_CONFLICT" },
+		]);
+		expect(latestSnapshot(host).snapshot).toEqual(editing);
+		await createServer(context).onStart();
+		expect(latestSnapshot(host).snapshot).toMatchObject({
+			status: "editing",
+			intakeId: null,
+			draw: null,
+		});
+		expect(storedSnapshot(context).status).toBe("editing");
+		expect(entropy).not.toHaveBeenCalled();
+	});
+
+	it("opens recommendations, closes on the same list, reopens with a fresh session and finalizes without drawing", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const guest = await connect(server, context, "추천손님");
+		await send(server, guest, {
+			type: "intake",
+			id: "guest-open",
+			action: "open",
+			expectedRevision: revision(guest),
+		});
+		expect(requestErrors(guest, "guest-open")).toMatchObject([
+			{ code: "HOST_REQUIRED" },
+		]);
+		await transition(server, host, "open", "open-intake");
+		const firstIntake = latestSnapshot(guest).snapshot.intakeId;
+		expect(firstIntake).toBeTruthy();
+		expect(latestSnapshot(host).snapshot.status).toBe("collecting");
+		const recommend = {
+			type: "recommend",
+			id: "guest-udon",
+			intakeId: firstIntake,
+			name: "우동",
+			ownerId: "forged",
+			ownerName: "위조",
+		};
+		await send(server, guest, recommend);
+		const own = latestSnapshot(host).snapshot.candidates.find(
+			(candidate) => candidate.name === "우동",
+		);
+		expect(own).toMatchObject({
+			ownerId: latestSnapshot(guest).self?.id,
+			ownerName: "추천손님",
+			included: true,
+		});
+		await send(server, guest, recommend);
+		expect(
+			latestSnapshot(host).snapshot.candidates.filter(
+				(candidate) => candidate.name === "우동",
+			),
+		).toHaveLength(1);
+		expect(acknowledgements(guest, "guest-udon")).toHaveLength(2);
+		await send(server, guest, { ...recommend, name: "다른 후보" });
+		expect(requestErrors(guest, "guest-udon")).toMatchObject([
+			{ code: "REQUEST_ID_REUSED" },
+		]);
+		await send(server, guest, {
+			type: "remove-candidate",
+			id: "remove-someone-else",
+			candidateId: candidates[0].id,
+			intakeId: firstIntake,
+		});
+		expect(requestErrors(guest, "remove-someone-else")).toMatchObject([
+			{ code: "CANDIDATE_FORBIDDEN" },
+		]);
+		await send(server, host, {
+			type: "start",
+			id: "collecting-cannot-start",
+			expectedRevision: revision(host),
+		});
+		expect(requestErrors(host, "collecting-cannot-start")).toHaveLength(1);
+		await transition(server, host, "close", "close-intake");
+		const closed = latestSnapshot(host).snapshot;
+		expect(closed.status).toBe("reviewing");
+		expect(closed.candidates).toHaveLength(4);
+		await send(server, guest, {
+			type: "remove-candidate",
+			id: "closed-own-delete",
+			candidateId: own?.id,
+			intakeId: firstIntake,
+		});
+		await send(server, guest, {
+			type: "recommend",
+			id: "closed-new",
+			name: "라면",
+			intakeId: firstIntake,
+		});
+		expect(requestErrors(guest, "closed-own-delete")).toMatchObject([
+			{ code: "INTAKE_CLOSED" },
+		]);
+		expect(requestErrors(guest, "closed-new")).toMatchObject([
+			{ code: "INTAKE_CLOSED" },
+		]);
+		await transition(server, host, "open", "reopen-intake");
+		const secondIntake = latestSnapshot(guest).snapshot.intakeId;
+		expect(secondIntake).not.toBe(firstIntake);
+		await send(server, guest, {
+			type: "recommend",
+			id: "late-old-session",
+			name: "라면",
+			intakeId: firstIntake,
+		});
+		expect(requestErrors(guest, "late-old-session")).toMatchObject([
+			{ code: "INTAKE_CLOSED" },
+		]);
+		await send(server, guest, {
+			type: "remove-candidate",
+			id: "delete-own",
+			candidateId: own?.id,
+			intakeId: secondIntake,
+		});
+		expect(latestSnapshot(host).snapshot.candidates).toHaveLength(3);
+		await transition(server, host, "finalize", "finalize-directly");
+		expect(latestSnapshot(guest).snapshot).toMatchObject({
+			status: "waiting",
+			intakeId: null,
+			draw: null,
+			history: [],
+		});
+		expect(entropy).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		"recommend-first",
+		"finalize-first",
+	] as const)("serializes recommendation and finalization without losing a submitted candidate: %s", async (order) => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const guest = await connect(server, context, "추천손님");
+		await transition(server, host, "open", "race-open");
+		const initial = latestSnapshot(host).snapshot;
+		const recommend = () =>
+			send(server, guest, {
+				type: "recommend",
+				id: "race-recommend",
+				name: "우동",
+				intakeId: initial.intakeId,
+			});
+		const finalize = () =>
+			send(server, host, {
+				type: "intake",
+				id: "race-finalize",
+				action: "finalize",
+				expectedRevision: initial.revision,
+			});
+		await Promise.all(
+			order === "recommend-first"
+				? [recommend(), finalize()]
+				: [finalize(), recommend()],
+		);
+		if (order === "recommend-first") {
+			expect(latestSnapshot(host).snapshot.status).toBe("collecting");
+			expect(
+				latestSnapshot(host).snapshot.candidates.some(
+					(candidate) => candidate.name === "우동",
+				),
+			).toBe(true);
+			expect(requestErrors(host, "race-finalize")).toMatchObject([
+				{ code: "REVISION_CONFLICT" },
+			]);
+			await transition(server, host, "finalize", "race-finalize-current");
+		} else {
+			expect(
+				latestSnapshot(host).snapshot.candidates.some(
+					(candidate) => candidate.name === "우동",
+				),
+			).toBe(false);
+			expect(requestErrors(guest, "race-recommend")).toMatchObject([
+				{ code: "INTAKE_CLOSED" },
+			]);
+		}
+		expect(latestSnapshot(host).snapshot.status).toBe("waiting");
+		expect(entropy).not.toHaveBeenCalled();
+	});
+
+	it("preserves new recommendations during a title-only edit and rejects a stale replacement atomically", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const guest = await connect(server, context, "추천손님");
+		await transition(server, host, "open", "draft-open");
+		const baseline = structuredClone(latestSnapshot(host).snapshot);
+		await send(server, guest, {
+			type: "recommend",
+			id: "draft-new-candidate",
+			name: "우동",
+			intakeId: baseline.intakeId,
+		});
+		await send(server, host, {
+			type: "room-edit",
+			id: "title-only",
+			baseListVersion: baseline.listVersion,
+			title: "새 방 제목",
+		});
+		const current = latestSnapshot(host).snapshot;
+		expect(current.title).toBe("새 방 제목");
+		expect(current.candidates).toHaveLength(4);
+		await send(server, host, {
+			type: "room-edit",
+			id: "stale-list",
+			baseListVersion: baseline.listVersion,
+			title: "덮어쓸 제목",
+			candidates: baseline.candidates,
+		});
+		expect(requestErrors(host, "stale-list")).toMatchObject([
+			{ code: "LIST_CONFLICT" },
+		]);
+		expect(latestSnapshot(host).snapshot.title).toBe("새 방 제목");
+		expect(latestSnapshot(host).snapshot.candidates).toEqual(
+			current.candidates,
+		);
+		await send(server, host, {
+			type: "room-edit",
+			id: "same-id-rename",
+			baseListVersion: current.listVersion,
+			candidates: current.candidates.map((candidate) => ({
+				...candidate,
+				name: candidate.name === "우동" ? "우동 이름 수정" : candidate.name,
+				ownerId: "forged-owner",
+			})),
+		});
+		const renamed = latestSnapshot(host).snapshot.candidates.find(
+			(candidate) => candidate.name === "우동 이름 수정",
+		);
+		expect(renamed).toMatchObject({
+			id: current.candidates[3].id,
+			ownerId: latestSnapshot(guest).self?.id,
+		});
+	});
+
+	it("accumulates ON winners, replaces them after a confirmed OFF success, and never publishes the new winner in the drawing ledger", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const guest = await connect(server, context, "손님");
+		await replaceList(server, host, 10);
+		await setExclusion(server, host, true, "on-initial");
+		entropy.mockResolvedValue({ numbers: [0], source: "quantum" });
+		for (let round = 1; round <= 3; round++) {
+			const previous = Array.from(
+				{ length: round - 1 },
+				(_, index) => `choice-${index + 1}`,
+			);
+			await send(server, host, {
+				type: "start",
+				id: `on-${round}`,
+				expectedRevision: revision(host),
+			});
+			await context.drain();
+			expect(latestSnapshot(host).snapshot.excludedIds).toEqual(previous);
+			expect(latestSnapshot(guest).snapshot.excludedIds).toEqual(previous);
+			expect(storedSnapshot(context).excludedIds).toEqual([
+				...previous,
+				`choice-${round}`,
+			]);
+			vi.advanceTimersByTime(8700);
+			await server.onAlarm();
+			expect(latestSnapshot(host).snapshot.excludedIds).toEqual([
+				...previous,
+				`choice-${round}`,
+			]);
+			await returnToWaiting(server, host);
+		}
+		await setExclusion(server, host, false, "off-between-games");
+		expect(latestSnapshot(host).snapshot.excludedIds).toEqual([
+			"choice-1",
+			"choice-2",
+			"choice-3",
+		]);
+		const callsBeforeConfirmation = entropy.mock.calls.length;
+		await send(server, host, {
+			type: "start",
+			id: "off-without-confirmation",
+			expectedRevision: revision(host),
+		});
+		expect(requestErrors(host, "off-without-confirmation")).toHaveLength(1);
+		expect(entropy.mock.calls.length).toBe(callsBeforeConfirmation);
+		expect(latestSnapshot(host).snapshot.status).toBe("waiting");
+		entropy.mockResolvedValueOnce({ numbers: [3], source: "quantum" });
+		await send(server, host, {
+			type: "start",
+			id: "off-four",
+			expectedRevision: revision(host),
+			confirmReset: true,
+		});
+		await context.drain();
+		expect(latestSnapshot(host).snapshot.excludedIds).toEqual([]);
+		expect(latestSnapshot(guest).snapshot.excludedIds).toEqual([]);
+		expect(storedSnapshot(context).excludedIds).toEqual(["choice-4"]);
+		vi.advanceTimersByTime(8700);
+		await server.onAlarm();
+		const draw = latestSnapshot(host).snapshot.draw;
+		expect(draw).toMatchObject({
+			excludeDrawn: false,
+			excludedIdsBefore: ["choice-1", "choice-2", "choice-3"],
+		});
+		await setExclusion(server, host, true, "on-after-four");
+		expect(latestSnapshot(host).snapshot).toMatchObject({
+			status: "result",
+			draw,
+			excludedIds: ["choice-4"],
+		});
+		await returnToWaiting(server, host);
+		await send(server, host, {
+			type: "next",
+			id: "next-off-four",
+			drawId: "off-four",
+		});
+		expect(latestSnapshot(host).snapshot.excludedIds).toEqual(["choice-4"]);
+		expect(
+			latestSnapshot(host).snapshot.history.filter(
+				(entry) => entry.id === "off-four",
+			),
+		).toHaveLength(1);
+	});
+
+	it("keeps manual exclusions and an existing result while resetting the automatic ledger, and does not reinsert on next", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		await editPreparedRoom(server, host, {
+			id: "manual-setup",
+			candidates: candidates.map((candidate, index) => ({
+				...candidate,
+				included: index !== 0,
+			})),
+		});
+		entropy.mockResolvedValueOnce({ numbers: [0], source: "quantum" });
+		const draw = await drawResult(server, context, host, "reset-result");
+		await setExclusion(server, host, true, "reset-result-on");
+		const resetCommand = {
+			type: "reset-exclusions",
+			id: "manual-reset",
+			expectedRevision: revision(host),
+		};
+		await send(server, host, resetCommand);
+		const reset = latestSnapshot(host).snapshot;
+		expect(reset).toMatchObject({
+			status: "result",
+			draw,
+			excludedIds: [],
+			history: [],
+		});
+		expect(
+			reset.candidates.find((candidate) => candidate.id === candidates[0].id)
+				?.included,
+		).toBe(false);
+		await send(server, host, resetCommand);
+		expect(acknowledgements(host, "manual-reset")).toHaveLength(2);
+		expect(revision(host)).toBe(reset.revision);
+		expect(latestSnapshot(host).snapshot.excludedIds).toEqual([]);
+		await returnToWaiting(server, host);
+		expect(latestSnapshot(host).snapshot).toMatchObject({
+			status: "waiting",
+			draw: null,
+			excludedIds: [],
+			history: [draw],
+		});
+	});
+
+	it("rejects stale reset approval and preserves the prior ledger when an OFF entropy request fails", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		await drawResult(server, context, host, "before-failure");
+		await returnToWaiting(server, host);
+		const before = structuredClone(latestSnapshot(host).snapshot);
+		await setExclusion(server, host, true, "conditions-change-on");
+		await setExclusion(server, host, false, "conditions-change-off");
+		await send(server, host, {
+			type: "start",
+			id: "stale-confirmation",
+			expectedRevision: before.revision,
+			confirmReset: true,
+		});
+		expect(requestErrors(host, "stale-confirmation")).toMatchObject([
+			{ code: "REVISION_CONFLICT" },
+		]);
+		let rejectEntropy: (reason: unknown) => void = () => {};
+		entropy.mockReturnValueOnce(
+			new Promise((_, reject) => {
+				rejectEntropy = reject;
+			}),
+		);
+		await send(server, host, {
+			type: "start",
+			id: "off-entropy-failure",
+			expectedRevision: revision(host),
+			confirmReset: true,
+		});
+		expect(latestSnapshot(host).snapshot).toMatchObject({
+			status: "fetching",
+			excludedIds: before.excludedIds,
+			history: before.history,
+		});
+		await send(server, host, {
+			type: "reset-exclusions",
+			id: "reset-while-fetching",
+			expectedRevision: revision(host),
+		});
+		expect(requestErrors(host, "reset-while-fetching")).toMatchObject([
+			{ code: "DRAW_BUSY" },
+		]);
+		rejectEntropy(new Error("entropy unavailable"));
+		await context.drain();
+		expect(latestSnapshot(host).snapshot).toMatchObject({
+			status: "waiting",
+			draw: null,
+			excludedIds: before.excludedIds,
+			history: before.history,
+		});
+		expect(storedSnapshot(context).excludedIds).toEqual(before.excludedIds);
+		await createServer(context).onStart();
+		expect(latestSnapshot(host).snapshot.excludedIds).toEqual(
+			before.excludedIds,
+		);
+	});
+
+	it("rolls back a failed result save before exposing a new winner or replacing the exclusion ledger", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		await drawResult(server, context, host, "before-save-failure");
+		await returnToWaiting(server, host);
+		const before = structuredClone(latestSnapshot(host).snapshot);
+		const put = context.storage.put.bind(context.storage);
+		let failed = false;
+		vi.spyOn(context.storage, "put").mockImplementation(async (key, value) => {
+			const saved = value as { snapshot?: RoomSnapshot };
+			if (!failed && saved.snapshot?.status === "drawing") {
+				failed = true;
+				throw new Error("result storage unavailable");
+			}
+			return put(key, value);
+		});
+		await send(server, host, {
+			type: "start",
+			id: "off-save-failure",
+			expectedRevision: revision(host),
+			confirmReset: true,
+		});
+		await context.drain();
+		expect(failed).toBe(true);
+		expect(latestSnapshot(host).snapshot).toMatchObject({
+			status: "waiting",
+			draw: null,
+			excludedIds: before.excludedIds,
+			history: before.history,
+		});
+		expect(storedSnapshot(context)).toMatchObject({
+			status: "waiting",
+			draw: null,
+			excludedIds: before.excludedIds,
+		});
+		expect(
+			messages(host).some(
+				(message) =>
+					message.type === "snapshot" &&
+					message.snapshot.draw?.id === "off-save-failure",
+			),
+		).toBe(false);
+		await createServer(context).onStart();
+		expect(latestSnapshot(host).snapshot.excludedIds).toEqual(
+			before.excludedIds,
+		);
+	});
+
+	it("allows empty-list recovery and records one remaining candidate with probability one", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		await replaceList(server, host, 0, "empty-list");
+		await send(server, host, {
+			type: "start",
+			id: "empty-start",
+			expectedRevision: revision(host),
+		});
+		expect(latestSnapshot(host).snapshot.status).toBe("editing");
+		expect(requestErrors(host, "empty-start")).toMatchObject([
+			{ code: "DRAW_BUSY" },
+		]);
+		await transition(server, host, "finalize", "empty-edit-finish");
+		expect(requestErrors(host, "empty-edit-finish")).toMatchObject([
+			{ code: "NO_CANDIDATES" },
+		]);
+		await transition(server, host, "open", "empty-open");
+		await transition(server, host, "close", "empty-close");
+		await transition(server, host, "finalize", "empty-finalize");
+		expect(requestErrors(host, "empty-finalize")).toMatchObject([
+			{ code: "NO_CANDIDATES" },
+		]);
+		expect(latestSnapshot(host).snapshot.status).toBe("reviewing");
+		await replaceList(server, host, 1, "single-list");
+		await transition(server, host, "finalize", "single-finalize");
+		entropy.mockResolvedValueOnce({ numbers: [0], source: "csprng" });
+		const draw = await drawResult(server, context, host, "single-draw");
+		expect(draw).toMatchObject({
+			winnerIndex: 0,
+			probabilities: [1],
+			source: "csprng",
+			toRotation: 1620,
+		});
+		expect(entropy).toHaveBeenCalledExactlyOnceWith(0, 0, 1);
+	});
+
+	it("keeps the automatic ledger independent of twenty retained history entries and preserves it on wake", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		await replaceList(server, host, 25, "history-list");
+		await setExclusion(server, host, true, "history-exclusion-on");
+		entropy.mockResolvedValue({ numbers: [0], source: "quantum" });
+		for (let round = 1; round <= 22; round++) {
+			await drawResult(server, context, host, `history-round-${round}`);
+			await returnToWaiting(server, host);
+		}
+		const expected = Array.from(
+			{ length: 22 },
+			(_, index) => `choice-${index + 1}`,
+		);
+		expect(latestSnapshot(host).snapshot.history).toHaveLength(20);
+		expect(latestSnapshot(host).snapshot.history.at(-1)?.id).toBe(
+			"history-round-3",
+		);
+		expect(latestSnapshot(host).snapshot.excludedIds).toEqual(expected);
+		await createServer(context).onStart();
+		expect(latestSnapshot(host).snapshot.excludedIds).toEqual(expected);
+	});
+
+	it("retains a recommender's reconnect proof after roster eviction so their candidate remains removable", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const proof = "candidate-owner-reconnect-proof";
+		const owner = await connect(
+			server,
+			context,
+			"추천주인",
+			undefined,
+			undefined,
+			proof,
+		);
+		const ownerId = latestSnapshot(owner).self?.id;
+		await transition(server, host, "open", "owner-intake");
+		const intakeId = latestSnapshot(owner).snapshot.intakeId;
+		await send(server, owner, {
+			type: "recommend",
+			id: "owner-candidate",
+			name: "우동",
+			intakeId,
+		});
+		const candidate = latestSnapshot(host).snapshot.candidates.find(
+			(item) => item.ownerId === ownerId,
+		);
+		owner.closed = true;
+		await server.onClose(socketConnection(owner));
+		for (let index = 0; index < lunchRoomLimits.maxMembers; index++) {
+			vi.advanceTimersByTime(1);
+			const transient = await connect(server, context, `손님${index}`);
+			transient.closed = true;
+			await server.onClose(socketConnection(transient));
+		}
+		expect(
+			latestSnapshot(host).snapshot.members?.some(
+				(item) => item.id === ownerId,
+			),
+		).toBe(false);
+		const restored = createServer(context);
+		await restored.onStart();
+		const returned = await connect(
+			restored,
+			context,
+			"추천주인",
+			undefined,
+			undefined,
+			proof,
+		);
+		expect(latestSnapshot(returned).self?.id).toBe(ownerId);
+		await send(restored, returned, {
+			type: "remove-candidate",
+			id: "owner-remove-after-wake",
+			candidateId: candidate?.id,
+			intakeId,
+		});
+		expect(requestErrors(returned, "owner-remove-after-wake")).toEqual([]);
+		expect(
+			latestSnapshot(host).snapshot.candidates.some(
+				(item) => item.id === candidate?.id,
+			),
+		).toBe(false);
+	});
+
+	it("requires explicit waiting and editing before renaming an excluded candidate, then keeps only each latest OFF winner", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		await replaceList(server, host, 3, "rename-list");
+		await setExclusion(server, host, true, "rename-exclusion-on");
+		entropy.mockResolvedValueOnce({ numbers: [0], source: "quantum" });
+		const original = await drawResult(
+			server,
+			context,
+			host,
+			"rename-winning-draw",
+		);
+		const before = latestSnapshot(host).snapshot;
+		await send(server, host, {
+			type: "room-edit",
+			id: "rename-winner",
+			baseListVersion: before.listVersion,
+			candidates: before.candidates.map((candidate, index) => ({
+				...candidate,
+				name: index === 0 ? "1번 이름 수정" : candidate.name,
+				included: index !== 1,
+			})),
+		});
+		expect(requestErrors(host, "rename-winner")).toMatchObject([
+			{ code: "PHASE_CONFLICT" },
+		]);
+		expect(latestSnapshot(host).snapshot).toEqual(before);
+		await returnToWaiting(server, host);
+		await editPreparedRoom(server, host, {
+			id: "prepared-rename-winner",
+			candidates: before.candidates.map((candidate, index) => ({
+				...candidate,
+				name: index === 0 ? "1번 이름 수정" : candidate.name,
+				included: index !== 1,
+			})),
+		});
+		const edited = latestSnapshot(host).snapshot;
+		expect(edited).toMatchObject({
+			status: "waiting",
+			draw: null,
+			excludedIds: ["choice-1"],
+			history: [original],
+		});
+		expect(edited.candidates[0]).toMatchObject({
+			id: "choice-1",
+			name: "1번 이름 수정",
+		});
+		await setExclusion(server, host, false, "rename-exclusion-off");
+		entropy.mockResolvedValueOnce({ numbers: [1], source: "quantum" });
+		const offFirst = await drawResult(
+			server,
+			context,
+			host,
+			"off-first-latest",
+			true,
+		);
+		expect(offFirst.candidates.map((candidate) => candidate.id)).toEqual([
+			"choice-1",
+			"choice-3",
+		]);
+		expect(latestSnapshot(host).snapshot.excludedIds).toEqual(["choice-3"]);
+		await returnToWaiting(server, host);
+		entropy.mockResolvedValueOnce({ numbers: [0], source: "quantum" });
+		await drawResult(server, context, host, "off-second-latest", true);
+		expect(latestSnapshot(host).snapshot.excludedIds).toEqual(["choice-1"]);
+		expect(latestSnapshot(host).snapshot.candidates[1].included).toBe(false);
+		expect(
+			latestSnapshot(host).snapshot.history.find(
+				(draw) => draw.id === original.id,
+			)?.candidates[0].name,
+		).toBe("1번");
+	});
+
+	it("migrates an old waiting result without inventing an exclusion ledger or mutating the historical draw", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		await drawResult(server, context, host, "legacy-phase-draw");
+		const saved = structuredClone(
+			context.storage.values.get("lunch-room:v1"),
+		) as { snapshot: RoomSnapshot };
+		saved.snapshot.status = "waiting";
+		delete saved.snapshot.revision;
+		delete saved.snapshot.intakeId;
+		delete saved.snapshot.excludeDrawn;
+		delete saved.snapshot.excludedIds;
+		if (!saved.snapshot.draw) throw new Error("Expected old draw");
+		delete saved.snapshot.draw.excludeDrawn;
+		delete saved.snapshot.draw.excludedIdsBefore;
+		const oldDraw = structuredClone(saved.snapshot.draw);
+		context.storage.values.set("lunch-room:v1", saved);
+		const restored = createServer(context);
+		await restored.onStart();
+		expect(latestSnapshot(host).snapshot).toMatchObject({
+			status: "result",
+			excludeDrawn: false,
+			excludedIds: [],
+			intakeId: null,
+			draw: oldDraw,
+		});
+		expect(latestSnapshot(host).snapshot.draw).not.toHaveProperty(
+			"excludeDrawn",
+		);
+		await returnToWaiting(restored, host);
+		expect(latestSnapshot(host).snapshot).toMatchObject({
+			status: "waiting",
+			excludedIds: [],
+			history: [oldDraw],
+		});
+	});
+
+	it("restores an interrupted confirmed OFF fetch without consuming the previous ledger", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		await drawResult(server, context, host, "before-interrupted-off");
+		await returnToWaiting(server, host);
+		const before = structuredClone(latestSnapshot(host).snapshot);
+		entropy.mockReturnValueOnce(new Promise(() => {}));
+		await send(server, host, {
+			type: "start",
+			id: "interrupted-off",
+			expectedRevision: revision(host),
+			confirmReset: true,
+		});
+		const restored = createServer(context);
+		await restored.onStart();
+		expect(latestSnapshot(host).snapshot).toMatchObject({
+			status: "waiting",
+			draw: null,
+			excludedIds: before.excludedIds,
+			history: before.history,
+		});
+		await send(restored, host, {
+			type: "start",
+			id: "interrupted-off",
+			expectedRevision: revision(host),
+			confirmReset: true,
+		});
+		expect(entropy).toHaveBeenCalledTimes(2);
+		await send(restored, host, {
+			type: "start",
+			id: "fresh-after-interrupted-off",
+			expectedRevision: revision(host),
+			confirmReset: true,
+		});
+		await context.tasks.at(-1);
+		expect(latestSnapshot(host).snapshot.status).toBe("drawing");
+		expect(entropy).toHaveBeenCalledTimes(3);
+	});
+
+	it("rolls back a failed intake save and allows retrying the same command ID", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const command = {
+			type: "intake",
+			id: "retry-open-save",
+			action: "open",
+			expectedRevision: revision(host),
+		};
+		const before = structuredClone(latestSnapshot(host).snapshot);
+		vi.spyOn(context.storage, "put").mockRejectedValueOnce(
+			new Error("intake storage unavailable"),
+		);
+		await send(server, host, command);
+		expect(requestErrors(host, "retry-open-save")).toMatchObject([
+			{ code: "SAVE_FAILED" },
+		]);
+		expect(latestSnapshot(host).snapshot).toEqual(before);
+		expect(acknowledgements(host, "retry-open-save")).toEqual([]);
+		await send(server, host, command);
+		expect(latestSnapshot(host).snapshot.status).toBe("collecting");
+		expect(acknowledgements(host, "retry-open-save")).toHaveLength(1);
+	});
+
+	it("rejects recommendations at the supported candidate limit without changing the list or version", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const guest = await connect(server, context, "추천손님");
+		await replaceList(
+			server,
+			host,
+			lunchRoomLimits.maxCandidates,
+			"maximum-list",
+		);
+		await transition(server, host, "open", "maximum-open");
+		const before = structuredClone(latestSnapshot(host).snapshot);
+		await send(server, guest, {
+			type: "recommend",
+			id: "over-maximum",
+			intakeId: before.intakeId,
+			name: "추가 후보",
+		});
+		expect(requestErrors(guest, "over-maximum")).toMatchObject([
+			{ code: "CANDIDATE_LIMIT" },
+		]);
+		expect(latestSnapshot(host).snapshot.candidates).toEqual(before.candidates);
+		expect(latestSnapshot(host).snapshot.listVersion).toBe(before.listVersion);
+		expect(revision(host)).toBe(before.revision);
+	});
+
+	it("rejects unversioned legacy candidate replacement without losing a new recommendation or stored exclusions", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const guest = await connect(server, context, "추천손님");
+		await drawResult(server, context, host, "before-legacy-update");
+		await returnToWaiting(server, host);
+		await transition(server, host, "open", "legacy-intake");
+		await send(server, guest, {
+			type: "recommend",
+			id: "new-before-stale-tab",
+			name: "우동",
+			intakeId: latestSnapshot(host).snapshot.intakeId,
+		});
+		await transition(server, host, "finalize", "legacy-finalize");
+		const before = structuredClone(latestSnapshot(host).snapshot);
+		await send(server, host, {
+			type: "candidates",
+			ids: candidates.slice(0, 2).map((candidate) => candidate.id),
+		});
+		expect(hasError(host, "CLIENT_UPGRADE_REQUIRED")).toBe(true);
+		expect(storedSnapshot(context).candidates).toEqual(before.candidates);
+		expect(storedSnapshot(context).excludedIds).toEqual(before.excludedIds);
+		expect(storedSnapshot(context).listVersion).toBe(before.listVersion);
+	});
+
+	it.each([
+		"collecting",
+		"fetching",
+		"drawing",
+	] as const)("publishes a committed action and keeps entropy running when scheduling the %s alarm fails", async (phase) => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const guest = await connect(server, context, "손님");
+		// Force a changed deadline; unchanged alarms are intentionally coalesced.
+		vi.advanceTimersByTime(lunchRoomLimits.awayAfterMs + 1);
+		const setAlarm = context.storage.setAlarm.bind(context.storage);
+		let failed = false;
+		vi.spyOn(context.storage, "setAlarm").mockImplementation(
+			async (deadline) => {
+				if (!failed && storedSnapshot(context).status === phase) {
+					failed = true;
+					throw new Error("alarm temporarily unavailable");
+				}
+				return setAlarm(deadline);
+			},
+		);
+		if (phase === "collecting") {
+			await expect(
+				transition(server, host, "open", "alarm-open"),
+			).resolves.toBeUndefined();
+			expect(latestSnapshot(guest).snapshot.status).toBe("collecting");
+			expect(acknowledgements(host, "alarm-open")).toHaveLength(1);
+		} else {
+			await expect(
+				send(server, host, {
+					type: "start",
+					id: "alarm-draw",
+					expectedRevision: revision(host),
+				}),
+			).resolves.toBeUndefined();
+			await context.drain();
+			expect(entropy).toHaveBeenCalledExactlyOnceWith(0, 2, 1);
+			expect(latestSnapshot(guest).snapshot.status).toBe("drawing");
+			expect(latestSnapshot(guest).snapshot.draw?.id).toBe("alarm-draw");
+			expect(storedSnapshot(context).status).toBe("drawing");
+			expect(acknowledgements(host, "alarm-draw")).toHaveLength(1);
+		}
+		expect(failed).toBe(true);
+	});
+
+	it.each([
+		"same-isolate",
+		"restart",
+	] as const)("recovers after both the result commit and failure cleanup saves fail: %s", async (recovery) => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		await drawResult(server, context, host, "before-double-save-failure");
+		await returnToWaiting(server, host);
+		const before = structuredClone(latestSnapshot(host).snapshot);
+		const put = context.storage.put.bind(context.storage);
+		let failuresRemaining = 2;
+		vi.spyOn(context.storage, "put").mockImplementation(async (key, value) => {
+			const saved = value as { snapshot?: RoomSnapshot };
+			if (
+				failuresRemaining > 0 &&
+				["drawing", "waiting"].includes(saved.snapshot?.status ?? "")
+			) {
+				failuresRemaining--;
+				throw new Error("storage temporarily unavailable");
+			}
+			return put(key, value);
+		});
+		await send(server, host, {
+			type: "start",
+			id: "double-save-failure",
+			expectedRevision: revision(host),
+			confirmReset: true,
+		});
+		await context.drain();
+		expect(failuresRemaining).toBe(0);
+		expect(latestSnapshot(host).snapshot).toMatchObject({
+			status: "waiting",
+			draw: null,
+			excludedIds: before.excludedIds,
+			history: before.history,
+		});
+		expect(storedSnapshot(context)).toMatchObject({
+			status: "fetching",
+			draw: null,
+			excludedIds: before.excludedIds,
+		});
+		expect(
+			messages(host).some(
+				(message) =>
+					message.type === "snapshot" &&
+					message.snapshot.draw?.id === "double-save-failure",
+			),
+		).toBe(false);
+		const recovered = recovery === "restart" ? createServer(context) : server;
+		if (recovery === "restart") await recovered.onStart();
+		expect(latestSnapshot(host).snapshot.excludedIds).toEqual(
+			before.excludedIds,
+		);
+		entropy.mockResolvedValueOnce({ numbers: [0], source: "quantum" });
+		const fresh = await drawResult(
+			recovered,
+			context,
+			host,
+			"fresh-after-double-save",
+			true,
+		);
+		expect(fresh.id).toBe("fresh-after-double-save");
+		expect(latestSnapshot(host).snapshot.excludedIds).toEqual([
+			candidates[0].id,
+		]);
+		expect(storedSnapshot(context).excludedIds).toEqual([candidates[0].id]);
+	});
+
+	it("rolls back a failed result-feedback save and lets the same identified vote retry without changing the round", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const guest = await connect(
+			server,
+			context,
+			"투표손님",
+			undefined,
+			undefined,
+			"vote-save-reconnect-proof",
+		);
+		const draw = await drawResult(server, context, host, "vote-save-round");
+		const before = structuredClone(latestSnapshot(host).snapshot);
+		const vote = {
+			type: "vote",
+			id: "retry-failed-feedback",
+			drawId: draw.id,
+			vote: "up",
+		};
+		vi.spyOn(context.storage, "put").mockRejectedValueOnce(
+			new Error("feedback storage unavailable"),
+		);
+		await send(server, guest, vote);
+		expect(requestErrors(guest, "retry-failed-feedback")).toMatchObject([
+			{ code: "SAVE_FAILED" },
+		]);
+		expect(latestSnapshot(guest).snapshot.draw).toEqual(draw);
+		expect(latestSnapshot(host).snapshot.draw).toEqual(draw);
+		expect(storedSnapshot(context).draw).toEqual(draw);
+		await send(server, guest, vote);
+		const accepted = latestSnapshot(host).snapshot.draw;
+		expect(accepted?.votes).toMatchObject([
+			{
+				participantId: latestSnapshot(guest).self?.id,
+				name: "투표손님",
+				vote: "up",
+			},
+		]);
+		expect(accepted?.votes).toHaveLength(1);
+		expect({ ...accepted, votes: [] }).toEqual(draw);
+		expect(latestSnapshot(host).snapshot.candidates).toEqual(before.candidates);
+		expect(latestSnapshot(host).snapshot.excludedIds).toEqual(
+			before.excludedIds,
+		);
+		expect(latestSnapshot(host).snapshot.history).toEqual(before.history);
+		await createServer(context).onStart();
+		expect(latestSnapshot(host).snapshot.draw).toEqual(accepted);
+	});
+});

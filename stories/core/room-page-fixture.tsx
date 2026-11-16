@@ -10,9 +10,12 @@ import {
 import { getWheelRotation, sampleLunchPlaces } from "@/lib/lunch";
 import {
 	type ChatMessage,
+	getEligibleRoomCandidates,
 	isRoomDrawVoter,
 	lunchRoomLimits,
 	normalizeLunchRoomNickname,
+	normalizeRoomCategory,
+	parseRoomGameFilter,
 	type RoomDraw,
 	type RoomDrawVote,
 	type RoomParticipant,
@@ -39,7 +42,7 @@ const guests = previewGuests.slice(0, 12);
 const participants = [host, ...guests];
 
 type PreviewOptions = {
-	initialPhase: "idle" | "result";
+	initialPhase: "idle" | "editing" | "collecting" | "reviewing" | "result";
 	isHost: boolean;
 	candidateCount?: number;
 	voteDelayMs?: number;
@@ -54,6 +57,7 @@ type PreviewState = Pick<
 	| "startPending"
 	| "nextPending"
 	| "candidatesPending"
+	| "mutationPending"
 	| "votePendingDrawId"
 > & { snapshot: RoomSnapshot };
 
@@ -64,12 +68,23 @@ function initialState(
 	const now = Date.now();
 	const candidates = sampleLunchPlaces.slice(
 		0,
-		Math.max(2, Math.min(candidateCount, sampleLunchPlaces.length)),
+		Math.max(
+			initialPhase === "result" ? 1 : 0,
+			Math.min(candidateCount, sampleLunchPlaces.length),
+		),
 	);
 	function completedDraw(id: string, startedAt: number, votes: number) {
 		const draw = createPreviewDraw({ id, count: candidates.length });
 		const value: RoomDraw = {
 			...draw,
+			candidates: candidates.map((candidate) => ({ ...candidate })),
+			winnerIndex: Math.min(draw.winnerIndex, candidates.length - 1),
+			probabilities: candidates.map(() => 1 / candidates.length),
+			toRotation: getWheelRotation(
+				0,
+				Math.min(draw.winnerIndex, candidates.length - 1),
+				candidates.length,
+			),
 			timestamp: startedAt - 350,
 			requestedAt: startedAt - 350,
 			startedAt,
@@ -81,7 +96,9 @@ function initialState(
 		}));
 		return value;
 	}
-	const previous = completedDraw(`page-history-${sequence}`, now - 120000, 5);
+	const previous = candidates.length
+		? completedDraw(`page-history-${sequence}`, now - 120000, 5)
+		: null;
 	const current =
 		initialPhase === "result"
 			? completedDraw(`page-current-${sequence}`, now - 12000, 7)
@@ -124,6 +141,14 @@ function initialState(
 			createdAt: now - 180000,
 			expiresAt: now - 180000 + lunchRoomLimits.ttlMs,
 			listVersion: 1,
+			revision: 1,
+			intakeId:
+				initialPhase === "collecting" || initialPhase === "reviewing"
+					? `page-intake-${sequence}`
+					: null,
+			excludeDrawn: false,
+			gameFilter: { categories: null, excludedIds: [] },
+			excludedIds: current ? [current.candidates[current.winnerIndex].id] : [],
 			candidates,
 			participants,
 			members: participants.map((participant, index) => ({
@@ -134,8 +159,8 @@ function initialState(
 			})),
 			messages,
 			draw: current,
-			history: [previous],
-			status: "waiting",
+			history: initialPhase === "editing" || !previous ? [] : [previous],
+			status: initialPhase === "idle" ? "waiting" : initialPhase,
 		},
 		nickname: isHost ? host.name : guests[0].name,
 		connection: "connected",
@@ -143,6 +168,7 @@ function initialState(
 		startPending: false,
 		nextPending: false,
 		candidatesPending: false,
+		mutationPending: null,
 		votePendingDrawId: null,
 	};
 }
@@ -218,6 +244,83 @@ export function RoomPageFixtureProvider({
 	}
 	function drawFinished(draw: RoomDraw | null) {
 		return Boolean(draw && Date.now() >= draw.startedAt + draw.durationMs);
+	}
+	function mutable() {
+		const value = current.current;
+		return (
+			options.isHost &&
+			value.connection === "connected" &&
+			!value.startPending &&
+			!value.nextPending &&
+			!value.mutationPending &&
+			value.snapshot.status !== "fetching" &&
+			value.snapshot.status !== "drawing" &&
+			value.snapshot.status !== "closed"
+		);
+	}
+	function revisionMatches(expected?: number) {
+		return (
+			expected === undefined ||
+			expected === (current.current.snapshot.revision ?? 1)
+		);
+	}
+	function applySnapshot(
+		update: (snapshot: RoomSnapshot) => RoomSnapshot,
+		conditionChanged = true,
+	) {
+		commit((value) => ({
+			...value,
+			error: "",
+			snapshot: {
+				...update(value.snapshot),
+				revision: (value.snapshot.revision ?? 1) + Number(conditionChanged),
+			},
+		}));
+	}
+	async function intake(
+		action: "edit" | "open" | "close" | "finalize",
+		expected?: number,
+	) {
+		const snapshot = current.current.snapshot;
+		if (!mutable() || !revisionMatches(expected)) return false;
+		if (action === "edit") {
+			if (snapshot.status !== "waiting") return false;
+			applySnapshot((value) => ({
+				...value,
+				status: "editing",
+				intakeId: null,
+				draw: null,
+			}));
+		} else if (action === "open") {
+			if (
+				snapshot.status !== "waiting" &&
+				snapshot.status !== "reviewing" &&
+				snapshot.status !== "editing"
+			)
+				return false;
+			applySnapshot((value) => ({
+				...value,
+				status: "collecting",
+				intakeId: `page-intake-${++sequence.current}`,
+			}));
+		} else if (action === "close") {
+			if (snapshot.status !== "collecting") return false;
+			applySnapshot((value) => ({ ...value, status: "reviewing" }));
+		} else {
+			if (
+				(snapshot.status !== "collecting" &&
+					snapshot.status !== "reviewing" &&
+					snapshot.status !== "editing") ||
+				!getEligibleRoomCandidates(snapshot).length
+			)
+				return false;
+			applySnapshot((value) => ({
+				...value,
+				status: "waiting",
+				intakeId: null,
+			}));
+		}
+		return true;
 	}
 	function addVote(choice: VoteChoice) {
 		const value = current.current;
@@ -301,14 +404,152 @@ export function RoomPageFixtureProvider({
 			);
 			return true;
 		},
-		startDraw() {
-			const value = current.current;
+		enterEditing: (expectedRevision) => intake("edit", expectedRevision),
+		openIntake: (expectedRevision) => intake("open", expectedRevision),
+		closeIntake: (expectedRevision) => intake("close", expectedRevision),
+		finalizeIntake: (expectedRevision) => intake("finalize", expectedRevision),
+		async addCandidate(name, category) {
+			const snapshot = current.current.snapshot;
+			const trimmed = name.trim();
+			const normalizedCategory = normalizeRoomCategory(category ?? "");
 			if (
-				!options.isHost ||
-				value.startPending ||
-				value.nextPending ||
-				value.snapshot.candidates.length < 2 ||
-				(value.snapshot.draw && !drawFinished(value.snapshot.draw))
+				snapshot.status !== "collecting" ||
+				!snapshot.intakeId ||
+				!trimmed ||
+				!normalizedCategory ||
+				trimmed.length > 80 ||
+				snapshot.candidates.length >= lunchRoomLimits.maxCandidates
+			)
+				return false;
+			applySnapshot((value) => ({
+				...value,
+				listVersion: value.listVersion + 1,
+				candidates: [
+					...value.candidates,
+					{
+						id: `page-candidate-${++sequence.current}`,
+						name: trimmed,
+						category: normalizedCategory,
+						included: true,
+						ownerId: selfId,
+						ownerName: current.current.nickname,
+					},
+				],
+			}));
+			return true;
+		},
+		async removeCandidate(candidateId) {
+			const snapshot = current.current.snapshot;
+			const candidate = snapshot.candidates.find(
+				(item) => item.id === candidateId,
+			);
+			if (
+				snapshot.status !== "collecting" ||
+				!candidate ||
+				(!options.isHost && candidate.ownerId !== selfId)
+			)
+				return false;
+			applySnapshot((value) => ({
+				...value,
+				listVersion: value.listVersion + 1,
+				candidates: value.candidates.filter((item) => item.id !== candidateId),
+				excludedIds: value.excludedIds?.filter((id) => id !== candidateId),
+				gameFilter: value.gameFilter
+					? {
+							...value.gameFilter,
+							excludedIds: value.gameFilter.excludedIds.filter(
+								(id) => id !== candidateId,
+							),
+						}
+					: undefined,
+			}));
+			return true;
+		},
+		async editRoom({ baseVersion, title, candidates }) {
+			if (
+				!mutable() ||
+				(candidates !== undefined &&
+					!["editing", "collecting", "reviewing"].includes(
+						current.current.snapshot.status,
+					)) ||
+				(candidates && baseVersion !== current.current.snapshot.listVersion)
+			)
+				return false;
+			applySnapshot(
+				(value) => ({
+					...value,
+					...(title === undefined ? {} : { title }),
+					...(candidates === undefined
+						? {}
+						: {
+								candidates: candidates.map((candidate) => ({ ...candidate })),
+								listVersion: value.listVersion + 1,
+								excludedIds: value.excludedIds?.filter((id) =>
+									candidates.some((candidate) => candidate.id === id),
+								),
+								gameFilter: value.gameFilter
+									? {
+											...value.gameFilter,
+											excludedIds: value.gameFilter.excludedIds.filter((id) =>
+												candidates.some((candidate) => candidate.id === id),
+											),
+										}
+									: undefined,
+							}),
+				}),
+				candidates !== undefined,
+			);
+			return true;
+		},
+		async updateRoomOptions(excludeDrawn, expectedRevision) {
+			if (!mutable() || !revisionMatches(expectedRevision)) return false;
+			applySnapshot((value) => ({ ...value, excludeDrawn }));
+			return true;
+		},
+		async updateGameFilter(filter, expectedRevision) {
+			const parsed = parseRoomGameFilter(filter);
+			if (
+				!mutable() ||
+				!["editing", "collecting", "reviewing"].includes(
+					current.current.snapshot.status ?? "waiting",
+				) ||
+				!revisionMatches(expectedRevision) ||
+				!parsed ||
+				parsed.excludedIds.some(
+					(id) =>
+						!current.current.snapshot.candidates.some(
+							(candidate) => candidate.id === id,
+						),
+				)
+			)
+				return false;
+			applySnapshot((value) => ({
+				...value,
+				gameFilter: parsed,
+				candidates: value.candidates.map((candidate) => ({
+					...candidate,
+					included: true,
+				})),
+			}));
+			return true;
+		},
+		async resetExclusions(expectedRevision) {
+			if (!mutable() || !revisionMatches(expectedRevision)) return false;
+			applySnapshot((value) => ({ ...value, excludedIds: [] }));
+			return true;
+		},
+		startDraw({ confirmReset, expectedRevision } = {}) {
+			const value = current.current;
+			const eligible = getEligibleRoomCandidates(value.snapshot);
+			if (
+				!mutable() ||
+				!revisionMatches(expectedRevision) ||
+				value.snapshot.status !== "waiting" ||
+				value.snapshot.draw !== null ||
+				eligible.length === 0 ||
+				(!value.snapshot.excludeDrawn &&
+					Boolean(value.snapshot.excludedIds?.length) &&
+					!confirmReset)
 			)
 				return false;
 			const requestedAt = Date.now();
@@ -320,14 +561,14 @@ export function RoomPageFixtureProvider({
 						snapshot: { ...state.snapshot, status: "fetching", draw: null },
 					},
 					systemMessage(
-						`방장이 ${state.snapshot.candidates.length}곳 중 추첨을 시작했습니다.`,
+						`방장이 ${eligible.length}곳 중 추첨을 시작했습니다.`,
 						"draw-started",
 					),
 				),
 			);
 			later(() => {
 				const state = current.current;
-				const candidates = state.snapshot.candidates;
+				const candidates = eligible;
 				const winnerIndex = ++sequence.current % candidates.length;
 				const draw: RoomDraw = {
 					id: `page-draw-${sequence.current}`,
@@ -341,14 +582,35 @@ export function RoomPageFixtureProvider({
 					fromRotation: 0,
 					toRotation: getWheelRotation(0, winnerIndex, candidates.length),
 					listVersion: state.snapshot.listVersion,
+					gameFilter: state.snapshot.gameFilter
+						? {
+								categories:
+									state.snapshot.gameFilter.categories === null
+										? null
+										: [...state.snapshot.gameFilter.categories],
+								excludedIds: [...state.snapshot.gameFilter.excludedIds],
+							}
+						: undefined,
 					participants: state.snapshot.participants,
 					probabilities: candidates.map(() => 1 / candidates.length),
 					votes: [],
+					excludeDrawn: state.snapshot.excludeDrawn ?? false,
+					excludedIdsBefore: [...(state.snapshot.excludedIds ?? [])],
 				};
+				const winnerId = candidates[winnerIndex].id;
+				const excludedIds = draw.excludeDrawn
+					? [...new Set([...(state.snapshot.excludedIds ?? []), winnerId])]
+					: [winnerId];
 				commit((latest) => ({
 					...latest,
 					startPending: false,
-					snapshot: { ...latest.snapshot, status: "drawing", draw },
+					snapshot: {
+						...latest.snapshot,
+						status: "drawing",
+						draw,
+						excludedIds: draw.excludeDrawn ? draw.excludedIdsBefore : [],
+						revision: (latest.snapshot.revision ?? 1) + 1,
+					},
 				}));
 				later(() => {
 					if (current.current.snapshot.draw?.id !== draw.id) return;
@@ -356,7 +618,12 @@ export function RoomPageFixtureProvider({
 						appendMessage(
 							{
 								...latest,
-								snapshot: { ...latest.snapshot, status: "waiting" },
+								snapshot: {
+									...latest.snapshot,
+									status: "result",
+									excludedIds,
+									revision: (latest.snapshot.revision ?? 1) + 1,
+								},
 							},
 							systemMessage(
 								`추첨 결과: ${draw.candidates[draw.winnerIndex].name}`,
@@ -378,6 +645,7 @@ export function RoomPageFixtureProvider({
 					...value.snapshot,
 					draw: null,
 					status: "waiting",
+					revision: (value.snapshot.revision ?? 1) + 1,
 					history: value.snapshot.history.some((entry) => entry.id === drawId)
 						? value.snapshot.history
 						: [draw, ...value.snapshot.history].slice(
@@ -408,6 +676,7 @@ export function RoomPageFixtureProvider({
 					...state.snapshot,
 					candidates: selected,
 					listVersion: state.snapshot.listVersion + 1,
+					revision: (state.snapshot.revision ?? 1) + 1,
 				},
 			}));
 			return true;

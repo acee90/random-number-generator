@@ -14,53 +14,37 @@ import {
 	WifiOff,
 	X,
 } from "lucide-react";
-import {
-	useCallback,
-	useEffect,
-	useId,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import CopyFallback from "@/components/features/CopyFallback";
 import { LunchWheel } from "@/components/features/LunchWheel";
-import {
-	RoomEditableCandidateList,
-	RoomReadonlyCandidateList,
-	roomCandidateNumbers,
-} from "@/components/features/RoomCandidateList";
+import { roomCandidateNumbers } from "@/components/features/RoomCandidateList";
 import RoomDrawDialog, {
 	roomDrawCopyText,
 } from "@/components/features/RoomDrawDialog";
 import RoomDrawResult from "@/components/features/RoomDrawResult";
 import RoomEntryGate from "@/components/features/RoomEntryGate";
+import RoomLifecyclePanel from "@/components/features/RoomLifecyclePanel";
+import RoomSettingsDialog from "@/components/features/RoomSettingsDialog";
 import SiteHeader from "@/components/layout/SiteHeader";
 import { Button } from "@/components/ui/button";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { type LocalChatMessage, useLunchRoom } from "@/hooks/useLunchRoom";
 import { useRoomTimeline } from "@/hooks/useRoomTimeline";
 import {
-	type LunchCategory,
-	lunchCategories,
-	sampleLunchPlaces,
-} from "@/lib/lunch";
-import {
 	type ChatMessage,
+	getEligibleRoomCandidates,
+	getRoomPhase,
 	lunchRoomLimits,
 	type RoomDraw,
 } from "@/lib/lunchRoom";
-import {
-	clearRoomCandidates,
-	createRoomCandidateSelection,
-	getRoomCandidateIds,
-	type RoomCandidateSelection,
-	selectAllRoomCandidateCategories,
-	selectAllRoomCandidates,
-	setRoomCandidateIncluded,
-	toggleRoomCandidateCategory,
-} from "@/lib/roomCandidateSelection";
 import { getSourceDisplayName } from "@/services/randomService";
 import "./lunch-room.css";
 import "./lunch-room-mobile.css";
@@ -109,11 +93,6 @@ export default function LunchRoomPage({
 	);
 	const editingName = chatPopover === "profile";
 	const [connectionEvents, setConnectionEvents] = useState<ChatMessage[]>([]);
-	const [candidateSelection, setCandidateSelection] =
-		useState<RoomCandidateSelection>(clearRoomCandidates);
-	const [guestCategories, setGuestCategories] =
-		useState<readonly LunchCategory[]>(lunchCategories);
-	const [candidateError, setCandidateError] = useState("");
 	const [motionOff, setMotionOff] = useState(false);
 	const [reducedMotion, setReducedMotion] = useState(false);
 	const [unread, setUnread] = useState(0);
@@ -131,6 +110,8 @@ export default function LunchRoomPage({
 	const drawButtonRef = useRef<HTMLButtonElement>(null);
 	const resultTitleRef = useRef<HTMLHeadingElement>(null);
 	const historyTitleRef = useRef<HTMLHeadingElement>(null);
+	const historyTriggerRef = useRef<HTMLButtonElement>(null);
+	const historyRecordFocusRef = useRef<string | null>(null);
 	const terminalTitleRef = useRef<HTMLHeadingElement>(null);
 	const nicknameRef = useRef<HTMLInputElement>(null);
 	const nicknameButtonRef = useRef<HTMLButtonElement>(null);
@@ -157,15 +138,6 @@ export default function LunchRoomPage({
 	const copyReturnRef = useRef<HTMLButtonElement | null>(null);
 	const restoreCopyFocusRef = useRef(false);
 	const focusResultRef = useRef(false);
-	const expectedVersionRef = useRef<number | null>(null);
-	const submittedCandidateIdsRef = useRef<string | null>(null);
-	const candidateDraftIdsRef = useRef("");
-	const observedCandidatesRef = useRef<{
-		roomId: string;
-		version: number;
-		ids: string;
-	} | null>(null);
-	const candidateTitleRef = useRef<HTMLHeadingElement>(null);
 	const snapshot = room.snapshot;
 	const draw = snapshot?.draw ?? null;
 	const drawMatchesCandidates = draw?.listVersion === snapshot?.listVersion;
@@ -189,10 +161,12 @@ export default function LunchRoomPage({
 	const busy = fetching || spinning || room.nextPending;
 	const connected = room.connection === "connected";
 	const isHost = connected && room.self?.isHost === true;
+	const eligibleCandidates = snapshot
+		? getEligibleRoomCandidates(snapshot)
+		: [];
 	const places =
 		(drawMatchesCandidates ? displayedDraw?.candidates : undefined) ??
-		snapshot?.candidates ??
-		[];
+		eligibleCandidates;
 	const winner =
 		displayedDraw && finished
 			? displayedDraw.candidates[displayedDraw.winnerIndex]
@@ -227,43 +201,12 @@ export default function LunchRoomPage({
 	}, [serverMessages, localMessages, connectionEvents]);
 	const hostOnline = participants.some((participant) => participant.isHost);
 	const canStart =
-		isHost && !busy && !room.candidatesPending && places.length >= 2;
-	const candidateVersion = snapshot?.listVersion;
-	const candidateRoomId = snapshot?.roomId;
-	const actualCandidateIds = getRoomCandidateIds(
-		createRoomCandidateSelection(
-			snapshot?.candidates.map((place) => place.id) ?? [],
-		),
-	).join(",");
-	const serverCandidateSelection = useMemo(
-		() =>
-			createRoomCandidateSelection(
-				actualCandidateIds ? actualCandidateIds.split(",") : [],
-			),
-		[actualCandidateIds],
-	);
-	// Show the approved candidates on the first room paint, before the effect syncs the editable draft.
-	const displayedSelection =
-		observedCandidatesRef.current?.roomId === roomId
-			? candidateSelection
-			: serverCandidateSelection;
-	const candidateIds = useMemo(
-		() => getRoomCandidateIds(displayedSelection),
-		[displayedSelection],
-	);
-	const candidateDraftIds = candidateIds.join(",");
-	const candidatesChanged = actualCandidateIds !== candidateDraftIds;
-	const candidateControlsDisabled = busy || room.candidatesPending || !isHost;
-	const visibleCandidates = useMemo(
-		() =>
-			sampleLunchPlaces.filter((place) =>
-				displayedSelection.categories.includes(place.category),
-			),
-		[displayedSelection.categories],
-	);
-	const guestVisibleCandidates = (snapshot?.candidates ?? []).filter((place) =>
-		guestCategories.includes(place.category),
-	);
+		isHost &&
+		!busy &&
+		!room.candidatesPending &&
+		!room.mutationPending &&
+		Boolean(snapshot && getRoomPhase(snapshot) === "waiting") &&
+		eligibleCandidates.length >= 1;
 	const completedHistory = (snapshot?.history ?? [])
 		.filter((entry) => room.serverNow() >= entry.startedAt + entry.durationMs)
 		.slice(0, lunchRoomLimits.maxHistory);
@@ -302,15 +245,6 @@ export default function LunchRoomPage({
 			delete root.dataset.compactViewport;
 		};
 	}, [closed, room.waitingForEntry, room.entryPending]);
-	const setCandidateIncluded = useCallback(
-		(placeId: string, included: boolean) => {
-			setCandidateSelection((previous) =>
-				setRoomCandidateIncluded(previous, placeId, included),
-			);
-			setCandidateError("");
-		},
-		[],
-	);
 
 	useEffect(() => {
 		setInviteUrl(
@@ -437,56 +371,6 @@ export default function LunchRoomPage({
 		}
 	}, [room.connection, roomId, snapshot?.roomId, room.clockOffset]);
 	useEffect(() => {
-		if (observedCandidatesRef.current?.roomId === roomId) return;
-		expectedVersionRef.current = null;
-		submittedCandidateIdsRef.current = null;
-		observedCandidatesRef.current = null;
-		setGuestCategories(lunchCategories);
-	}, [roomId]);
-	useEffect(() => {
-		candidateDraftIdsRef.current = candidateDraftIds;
-	}, [candidateDraftIds]);
-	useEffect(() => {
-		if (candidateVersion === undefined || candidateRoomId !== roomId) return;
-		const previous = observedCandidatesRef.current;
-		if (
-			previous?.roomId === roomId &&
-			previous.version === candidateVersion &&
-			previous.ids === actualCandidateIds
-		)
-			return;
-		const ownAcknowledgement =
-			previous?.roomId === roomId &&
-			!room.error &&
-			expectedVersionRef.current !== null &&
-			candidateVersion >= expectedVersionRef.current &&
-			submittedCandidateIdsRef.current === actualCandidateIds &&
-			candidateDraftIdsRef.current === actualCandidateIds;
-		if (!ownAcknowledgement) setCandidateSelection(serverCandidateSelection);
-		if (previous?.roomId !== roomId) setGuestCategories(lunchCategories);
-		observedCandidatesRef.current = {
-			roomId,
-			version: candidateVersion,
-			ids: actualCandidateIds,
-		};
-		expectedVersionRef.current = null;
-		submittedCandidateIdsRef.current = null;
-		setCandidateError("");
-	}, [
-		actualCandidateIds,
-		serverCandidateSelection,
-		candidateVersion,
-		roomId,
-		candidateRoomId,
-		room.error,
-	]);
-	useEffect(() => {
-		if (!room.candidatesPending && room.error) {
-			expectedVersionRef.current = null;
-			submittedCandidateIdsRef.current = null;
-		}
-	}, [room.candidatesPending, room.error]);
-	useEffect(() => {
 		if (
 			showResult &&
 			!selectedDraw &&
@@ -510,8 +394,15 @@ export default function LunchRoomPage({
 		}
 	}, [draw, room.nextPending, view]);
 	useEffect(() => {
-		if (view === "history") historyTitleRef.current?.focus();
-	}, [view]);
+		if (view === "history" && !selectedDraw) {
+			const record = historyRecordFocusRef.current
+				? document.querySelector<HTMLButtonElement>(
+						`[data-draw-id="${historyRecordFocusRef.current}"]`,
+					)
+				: null;
+			(record ?? historyTitleRef.current)?.focus();
+		}
+	}, [view, selectedDraw]);
 	useEffect(() => {
 		if (!copyHelp && restoreCopyFocusRef.current) {
 			restoreCopyFocusRef.current = false;
@@ -567,6 +458,7 @@ export default function LunchRoomPage({
 		return () => observer.disconnect();
 	}, [closed, room.waitingForEntry, room.entryPending, chatCollapsed]);
 	function changeView(next: RoomView) {
+		historyRecordFocusRef.current = null;
 		setSelectedDraw(null);
 		focusResultRef.current = false;
 		copyAttemptRef.current++;
@@ -579,6 +471,7 @@ export default function LunchRoomPage({
 		focusNextRoundRef.current = false;
 	}
 	function openRecord(draw: RoomDraw, trigger: HTMLButtonElement) {
+		historyRecordFocusRef.current = draw.id;
 		focusResultRef.current = false;
 		setChatPopover(null);
 		selectedDrawTriggerRef.current = trigger;
@@ -600,58 +493,11 @@ export default function LunchRoomPage({
 				: { votes: draw.votes.map((vote) => ({ ...vote })) }),
 		});
 	}
-	function candidateCategoryButtons(readOnly: boolean) {
-		const categories = readOnly
-			? guestCategories
-			: displayedSelection.categories;
-		return (
-			<fieldset
-				className="room-candidate-categories"
-				disabled={!readOnly && candidateControlsDisabled}
-			>
-				<legend className="sr-only">
-					{readOnly ? "목록 보기 분류" : "추첨 후보 분류"}
-				</legend>
-				{(["전체", ...lunchCategories] as const).map((category) => {
-					const selected =
-						category === "전체"
-							? lunchCategories.every((item) => categories.includes(item))
-							: categories.includes(category);
-					return (
-						<Button
-							variant={selected ? "default" : "outline"}
-							size="sm"
-							key={category}
-							type="button"
-							aria-pressed={selected}
-							onClick={() => {
-								if (readOnly)
-									setGuestCategories((previous) =>
-										category === "전체"
-											? lunchCategories
-											: previous.includes(category)
-												? previous.filter((item) => item !== category)
-												: [...previous, category],
-									);
-								else {
-									setCandidateSelection((previous) =>
-										category === "전체"
-											? selectAllRoomCandidateCategories(previous)
-											: toggleRoomCandidateCategory(previous, category),
-									);
-									setCandidateError("");
-								}
-							}}
-						>
-							{category}
-						</Button>
-					);
-				})}
-			</fieldset>
-		);
-	}
-	function start() {
-		if (!room.startDraw()) return;
+	function start(options?: {
+		confirmReset?: boolean;
+		expectedRevision?: number;
+	}) {
+		if (!room.startDraw(options)) return;
 		copyAttemptRef.current++;
 		setCopyHelp(null);
 		setCopied(null);
@@ -849,6 +695,7 @@ export default function LunchRoomPage({
 									</div>
 								</details>
 							)}
+							<RoomSettingsDialog room={room} busy={busy} />
 						</div>
 					)}
 				</div>
@@ -914,416 +761,253 @@ export default function LunchRoomPage({
 										/>
 									</section>
 								)}
-								<nav className="room-primary-tabs" aria-label="추첨 도구">
-									<Button
-										variant="plain"
-										size="auto"
-										type="button"
-										aria-pressed={view === "wheel"}
-										aria-controls={`${id}-draw-panel`}
-										onClick={() => changeView("wheel")}
-									>
-										룰렛
-									</Button>
-									<Button
-										variant="plain"
-										size="auto"
-										type="button"
-										aria-pressed={view === "history"}
-										aria-controls={`${id}-history-panel`}
-										onClick={() => changeView("history")}
-									>
-										결과{" "}
-										<span aria-hidden="true">{completedHistory.length}</span>
-									</Button>
-								</nav>
-								<section
-									id={`${id}-draw-panel`}
-									className="room-draw-panel"
-									hidden={view !== "wheel"}
-									aria-labelledby={`${id}-wheel`}
+								<RoomLifecyclePanel
+									room={room}
+									key={roomId}
+									historyButtonRef={historyTriggerRef}
+									busy={busy}
+									showResult={showResult}
+									onStart={start}
+									onHistory={() => changeView("history")}
 								>
-									<h2 id={`${id}-wheel`} className="sr-only">
-										룰렛
-									</h2>
-									<div className="room-wheel-stage">
-										<div
-											className={`room-wheel-area ${showResult ? "is-covered" : ""}`}
-											aria-hidden={showResult || undefined}
+									{(requestStart) => (
+										<section
+											id={`${id}-draw-panel`}
+											className="room-draw-panel"
+											hidden={false}
+											aria-labelledby={`${id}-wheel`}
 										>
-											<LunchWheel
-												candidates={places}
-												candidateNumbers={places.map(
-													(place) => roomCandidateNumbers.get(place.id) ?? 0,
+											<h2 id={`${id}-wheel`} className="sr-only">
+												룰렛
+											</h2>
+											<div className="room-wheel-stage">
+												<div
+													className={`room-wheel-area ${showResult ? "is-covered" : ""}`}
+													aria-hidden={showResult || undefined}
+												>
+													<LunchWheel
+														candidates={places}
+														candidateNumbers={places.map(
+															(place, index) =>
+																roomCandidateNumbers.get(place.id) ?? index + 1,
+														)}
+														rotation={
+															finished ? (displayedDraw?.toRotation ?? 0) : 0
+														}
+														phase={
+															fetching
+																? "fetching"
+																: spinning
+																	? "spinning"
+																	: winner
+																		? "done"
+																		: "idle"
+														}
+														onComplete={() => {}}
+														onDraw={requestStart}
+														buttonId={`${id}-start`}
+														errorId={room.error ? `${id}-error` : undefined}
+														covered={!canStart || showResult}
+														canDraw={isHost}
+														drawLabel={
+															places.length === 1
+																? "마지막 후보 확정"
+																: "룰렛 돌리기"
+														}
+														drawText={
+															places.length === 1 ? "후보 확정" : "돌리기"
+														}
+														buttonRef={drawButtonRef}
+														rotorRef={rotorRef}
+														controlled
+													/>
+												</div>
+												{showResult && winner && displayedDraw && (
+													<div className="room-result-overlay">
+														<RoomDrawResult
+															key={displayedDraw.id}
+															draw={displayedDraw}
+															selfId={room.self?.id}
+															isHost={room.self?.isHost === true}
+															connected={connected}
+															pending={
+																room.votePendingDrawId === displayedDraw.id
+															}
+															readOnly={drawArchived}
+															nextPending={room.nextPending}
+															canNext={
+																connected && !busy && !room.candidatesPending
+															}
+															onNext={nextRound}
+															onVote={room.vote}
+															titleRef={resultTitleRef}
+															titleId={`${id}-winner`}
+														/>
+													</div>
 												)}
-												rotation={
-													finished && drawMatchesCandidates
-														? (displayedDraw?.toRotation ?? 0)
-														: 0
-												}
-												phase={
-													fetching
-														? "fetching"
-														: spinning
-															? "spinning"
-															: winner
-																? "done"
-																: "idle"
-												}
-												onComplete={() => {}}
-												onDraw={start}
-												buttonId={`${id}-start`}
-												errorId={room.error ? `${id}-error` : undefined}
-												covered={!canStart || showResult}
-												canDraw={isHost}
-												buttonRef={drawButtonRef}
-												rotorRef={rotorRef}
-												controlled
-											/>
-										</div>
-										{showResult && winner && displayedDraw && (
-											<div className="room-result-overlay">
-												<RoomDrawResult
-													key={displayedDraw.id}
-													draw={displayedDraw}
-													selfId={room.self?.id}
-													isHost={room.self?.isHost === true}
-													connected={connected}
-													pending={room.votePendingDrawId === displayedDraw.id}
-													readOnly={drawArchived}
-													nextPending={room.nextPending}
-													canNext={
-														connected && !busy && !room.candidatesPending
-													}
-													onNext={nextRound}
-													onVote={room.vote}
-													titleRef={resultTitleRef}
-													titleId={`${id}-winner`}
-												/>
 											</div>
-										)}
-									</div>
-									<output
-										className={showResult ? "sr-only" : "room-draw-status"}
-										aria-live="polite"
-									>
-										{status}
-									</output>
-									{spinning && !reducedMotion && (
-										<Button
-											variant="outline"
-											size="sm"
-											type="button"
-											className="room-motion-button"
-											onClick={() => setMotionOff((off) => !off)}
-										>
-											{motionOff ? (
-												<Play size={14} aria-hidden="true" />
-											) : (
-												<Pause size={14} aria-hidden="true" />
+											<output
+												className={showResult ? "sr-only" : "room-draw-status"}
+												aria-live="polite"
+											>
+												{status}
+											</output>
+											{spinning && !reducedMotion && (
+												<Button
+													variant="outline"
+													size="sm"
+													type="button"
+													className="room-motion-button"
+													onClick={() => setMotionOff((off) => !off)}
+												>
+													{motionOff ? (
+														<Play size={14} aria-hidden="true" />
+													) : (
+														<Pause size={14} aria-hidden="true" />
+													)}
+													{motionOff ? "애니메이션 켜기" : "애니메이션 끄기"}
+												</Button>
 											)}
-											{motionOff ? "애니메이션 켜기" : "애니메이션 끄기"}
-										</Button>
+											{spinning && reducedMotion && (
+												<p className="room-motion-note">
+													동작 줄이기 설정을 적용했습니다. 추첨이 끝나면 결과를
+													표시합니다.
+												</p>
+											)}
+										</section>
 									)}
-									{spinning && reducedMotion && (
-										<p className="room-motion-note">
-											동작 줄이기 설정을 적용했습니다. 추첨이 끝나면 결과를
-											표시합니다.
-										</p>
-									)}
-								</section>
-								<section
-									id={`${id}-history-panel`}
-									className="room-history-panel"
-									hidden={view !== "history"}
-									aria-labelledby={`${id}-history-title`}
+								</RoomLifecyclePanel>
+								<Dialog
+									open={view === "history" && !selectedDraw}
+									onOpenChange={(open) => {
+										if (!open) setView("wheel");
+									}}
 								>
-									<div className="room-panel-heading">
-										<h2
-											id={`${id}-history-title`}
-											ref={historyTitleRef}
-											tabIndex={-1}
+									<DialogContent className="room-history-dialog">
+										<DialogTitle className="sr-only">
+											지난 추첨 기록
+										</DialogTitle>
+										<DialogDescription className="sr-only">
+											같은 방에서 완료한 추첨과 당시 후보를 확인합니다.
+										</DialogDescription>
+										<section
+											id={`${id}-history-panel`}
+											className="room-history-panel"
+											hidden={false}
+											aria-labelledby={`${id}-history-title`}
 										>
-											방 추첨 기록
-										</h2>
-										<span>최근 {lunchRoomLimits.maxHistory}개</span>
-									</div>
-									{completedHistory.length === 0 ? (
-										<p className="room-panel-note">
-											아직 확정된 추첨 기록이 없습니다. 방장이 다음 추첨을
-											시작하면 이전 결과와 투표가 기록으로 확정됩니다.
-										</p>
-									) : (
-										<ol className="room-history-list">
-											{completedHistory.map((entry) => {
-												const place = entry.candidates[entry.winnerIndex];
-												const kind: CopyKind = `history:${entry.id}`;
-												return (
-													<li key={entry.id} className="room-history-item">
-														<Button
-															variant="ghost"
-															size="auto"
-															type="button"
-															className="room-history-open"
-															aria-expanded={selectedDraw?.id === entry.id}
-															aria-label={`${place.name} 상세 기록 열기`}
-															aria-haspopup="dialog"
-															onClick={(event) =>
-																openRecord(entry, event.currentTarget)
-															}
-														>
-															<strong>{place.name}</strong>
-															<span>{place.category}</span>
-															<span>
-																{entry.candidates.length}곳 중 추첨 ·{" "}
-																{getSourceDisplayName(entry.source)}
-															</span>
-															<time
-																dateTime={new Date(
-																	entry.timestamp,
-																).toISOString()}
-															>
-																{new Date(entry.timestamp).toLocaleString(
-																	"ko-KR",
-																	{
-																		month: "2-digit",
-																		day: "2-digit",
-																		hour: "2-digit",
-																		minute: "2-digit",
-																	},
-																)}
-															</time>
-															<span className="room-history-detail-hint">
-																상세 보기 →
-															</span>
-															{entry.votes && (
-																<span>
-																	좋아요{" "}
-																	{
-																		entry.votes.filter(
-																			(vote) => vote.vote === "up",
-																		).length
-																	}{" "}
-																	· 싫어요{" "}
-																	{
-																		entry.votes.filter(
-																			(vote) => vote.vote === "down",
-																		).length
-																	}
-																</span>
-															)}
-														</Button>
-														<Button
-															variant="outline"
-															size="default"
-															type="button"
-															className="room-outline-button room-history-copy"
-															aria-label={`${place.name} 기록 ${copied === kind ? "복사됨" : "복사"}`}
-															onClick={(event) =>
-																void copy(
-																	roomDrawCopyText(entry),
-																	kind,
-																	event.currentTarget,
-																)
-															}
-														>
-															{copied === kind ? (
-																<Check size={15} aria-hidden="true" />
-															) : (
-																<Copy size={15} aria-hidden="true" />
-															)}
-															{copied === kind ? "복사됨" : "복사"}
-														</Button>
-													</li>
-												);
-											})}
-										</ol>
-									)}
-								</section>
-								<section
-									className="room-candidates-panel"
-									aria-labelledby={`${id}-candidates`}
-								>
-									{isHost ? (
-										<form
-											className="room-candidate-form"
-											onSubmit={(event) => {
-												event.preventDefault();
-												if (candidateControlsDisabled || !candidatesChanged)
-													return;
-												setCandidateError("");
-												if (candidateIds.length < 2) {
-													setCandidateError("음식점을 2곳 이상 선택해 주세요.");
-													candidateTitleRef.current?.focus();
-													return;
-												}
-												if (room.updateCandidates(candidateIds)) {
-													expectedVersionRef.current =
-														(candidateVersion ?? 0) + 1;
-													submittedCandidateIdsRef.current = candidateDraftIds;
-												}
-											}}
-										>
-											<div className="room-candidate-toolbar">
-												<div className="room-candidate-toolbar-heading">
-													<h2
-														id={`${id}-candidates`}
-														ref={candidateTitleRef}
-														tabIndex={-1}
-														aria-describedby={
-															candidateError
-																? `${id}-candidate-error`
-																: undefined
-														}
-													>
-														추첨 후보
-													</h2>
-													<span>
-														선택 {candidateIds.length}곳 · 적용{" "}
-														{snapshot?.candidates.length ?? 0}곳
-													</span>
-												</div>
+											<div className="room-panel-heading">
+												<h2
+													id={`${id}-history-title`}
+													ref={historyTitleRef}
+													tabIndex={-1}
+												>
+													방 추첨 기록
+												</h2>
+												<span>최근 {lunchRoomLimits.maxHistory}개</span>
+											</div>
+											{completedHistory.length === 0 ? (
 												<p className="room-panel-note">
-													분류와 음식점을 고른 뒤 후보 적용을 누르세요.
+													아직 확정된 추첨 기록이 없습니다. 방장이 다음 추첨을
+													시작하면 이전 결과와 투표가 기록으로 확정됩니다.
 												</p>
-												{candidateCategoryButtons(false)}
-												<div className="room-candidate-toolbar-actions">
-													<Button
-														variant="ghost"
-														size="sm"
-														type="button"
-														className="room-text-action"
-														disabled={candidateControlsDisabled}
-														onClick={() => {
-															setCandidateSelection(selectAllRoomCandidates());
-															setCandidateError("");
-														}}
-													>
-														모두 선택
-													</Button>
-													<Button
-														variant="ghost"
-														size="sm"
-														type="button"
-														className="room-text-action"
-														disabled={candidateControlsDisabled}
-														onClick={() => {
-															setCandidateSelection(clearRoomCandidates());
-															setCandidateError("");
-														}}
-													>
-														선택 해제
-													</Button>
-													<Button
-														variant="outline"
-														size="default"
-														type="button"
-														className="room-outline-button"
-														disabled={
-															candidateControlsDisabled || !candidatesChanged
-														}
-														onClick={() => {
-															expectedVersionRef.current = null;
-															submittedCandidateIdsRef.current = null;
-															setCandidateSelection(
-																createRoomCandidateSelection(
-																	actualCandidateIds
-																		? actualCandidateIds.split(",")
-																		: [],
-																),
-															);
-															setCandidateError("");
-														}}
-													>
-														변경 취소
-													</Button>
-													<Button
-														variant="default"
-														size="default"
-														type="submit"
-														className="room-candidate-submit"
-														disabled={
-															candidateControlsDisabled || !candidatesChanged
-														}
-														aria-describedby={
-															candidateError
-																? `${id}-candidate-error`
-																: undefined
-														}
-													>
-														{room.candidatesPending
-															? "후보 적용 중…"
-															: "후보 적용"}
-													</Button>
-												</div>
-												<output
-													className="room-candidate-feedback"
-													aria-live="polite"
-												>
-													{room.candidatesPending
-														? "후보를 적용하고 있습니다."
-														: busy
-															? "추첨 중에는 후보를 변경할 수 없습니다."
-															: candidatesChanged
-																? "변경사항 있음"
-																: "적용됨"}
-												</output>
-												<p
-													id={`${id}-candidate-error`}
-													role="alert"
-													className={
-														candidateError
-															? "room-candidate-feedback room-error"
-															: "room-empty-error"
-													}
-												>
-													{candidateError}
-												</p>
-											</div>
-											<fieldset disabled={candidateControlsDisabled}>
-												<legend className="sr-only">
-													함께 추첨할 음식점 선택
-												</legend>
-												<RoomEditableCandidateList
-													places={visibleCandidates}
-													selectedIds={candidateIds}
-													onIncludedChange={setCandidateIncluded}
-												/>
-											</fieldset>
-											{visibleCandidates.length === 0 && (
-												<p className="room-candidate-empty">
-													선택한 분류의 음식점이 없습니다. 분류를 하나 이상 켜
-													주세요.
-												</p>
+											) : (
+												<ol className="room-history-list">
+													{completedHistory.map((entry) => {
+														const place = entry.candidates[entry.winnerIndex];
+														const kind: CopyKind = `history:${entry.id}`;
+														return (
+															<li key={entry.id} className="room-history-item">
+																<Button
+																	variant="ghost"
+																	size="auto"
+																	type="button"
+																	className="room-history-open"
+																	data-draw-id={entry.id}
+																	ref={(node) => {
+																		if (
+																			node &&
+																			entry.id === historyRecordFocusRef.current
+																		)
+																			selectedDrawTriggerRef.current = node;
+																	}}
+																	aria-expanded={selectedDraw?.id === entry.id}
+																	aria-label={`${place.name} 상세 기록 열기`}
+																	aria-haspopup="dialog"
+																	onClick={(event) =>
+																		openRecord(entry, event.currentTarget)
+																	}
+																>
+																	<strong>{place.name}</strong>
+																	<span>{place.category}</span>
+																	<span>
+																		{entry.candidates.length}곳 중 추첨 ·{" "}
+																		{getSourceDisplayName(entry.source)}
+																	</span>
+																	<time
+																		dateTime={new Date(
+																			entry.timestamp,
+																		).toISOString()}
+																	>
+																		{new Date(entry.timestamp).toLocaleString(
+																			"ko-KR",
+																			{
+																				month: "2-digit",
+																				day: "2-digit",
+																				hour: "2-digit",
+																				minute: "2-digit",
+																			},
+																		)}
+																	</time>
+																	<span className="room-history-detail-hint">
+																		상세 보기 →
+																	</span>
+																	{entry.votes && (
+																		<span>
+																			좋아요{" "}
+																			{
+																				entry.votes.filter(
+																					(vote) => vote.vote === "up",
+																				).length
+																			}{" "}
+																			· 싫어요{" "}
+																			{
+																				entry.votes.filter(
+																					(vote) => vote.vote === "down",
+																				).length
+																			}
+																		</span>
+																	)}
+																</Button>
+																<Button
+																	variant="outline"
+																	size="default"
+																	type="button"
+																	className="room-outline-button room-history-copy"
+																	aria-label={`${place.name} 기록 ${copied === kind ? "복사됨" : "복사"}`}
+																	onClick={(event) =>
+																		void copy(
+																			roomDrawCopyText(entry),
+																			kind,
+																			event.currentTarget,
+																		)
+																	}
+																>
+																	{copied === kind ? (
+																		<Check size={15} aria-hidden="true" />
+																	) : (
+																		<Copy size={15} aria-hidden="true" />
+																	)}
+																	{copied === kind ? "복사됨" : "복사"}
+																</Button>
+															</li>
+														);
+													})}
+												</ol>
 											)}
-										</form>
-									) : (
-										<>
-											<div className="room-candidate-toolbar">
-												<div className="room-candidate-toolbar-heading">
-													<h2 id={`${id}-candidates`}>추첨 후보</h2>
-													<span>
-														표시 {guestVisibleCandidates.length}곳 · 실제 추첨{" "}
-														{snapshot?.candidates.length ?? 0}곳
-													</span>
-												</div>
-												<p className="room-candidate-feedback">
-													목록 보기 필터입니다. 실제 추첨 대상은 바뀌지
-													않습니다.
-												</p>
-												{candidateCategoryButtons(true)}
-											</div>
-											<RoomReadonlyCandidateList
-												places={guestVisibleCandidates}
-											/>
-											{guestVisibleCandidates.length === 0 && (
-												<p className="room-candidate-empty">
-													선택한 분류의 후보가 없습니다. 다른 분류를 켜 보세요.
-												</p>
-											)}
-										</>
-									)}
-								</section>
+										</section>
+									</DialogContent>
+								</Dialog>
 							</div>
 							<aside
 								className="room-chat-panel"
@@ -1828,9 +1512,12 @@ export default function LunchRoomPage({
 					draw={selectedDraw}
 					columnRef={primaryColumnRef}
 					returnFocusRef={selectedDrawTriggerRef}
-					fallbackFocusRef={historyTitleRef}
+					fallbackFocusRef={
+						view === "history" ? historyTitleRef : historyTriggerRef
+					}
 					chatInputRef={chatInputRef}
 					onChatFocus={() => {
+						setView("wheel");
 						if (chatCollapsed) {
 							focusChatAfterExpand.current = true;
 							setChatCollapsed(false);

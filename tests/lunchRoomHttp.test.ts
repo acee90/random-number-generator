@@ -145,15 +145,37 @@ describe("lunch room HTTP creation", () => {
 		expect(party.initialize.mock.calls[0][0]).not.toHaveProperty("hostToken");
 	});
 
-	it("defaults omitted candidates to the complete supplied restaurant list", async () => {
+	it.each([
+		undefined,
+		[],
+		[ids[0]],
+	])("creates with an empty default or explicit valid selection: %j", async (candidateIds) => {
 		const response = await responseFor(
-			createRequest({ title: "점심", hostName: "방장" }),
+			createRequest({
+				title: "점심",
+				hostName: "방장",
+				...(candidateIds === undefined ? {} : { candidateIds }),
+			}),
 		);
 		expect(response.status).toBe(201);
-		expect(party.initialize.mock.calls[0][0].candidateIds).toHaveLength(107);
-		expect(party.initialize.mock.calls[0][0].candidateIds).toEqual(
-			sampleLunchPlaces.map((place) => place.id),
-		);
+		expect(response.headers.get("Cache-Control")).toBe("no-store");
+		const created = (await response.json()) as {
+			roomId: string;
+			hostToken: string;
+			expiresAt: number;
+			joinPath: string;
+		};
+		expect(created.expiresAt).toBe(now + lunchRoomLimits.ttlMs);
+		expect(created.joinPath).toBe(`/lunch-room/${created.roomId}`);
+		expect(party.initialize).toHaveBeenCalledExactlyOnceWith({
+			roomId: created.roomId,
+			title: "점심",
+			hostTokenHash: createHash("sha256")
+				.update(created.hostToken)
+				.digest("hex"),
+			candidateIds: candidateIds ?? [],
+			createdAt: now,
+		});
 	});
 
 	it("creates a room with an explicit107-candidate selection inside the4096-byte UTF-8 boundary", async () => {
@@ -188,8 +210,15 @@ describe("lunch room HTTP creation", () => {
 		[],
 		{ ...input, title: " " },
 		{ ...input, hostName: "x".repeat(21) },
-		{ ...input, candidateIds: [] },
-		{ ...input, candidateIds: [ids[0]] },
+		{ ...input, candidateIds: null },
+		{ ...input, candidateIds: ["missing-candidate"] },
+		{
+			...input,
+			candidateIds: Array.from(
+				{ length: lunchRoomLimits.maxCandidates + 1 },
+				() => "x",
+			),
+		},
 		{ ...input, candidateIds: [ids[0], ids[0]] },
 		{ ...input, candidateIds: [ids[0], "https://example.com/menu"] },
 		{ ...input, candidateIds: [ids[0], { id: ids[1], name: "주입한 식당" }] },
