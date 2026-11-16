@@ -180,7 +180,7 @@ export type ClientMessage =
 			updateName?: boolean;
 	  }
 	| { type: "activity" }
-	| { type: "chat"; id: string; text: string }
+	| { type: "chat"; id: string; text: string; diagnosticId?: string }
 	| {
 			type: "start";
 			id: string;
@@ -231,12 +231,67 @@ export type ClientMessage =
 	  }
 	| { type: "ping"; clientTime: number };
 
+/** Opt-in telemetry only; never part of the persisted room snapshot. */
+export interface ChatTrace {
+	diagnosticId: string;
+	serverReceivedAt: number;
+	serverSendAt: number;
+	queueMs: number;
+	prepareMs: number;
+	saveMs: number;
+	alarmMs: number;
+	serverTotalMs: number;
+}
+
+export function isChatDiagnosticId(value: unknown): value is string {
+	return (
+		typeof value === "string" &&
+		/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+			value,
+		)
+	);
+}
+
+function parseChatTrace(value: unknown): ChatTrace | undefined {
+	if (
+		!isRecord(value) ||
+		!isChatDiagnosticId(value.diagnosticId) ||
+		!isTime(value.serverReceivedAt) ||
+		!isTime(value.serverSendAt)
+	)
+		return;
+	const keys = [
+		"queueMs",
+		"prepareMs",
+		"saveMs",
+		"alarmMs",
+		"serverTotalMs",
+	] as const;
+	if (
+		keys.some(
+			(key) =>
+				typeof value[key] !== "number" ||
+				!Number.isFinite(value[key]) ||
+				value[key] < 0 ||
+				value[key] > 86400000,
+		)
+	)
+		return;
+	return Object.fromEntries(
+		["diagnosticId", "serverReceivedAt", "serverSendAt", ...keys].map((key) => [
+			key,
+			value[key],
+		]),
+	) as unknown as ChatTrace;
+}
+
 export type ServerMessage =
 	| { type: "ack"; requestId: string }
 	| {
 			type: "snapshot";
 			snapshot: RoomSnapshot;
 			serverTime: number;
+			chatTrace?: ChatTrace;
 			self?: { id: string; isHost: boolean };
 	  }
 	| { type: "error"; code: string; message: string; requestId?: string }
@@ -422,7 +477,14 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
 		case "chat": {
 			const content = text(value.text, 500);
 			return isId(value.id) && content
-				? { type: "chat", id: value.id, text: content }
+				? {
+						type: "chat",
+						id: value.id,
+						text: content,
+						...(isChatDiagnosticId(value.diagnosticId)
+							? { diagnosticId: value.diagnosticId }
+							: {}),
+					}
 				: null;
 		}
 		case "start":
@@ -1073,6 +1135,7 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
 				: null;
 		case "snapshot": {
 			const snapshot = parseRoomSnapshot(value.snapshot);
+			const chatTrace = parseChatTrace(value.chatTrace);
 			if (!snapshot || !isTime(value.serverTime)) return null;
 			if (
 				value.self !== undefined &&
@@ -1085,6 +1148,7 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
 				type: "snapshot",
 				snapshot,
 				serverTime: value.serverTime,
+				...(chatTrace ? { chatTrace } : {}),
 				...(value.self === undefined
 					? {}
 					: {

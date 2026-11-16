@@ -84,7 +84,9 @@ describe("admission acknowledgement to React commit timings", () => {
 		});
 	}
 	function stages() {
-		return info.mock.calls.map((call) => payload(call).stage);
+		return info.mock.calls
+			.filter((call) => String(call[0]).startsWith("[room timing] "))
+			.map((call) => payload(call).stage);
 	}
 	function open(socket: TimingSocket) {
 		act(() => {

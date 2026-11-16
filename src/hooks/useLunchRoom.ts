@@ -7,6 +7,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { beginChatTrace } from "@/lib/chatTrace";
 import {
 	type ChatMessage,
 	type ClientMessage,
@@ -46,6 +47,7 @@ type LocalChatRequest = {
 	message: LocalChatMessage;
 	timer?: ReturnType<typeof setTimeout>;
 	finishAcknowledgement?: () => void;
+	trace?: ReturnType<typeof beginChatTrace>;
 };
 const maxLocalChatMessages = 20;
 type RoomError = {
@@ -174,8 +176,10 @@ export function useLunchRoom(
 		);
 	}, []);
 	const clearLocalChatMessages = useCallback(() => {
-		for (const request of localChatRequestsRef.current.values())
+		for (const request of localChatRequestsRef.current.values()) {
 			clearTimeout(request.timer);
+			request.trace?.cancel();
+		}
 		localChatRequestsRef.current.clear();
 		setLocalChatMessages([]);
 	}, []);
@@ -185,6 +189,7 @@ export function useLunchRoom(
 			for (const request of localChatRequestsRef.current.values()) {
 				if (request.message.delivery !== "sending") continue;
 				clearTimeout(request.timer);
+				request.trace?.cancel();
 				request.timer = undefined;
 				request.message = {
 					...request.message,
@@ -202,6 +207,7 @@ export function useLunchRoom(
 			const request = localChatRequestsRef.current.get(id);
 			if (!request || request.message.delivery === "sending") return;
 			clearTimeout(request.timer);
+			request.trace?.cancel();
 			localChatRequestsRef.current.delete(id);
 			syncLocalChatMessages();
 		},
@@ -461,8 +467,11 @@ export function useLunchRoom(
 			}, 12000);
 		}
 		function onMessage(event: MessageEvent) {
+			const receivedAt = performance.now();
+			const receivedWallAt = Date.now();
 			if (!active || terminalRef.current) return;
 			const message = parseServerMessage(event.data);
+			const parsedAt = performance.now();
 			if (
 				!message ||
 				(message.type === "snapshot" && message.snapshot.roomId !== roomId)
@@ -486,6 +495,7 @@ export function useLunchRoom(
 					clearTimeout(chatRequest.timer);
 					chatRequest.timer = undefined;
 					chatRequest.finishAcknowledgement = undefined;
+					chatRequest.trace?.cancel();
 					chatRequest.message = {
 						...chatRequest.message,
 						delivery: "failed",
@@ -601,6 +611,12 @@ export function useLunchRoom(
 					continue;
 				clearTimeout(request.timer);
 				request.finishAcknowledgement?.();
+				request.trace?.finish(message.chatTrace, {
+					at: receivedAt,
+					wallAt: receivedWallAt,
+					parsedAt,
+					eventTimeStamp: event.timeStamp,
+				});
 				localChatRequestsRef.current.delete(entry.id);
 				chatAcknowledged = true;
 			}
@@ -896,7 +912,18 @@ export function useLunchRoom(
 		if (!self) return send({ type: "chat", id: actionId(), text: value });
 		const id = actionId();
 		const finishAcknowledgement = beginRoomTiming("chat_ack");
-		if (!send({ type: "chat", id, text: value })) return false;
+		const trace = beginChatTrace();
+		if (
+			!send({
+				type: "chat",
+				id,
+				text: value,
+				...(trace ? { diagnosticId: trace.diagnosticId } : {}),
+			})
+		) {
+			trace?.cancel();
+			return false;
+		}
 		const request: LocalChatRequest = {
 			message: {
 				id,
@@ -908,10 +935,12 @@ export function useLunchRoom(
 				delivery: "sending",
 			},
 			finishAcknowledgement,
+			trace,
 		};
 		request.timer = setTimeout(() => {
 			if (localChatRequestsRef.current.get(id) !== request) return;
 			request.timer = undefined;
+			request.trace?.cancel();
 			request.message = {
 				...request.message,
 				delivery: "unconfirmed",

@@ -1,6 +1,7 @@
 import { type Connection, Server, type WSMessage } from "partyserver";
 import { getWheelRotation } from "@/lib/lunch";
 import {
+	type ChatTrace,
 	type ClientMessage,
 	clampLunchRoomNickname,
 	getEligibleRoomCandidates,
@@ -468,8 +469,12 @@ export class LunchRoomServer extends Server<RoomEnv> {
 	}
 
 	async onMessage(connection: Connection<SocketState>, raw: WSMessage) {
+		const started = performance.now();
+		const receivedAt = Date.now();
 		const message = parseClientMessage(raw);
+		const queuedAt = performance.now();
 		await this.exclusive(async () => {
+			const queueMs = performance.now() - queuedAt;
 			await this.load();
 			if (connection.state?.closing) return;
 			if (await this.rejectUnavailable(connection)) return;
@@ -529,7 +534,11 @@ export class LunchRoomServer extends Server<RoomEnv> {
 					});
 					break;
 				case "chat":
-					await this.chat(connection, message);
+					await this.chat(
+						connection,
+						message,
+						message.diagnosticId ? { started, receivedAt, queueMs } : undefined,
+					);
 					break;
 				case "vote":
 					await this.vote(connection, message);
@@ -988,6 +997,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 	private async chat(
 		connection: Connection<SocketState>,
 		message: Extract<ClientMessage, { type: "chat" }>,
+		timing?: { started: number; receivedAt: number; queueMs: number },
 	) {
 		const state = connection.state;
 		const participant = state?.participant;
@@ -1020,9 +1030,30 @@ export class LunchRoomServer extends Server<RoomEnv> {
 				timestamp: now,
 			},
 		].slice(-lunchRoomLimits.maxMessages);
+		const saveStarted = performance.now();
 		await this.save();
+		const alarmStarted = performance.now();
 		await this.scheduleAlarm();
-		this.publish();
+		const ready = performance.now();
+		const chatTrace: ChatTrace | undefined =
+			timing && message.diagnosticId
+				? {
+						diagnosticId: message.diagnosticId,
+						serverReceivedAt: timing.receivedAt,
+						serverSendAt: Date.now(),
+						queueMs: timing.queueMs,
+						prepareMs: saveStarted - timing.started - timing.queueMs,
+						saveMs: alarmStarted - saveStarted,
+						alarmMs: ready - alarmStarted,
+						serverTotalMs: ready - timing.started,
+					}
+				: undefined;
+		this.publish(
+			undefined,
+			chatTrace && timing
+				? { connection, chatTrace, started: timing.started }
+				: undefined,
+		);
 	}
 
 	private async changeCandidates(
@@ -1563,6 +1594,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 	private sendSnapshot(
 		connection: Connection<SocketState>,
 		excludeSocketId?: string,
+		diagnostic?: { chatTrace: ChatTrace; started: number },
 	) {
 		if (
 			!this.room ||
@@ -1587,6 +1619,15 @@ export class LunchRoomServer extends Server<RoomEnv> {
 				participants: this.participants(excludeSocketId),
 			},
 			serverTime: Date.now(),
+			...(diagnostic
+				? {
+						chatTrace: {
+							...diagnostic.chatTrace,
+							serverSendAt: Date.now(),
+							serverTotalMs: performance.now() - diagnostic.started,
+						},
+					}
+				: {}),
 			self: {
 				id: connection.state.participant.id,
 				isHost: connection.state.participant.isHost,
@@ -1594,10 +1635,39 @@ export class LunchRoomServer extends Server<RoomEnv> {
 		});
 	}
 
-	private publish(excludeSocketId?: string) {
+	private publish(
+		excludeSocketId?: string,
+		diagnostic?: {
+			connection: Connection<SocketState>;
+			chatTrace: ChatTrace;
+			started: number;
+		},
+	) {
 		for (const connection of this.getConnections<SocketState>()) {
 			if (connection.state?.socketId !== excludeSocketId)
-				this.sendSnapshot(connection, excludeSocketId);
+				this.sendSnapshot(
+					connection,
+					excludeSocketId,
+					diagnostic &&
+						diagnostic.connection.state?.socketId === connection.state?.socketId
+						? diagnostic
+						: undefined,
+				);
+		}
+		if (diagnostic) {
+			try {
+				console.info(
+					"[room chat trace]",
+					JSON.stringify({
+						...diagnostic.chatTrace,
+						serverSendAt: Date.now(),
+						serverTotalMs: performance.now() - diagnostic.started,
+						boundary: "broadcast-enqueued",
+					}),
+				);
+			} catch {
+				/* Diagnostics must never fail a chat. */
+			}
 		}
 	}
 
