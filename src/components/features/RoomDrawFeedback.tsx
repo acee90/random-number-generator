@@ -111,7 +111,6 @@ function VoteTally({
 export default function RoomDrawFeedback({
 	draw,
 	selfId,
-	isHost,
 	connected,
 	pending,
 	optimisticVote,
@@ -149,7 +148,6 @@ export default function RoomDrawFeedback({
 		connected &&
 		eligible &&
 		!readOnly &&
-		!isHost &&
 		optimisticVote?.participantId === selfId &&
 		!votes.some((vote) => vote.participantId === optimisticVote?.participantId)
 			? optimisticVote
@@ -166,21 +164,14 @@ export default function RoomDrawFeedback({
 		votes.find((vote) => vote.participantId === selfId) ?? pendingVote;
 	const ownChoice = choices.find((choice) => choice.vote === ownVote?.vote);
 	const submitError =
-		!readOnly &&
-		!isHost &&
-		!pending &&
-		!ownVote &&
-		failedSubmission?.drawId === draw.id
+		!readOnly && !pending && !ownVote && failedSubmission?.drawId === draw.id
 			? failedSubmission.message
 			: "";
-	const canVote =
-		!readOnly && !isHost && connected && eligible && !pending && !ownVote;
+	const canVote = !readOnly && connected && eligible && !pending && !ownVote;
 	const statusMessage = readOnly
 		? "확정된 투표 기록입니다."
 		: !connected
-			? isHost
-				? "다시 연결되면 최신 투표 현황을 표시합니다."
-				: "다시 연결되면 투표할 수 있습니다."
+			? "다시 연결되면 투표할 수 있습니다."
 			: pendingVote
 				? "투표를 보내고 있습니다…"
 				: ownChoice
@@ -188,19 +179,15 @@ export default function RoomDrawFeedback({
 					: pending
 						? "투표를 보내고 있습니다…"
 						: submitError ||
-							(isHost
-								? "참가자의 투표가 실시간으로 표시됩니다."
-								: !selfId
-									? "참가 정보를 확인하고 있습니다."
-									: !eligible
-										? "추첨 시작 후 입장해 이번 결과에는 투표할 수 없습니다. 다음 추첨부터 참여해 주세요."
-										: "");
+							(!selfId
+								? "참가 정보를 확인하고 있습니다."
+								: !eligible
+									? "추첨 시작 후 입장해 이번 결과에는 투표할 수 없습니다. 다음 추첨부터 참여해 주세요."
+									: "");
 	const showVisibleStatus =
 		!readOnly &&
 		(!connected ||
-			(!pending &&
-				!ownVote &&
-				(Boolean(submitError) || (!isHost && (!selfId || !eligible)))));
+			(!pending && !ownVote && (Boolean(submitError) || !selfId || !eligible)));
 
 	return (
 		<section
@@ -212,9 +199,7 @@ export default function RoomDrawFeedback({
 			<div className="room-feedback-heading">
 				<h4 id={`${id}-title`}>
 					{mode === "actions"
-						? isHost
-							? "참가자의 선택을 기다리고 있어요"
-							: "이 메뉴, 어때요?"
+						? "이 메뉴, 어때요?"
 						: mode === "results"
 							? "실시간 투표 현황"
 							: "메뉴 투표"}
@@ -223,7 +208,7 @@ export default function RoomDrawFeedback({
 					<span>{votes.length + (pendingVote ? 1 : 0)}명 참여</span>
 				)}
 			</div>
-			{mode !== "results" && !readOnly && !isHost && (
+			{mode !== "results" && !readOnly && (
 				<div className="room-feedback-action-collapse">
 					<div className="room-feedback-action-clip">
 						<fieldset className="room-feedback-actions">

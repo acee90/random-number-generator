@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useNicknameAvailability } from "@/hooks/useNicknameAvailability";
+import { useRoomEntryInfo } from "@/hooks/useRoomEntryInfo";
 import {
 	clampLunchRoomNickname,
 	lunchRoomLimits,
@@ -42,6 +43,7 @@ export default function RoomEntryGate({
 	const [composing, setComposing] = useState(false);
 	const [validationError, setValidationError] = useState("");
 	const message = validationError || error;
+	const entryInfo = useRoomEntryInfo({ roomId, enabled: !loading });
 	const availability = useNicknameAvailability({
 		roomId,
 		name,
@@ -50,6 +52,9 @@ export default function RoomEntryGate({
 		rejected: Boolean(error),
 	});
 	const canEnter = !pending && availability.status === "available";
+	const showRetry =
+		!pending &&
+		(availability.status === "error" || availability.status === "taken");
 	const availabilityMessage = {
 		idle: "닉네임을 입력하면 중복 여부를 확인합니다.",
 		invalid: `닉네임은 1~${lunchRoomLimits.maxNicknameLength}자로 입력해 주세요.`,
@@ -110,14 +115,15 @@ export default function RoomEntryGate({
 
 	return (
 		<section className="room-entry-card" aria-labelledby={`${id}-title`}>
-			<div className="room-entry-icon" aria-hidden="true">
-				<UserRound size={24} />
-			</div>
-			<p className="room-entry-eyebrow">점심 추첨방 입장</p>
-			<h1 id={`${id}-title`}>닉네임을 정해 주세요</h1>
-			<p className="room-entry-description">
-				입장 버튼을 누르면 룰렛과 채팅에 참가합니다.
-			</p>
+			<header className="room-entry-heading">
+				<div className="room-entry-icon" aria-hidden="true">
+					<UserRound size={24} />
+				</div>
+				<div className="room-entry-title-block">
+					<p className="room-entry-eyebrow">추첨방 입장</p>
+					<h1 id={`${id}-title`}>{entryInfo.title ?? "점심 추첨방"}</h1>
+				</div>
+			</header>
 			<form
 				className="room-entry-form"
 				aria-label="추첨방 입장"
@@ -145,36 +151,54 @@ export default function RoomEntryGate({
 						{name.length}/{lunchRoomLimits.maxNicknameLength}
 					</span>
 				</div>
-				<Input
-					id={`${id}-name`}
-					ref={inputRef}
-					value={name}
-					disabled={pending}
-					maxLength={lunchRoomLimits.maxNicknameLength}
-					autoComplete="nickname"
-					placeholder="사용할 닉네임 입력"
-					aria-invalid={
-						Boolean(message) ||
-						availability.status === "taken" ||
-						availability.status === "invalid"
-					}
-					aria-describedby={`${id}-hint ${id}-availability${message ? ` ${id}-error` : ""}`}
-					onChange={(event) => {
-						setName(event.target.value);
-						setValidationError("");
-						onClearError();
-					}}
-					onCompositionStart={() => setComposing(true)}
-					onCompositionEnd={(event) => {
-						setName(event.currentTarget.value);
-						setComposing(false);
-					}}
-					onKeyDown={(event) => {
-						if (event.key === "Enter" && event.nativeEvent.isComposing)
-							event.preventDefault();
-					}}
-				/>
-				<p id={`${id}-hint`} className="room-entry-hint">
+				<div
+					className="room-entry-input-wrap"
+					data-status={message ? "error" : availability.status}
+				>
+					<Input
+						id={`${id}-name`}
+						ref={inputRef}
+						value={name}
+						disabled={pending}
+						maxLength={lunchRoomLimits.maxNicknameLength}
+						autoComplete="nickname"
+						placeholder="사용할 닉네임 입력"
+						aria-invalid={
+							Boolean(message) ||
+							availability.status === "taken" ||
+							availability.status === "invalid"
+						}
+						aria-describedby={`${id}-hint ${id}-availability`}
+						onChange={(event) => {
+							setName(event.target.value);
+							setValidationError("");
+							onClearError();
+						}}
+						onCompositionStart={() => setComposing(true)}
+						onCompositionEnd={(event) => {
+							setName(event.currentTarget.value);
+							setComposing(false);
+						}}
+						onKeyDown={(event) => {
+							if (event.key === "Enter" && event.nativeEvent.isComposing)
+								event.preventDefault();
+						}}
+					/>
+					<span className="room-entry-input-status" aria-hidden="true">
+						{availability.status === "checking" || pending ? (
+							<LoaderCircle className="room-entry-spinner" size={18} />
+						) : availability.status === "available" && !message ? (
+							<CheckCircle2 size={18} />
+						) : availability.status === "taken" ||
+							availability.status === "invalid" ||
+							message ? (
+							<CircleX size={18} />
+						) : availability.status === "error" ? (
+							<TriangleAlert size={18} />
+						) : null}
+					</span>
+				</div>
+				<p id={`${id}-hint`} className="sr-only">
 					1~{lunchRoomLimits.maxNicknameLength}자 · 같은 방에서 사용 중인
 					닉네임은 쓸 수 없습니다.
 				</p>
@@ -182,47 +206,37 @@ export default function RoomEntryGate({
 					id={`${id}-availability`}
 					htmlFor={`${id}-name`}
 					className="room-entry-availability"
-					data-status={availability.status}
-					aria-live="polite"
+					data-status={message ? "error" : availability.status}
+					role={message ? "alert" : "status"}
+					aria-live={message ? "assertive" : "polite"}
 					aria-atomic="true"
 				>
-					{availability.status === "checking" ? (
-						<LoaderCircle
-							className="room-entry-spinner"
-							size={16}
-							aria-hidden="true"
-						/>
-					) : availability.status === "available" ? (
-						<CheckCircle2 size={16} aria-hidden="true" />
-					) : availability.status === "taken" ||
-						availability.status === "invalid" ? (
-						<CircleX size={16} aria-hidden="true" />
-					) : availability.status === "error" ? (
-						<TriangleAlert size={16} aria-hidden="true" />
-					) : null}
-					<span>{pending ? "입장 중…" : availabilityMessage}</span>
-					{!pending &&
-						(availability.status === "error" ||
-							availability.status === "taken") && (
-							<Button
-								variant="link"
-								size="sm"
-								type="button"
-								className="room-entry-recheck"
-								onClick={() => {
-									onClearError();
-									availability.retry();
-								}}
-							>
-								다시 확인
-							</Button>
-						)}
+					<span
+						className={
+							!message &&
+							["idle", "checking", "available"].includes(availability.status)
+								? "sr-only"
+								: undefined
+						}
+					>
+						{message || (pending ? "입장 중…" : availabilityMessage)}
+					</span>
+					<Button
+						variant="link"
+						size="sm"
+						type="button"
+						className="room-entry-recheck"
+						data-visible={showRetry}
+						aria-hidden={!showRetry}
+						tabIndex={showRetry ? undefined : -1}
+						onClick={() => {
+							onClearError();
+							availability.retry();
+						}}
+					>
+						다시 확인
+					</Button>
 				</output>
-				{message && (
-					<p id={`${id}-error`} className="room-entry-error" role="alert">
-						{message}
-					</p>
-				)}
 				<Button
 					variant="default"
 					size="lg"

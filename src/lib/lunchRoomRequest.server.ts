@@ -2,6 +2,7 @@ import { lunchRoomLimits } from "./lunchRoom";
 
 // Internal binding traffic only; the public Worker validates the browser origin.
 export const nicknameCheckPath = "/_internal/lunch-room/nickname-availability";
+export const roomEntryInfoPath = "/_internal/lunch-room/entry-info";
 
 export async function readBoundedRoomJson(request: Request): Promise<unknown> {
 	if (

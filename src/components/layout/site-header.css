@@ -47,7 +47,7 @@
 	scrollbar-color: #9ba78a transparent;
 }
 .site-header-item:focus-visible {
-	outline-offset: -4px;
+	outline-offset: calc(-1 * var(--focus-ring-offset));
 }
 
 @media (max-width: 760px) {

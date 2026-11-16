@@ -289,46 +289,49 @@
 	min-inline-size: 0;
 }
 .room-result {
-	inline-size: min(100%, 440px);
-	padding: 16px;
+	inline-size: 100%;
+	min-inline-size: 0;
+	padding: 24px;
 	border: 0;
 	border-radius: 0;
 	background: transparent;
 }
 .room-result-layout {
 	display: grid;
-	grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.25fr);
-	align-items: start;
+	grid-template-columns: minmax(0, 1fr);
+	align-items: stretch;
 	gap: 0;
 	inline-size: 100%;
 	min-inline-size: 0;
+	min-block-size: clamp(480px, calc(100dvh - 230px), 680px);
 }
 .room-result-layout > .room-result {
-	inline-size: 100%;
+	display: grid;
+	grid-template-rows: minmax(0, 1fr) auto;
+	gap: 20px;
+	align-content: start;
+}
+.room-result-summary {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
 	min-inline-size: 0;
-	padding: 24px;
+	min-block-size: 180px;
+	padding: 24px 16px;
+	background: var(--surface);
+	text-align: center;
 }
 .room-result-layout > [data-mode="results"] {
-	border-inline-start: 1px solid var(--section-line);
+	border-inline-start: 0;
+	border-block-start: 1px solid var(--line);
 }
 .room-next-round-note {
 	margin: 0;
 	font-size: 12px;
 	line-height: 1.7;
 	color: var(--muted);
-}
-@container (max-width: 620px) {
-	.room-result-layout {
-		grid-template-columns: minmax(0, 1fr);
-		max-inline-size: 440px;
-	}
-	.room-result-layout > .room-result {
-		padding: 16px;
-	}
-	.room-result-layout > [data-mode="results"] {
-		border-inline-start: 0;
-		border-block-start: 1px solid var(--line);
-	}
 }
 @keyframes room-results-expand {
 	from {
@@ -349,36 +352,44 @@
 	}
 }
 .room-result h3 {
-	font-size: clamp(26px, 3.5cqi, 38px);
+	max-inline-size: 100%;
+	margin: 0;
+	font-size: clamp(40px, 7cqi, 72px);
 	font-weight: 850;
-	letter-spacing: -0.065em;
-	line-height: 1.2;
-	margin: 8px 0;
+	letter-spacing: -0.05em;
+	line-height: 1.12;
+	overflow-wrap: anywhere;
+	text-wrap: balance;
+}
+.room-result-eyebrow {
+	margin: 0;
+	color: var(--accent-foreground);
+	font-size: 13px;
+	font-weight: 700;
+	line-height: 1.5;
+}
+.room-result-category {
+	max-inline-size: 100%;
+	margin: 0;
+	color: var(--muted);
+	font-size: 14px;
+	line-height: 1.5;
 	overflow-wrap: anywhere;
 }
-.room-result > .room-eyebrow {
-	display: inline-block;
-	padding: 3px 7px;
-	border: 1px solid #ced7bb;
-	background: var(--surface);
-	color: #40532d;
-	font-weight: 700;
-}
-.room-result > p:not(.room-eyebrow) {
-	font-size: 16px;
-	margin: 0;
-	line-height: 1.6;
-}
 .room-result-actions {
-	display: grid;
+	display: flex;
+	justify-content: flex-end;
 	gap: 8px;
-	margin-block-start: 16px;
+	margin: 0;
+	padding: 20px 24px;
+	border-block-start: 1px solid var(--line);
 }
 .room-result-actions .room-next-round {
-	inline-size: 100%;
+	max-inline-size: 100%;
 	min-inline-size: 0;
 	flex-wrap: wrap;
 	margin: 0;
+	white-space: normal;
 }
 @keyframes room-result-reveal {
 	from {
@@ -837,15 +848,48 @@
 	flex-shrink: 0;
 }
 .room-chat-unread {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
 	margin-inline-start: auto;
-	padding: 2px 6px;
-	border-radius: var(--control-radius);
+	min-inline-size: 22px;
+	min-block-size: 22px;
+	padding-inline: 6px;
+	border-radius: 999px;
 	background: var(--lime);
 	color: var(--ink);
-	font-size: 11px;
-	font-weight: 650;
-	line-height: 1.4;
+	font-size: 12px;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	line-height: 1;
 	white-space: nowrap;
+}
+.room-chat-unread[hidden],
+.room-new-messages[hidden] {
+	display: none;
+}
+.room-chat-unread-count {
+	display: inline-block;
+}
+@media (prefers-reduced-motion: no-preference) {
+	.room-chat-unread-count[data-arrival="new"] {
+		animation: room-unread-arrival 360ms cubic-bezier(0.2, 0, 0, 1) 1;
+	}
+}
+@keyframes room-unread-arrival {
+	0%,
+	100% {
+		transform: translateX(0) rotate(0);
+	}
+	25% {
+		transform: translateX(-2px) rotate(-8deg);
+	}
+	50% {
+		transform: translateX(2px) rotate(8deg);
+	}
+	75% {
+		transform: translateX(-1px) rotate(-4deg);
+	}
 }
 .room-chat-panel[data-collapsed="true"] .room-chat-header {
 	border-block-end: 0;
@@ -1148,7 +1192,10 @@
 	line-height: 1.5;
 }
 .room-new-messages {
+	align-self: center;
 	flex-shrink: 0;
+	gap: 6px;
+	min-block-size: 44px;
 	margin: 2px 8px 5px;
 }
 .room-chat-footer {

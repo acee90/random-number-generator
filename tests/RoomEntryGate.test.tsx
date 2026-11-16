@@ -16,11 +16,16 @@ const mocks = vi.hoisted(() => ({
 	readName: vi.fn(),
 	readHost: vi.fn(),
 	readGuest: vi.fn(),
+	entryInfo: vi.fn(),
 }));
 vi.mock("../src/lib/lunchRoomClient", () => ({
 	readLunchRoomName: mocks.readName,
 	readLunchRoomHost: mocks.readHost,
 	readOrCreateLunchRoomGuestToken: mocks.readGuest,
+}));
+
+vi.mock("../src/hooks/useRoomEntryInfo", () => ({
+	useRoomEntryInfo: mocks.entryInfo,
 }));
 
 const roomId = "9b8c4944-5841-462d-b5a4-a701044be6b2";
@@ -63,6 +68,10 @@ beforeEach(() => {
 	vi.useFakeTimers();
 	for (const mock of Object.values(mocks)) mock.mockReset();
 	mocks.readGuest.mockReturnValue(guestToken);
+	mocks.entryInfo.mockReturnValue({
+		title: "오늘 점심 함께 골라요",
+		status: "ready",
+	});
 	fetchMock.mockReset();
 	enter.mockClear();
 	clearError.mockClear();
@@ -75,6 +84,45 @@ afterEach(() => {
 });
 
 describe("nickname preflight entry UI", () => {
+	it("identifies the room beside the icon without redundant entry instructions", () => {
+		render(gate());
+		expect(
+			screen.getByRole("heading", { name: "오늘 점심 함께 골라요", level: 1 }),
+		).toBeTruthy();
+		expect(screen.queryByText("닉네임을 정해 주세요")).toBeNull();
+		expect(
+			screen.queryByText("입장 버튼을 누르면 룰렛과 채팅에 참가합니다."),
+		).toBeNull();
+		expect(screen.getByRole("textbox", { name: "닉네임" })).toBeTruthy();
+		expect(enter).not.toHaveBeenCalled();
+	});
+	it("keeps the same feedback region and input status slot through empty, checking, available and taken states", async () => {
+		fetchMock
+			.mockResolvedValueOnce(response("동료"))
+			.mockResolvedValueOnce(response("방장", false));
+		render(gate());
+		const input = screen.getByRole("textbox", { name: "닉네임" });
+		const status = screen.getByRole("status");
+		const iconSlot = input.parentElement?.querySelector(
+			".room-entry-input-status",
+		);
+		expect(iconSlot).not.toBeNull();
+		expect(screen.queryByRole("button", { name: "다시 확인" })).toBeNull();
+		fireEvent.change(input, { target: { value: "동료" } });
+		expect(screen.getByRole("status")).toBe(status);
+		await advance();
+		expect(input.parentElement?.querySelector(".room-entry-input-status")).toBe(
+			iconSlot,
+		);
+		expect(screen.getByRole("status")).toBe(status);
+		expect(screen.queryByRole("button", { name: "다시 확인" })).toBeNull();
+		fireEvent.change(input, { target: { value: "방장" } });
+		await advance();
+		expect(screen.getByRole("status")).toBe(status);
+		expect(input.getAttribute("aria-invalid")).toBe("true");
+		expect(screen.getByRole("button", { name: "다시 확인" })).toBeTruthy();
+	});
+
 	it("shows immediate checking feedback while debouncing changes and requires explicit entry after success", async () => {
 		fetchMock.mockResolvedValue(response("동료 둘"));
 		render(gate());
@@ -83,7 +131,7 @@ describe("nickname preflight entry UI", () => {
 		fireEvent.change(input, { target: { value: "동료 하나" } });
 		expect(screen.getByRole("status").textContent).toContain("확인 중…");
 		expect(
-			screen.getByRole("status").querySelector(".room-entry-spinner"),
+			input.parentElement?.querySelector(".room-entry-spinner"),
 		).not.toBeNull();
 		expect((button as HTMLButtonElement).disabled).toBe(true);
 		expect((input as HTMLInputElement).disabled).toBe(false);

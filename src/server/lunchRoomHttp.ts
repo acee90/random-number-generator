@@ -7,7 +7,9 @@ import {
 import {
 	nicknameCheckPath,
 	readBoundedRoomJson,
+	roomEntryInfoPath,
 } from "@/lib/lunchRoomRequest.server";
+import { parseRoomEntryInfo } from "@/lib/roomEntryInfo";
 
 const json = (value: unknown, status: number, headers?: HeadersInit) =>
 	Response.json(value, {
@@ -31,6 +33,63 @@ export async function handleLunchRoomRequest(
 	env: LunchRoomEnvironment,
 ): Promise<Response | null> {
 	const url = new URL(request.url);
+	const entryInfoPath = url.pathname.match(
+		/^\/api\/lunch\/rooms\/([^/]+)\/entry-info$/,
+	);
+	if (entryInfoPath) {
+		const roomId = entryInfoPath[1];
+		if (!isLunchRoomId(roomId))
+			return json(
+				{ code: "ROOM_NOT_FOUND", error: "방을 찾을 수 없습니다." },
+				404,
+			);
+		if (request.method !== "GET")
+			return json({ error: "GET 요청이 필요합니다." }, 405, { Allow: "GET" });
+		// Same-origin GET fetches may omit Origin. Never grant cross-origin reads.
+		const origin = request.headers.get("Origin");
+		if (
+			(origin !== null && origin !== url.origin) ||
+			request.headers.get("Sec-Fetch-Site") === "cross-site"
+		)
+			return json({ error: "같은 사이트에서 방 정보를 확인해 주세요." }, 403);
+		try {
+			const room = env.LunchRooms.get(
+				env.LunchRooms.idFromName(roomId),
+				roomLocationOptions(env),
+			);
+			const response = await room.fetch(
+				new Request(`https://lunch-room.internal${roomEntryInfoPath}`, {
+					method: "GET",
+					headers: { "x-partykit-room": roomId },
+				}),
+			);
+			const body: unknown = await response.json();
+			if (response.status === 200) {
+				const info = parseRoomEntryInfo(body);
+				if (!info) throw new Error("Invalid room entry info");
+				return json(info, 200);
+			}
+			if (response.status === 404 || response.status === 410) {
+				const expired = response.status === 410;
+				return json(
+					{
+						code: expired ? "ROOM_EXPIRED" : "ROOM_NOT_FOUND",
+						error: expired ? "방이 만료됐습니다." : "방을 찾을 수 없습니다.",
+					},
+					response.status,
+				);
+			}
+			throw new Error("Room entry info unavailable");
+		} catch {
+			return json(
+				{
+					code: "ENTRY_INFO_UNAVAILABLE",
+					error: "방 정보를 불러오지 못했습니다.",
+				},
+				503,
+			);
+		}
+	}
 	const availabilityPath = url.pathname.match(
 		/^\/api\/lunch\/rooms\/([^/]+)\/nickname-availability$/,
 	);

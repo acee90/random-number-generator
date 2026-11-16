@@ -1,4 +1,5 @@
 import {
+	ArrowDown,
 	Check,
 	ChevronDown,
 	ChevronUp,
@@ -18,6 +19,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import CopyFallback from "@/components/features/CopyFallback";
 import { LunchWheel } from "@/components/features/LunchWheel";
 import { roomCandidateNumbers } from "@/components/features/RoomCandidateList";
+import RoomChatUnreadBadge from "@/components/features/RoomChatUnreadBadge";
 import RoomDrawDialog, {
 	roomDrawCopyText,
 } from "@/components/features/RoomDrawDialog";
@@ -1035,15 +1037,10 @@ export default function LunchRoomPage({
 											}}
 										>
 											채팅{" "}
-											{unread > 0 && (
-												<span
-													className="room-chat-unread"
-													id={`${id}-chat-unread`}
-													aria-live="polite"
-												>
-													새 메시지 {unread}개
-												</span>
-											)}
+											<RoomChatUnreadBadge
+												count={unread}
+												id={`${id}-chat-unread`}
+											/>
 											{chatCollapsed ? (
 												<ChevronUp size={17} aria-hidden="true" />
 											) : (
@@ -1277,22 +1274,23 @@ export default function LunchRoomPage({
 											</li>
 										)}
 									</ul>
-									{unread > 0 && (
-										<Button
-											variant="secondary"
-											size="sm"
-											type="button"
-											className="room-new-messages"
-											onClick={() => {
-												const list = chatListRef.current;
-												if (list) list.scrollTop = list.scrollHeight;
-												nearBottomRef.current = true;
-												setUnread(0);
-											}}
-										>
-											새 메시지 {unread}개 보기
-										</Button>
-									)}
+									<Button
+										variant="secondary"
+										size="sm"
+										type="button"
+										className="room-new-messages"
+										hidden={unread === 0}
+										aria-label={`새 메시지 ${unread}개 보기`}
+										onClick={() => {
+											const list = chatListRef.current;
+											if (list) list.scrollTop = list.scrollHeight;
+											nearBottomRef.current = true;
+											setUnread(0);
+										}}
+									>
+										<ArrowDown size={16} aria-hidden="true" />
+										<RoomChatUnreadBadge count={unread} announce={false} />
+									</Button>
 									<form
 										className="room-chat-form"
 										onSubmit={(event) => {

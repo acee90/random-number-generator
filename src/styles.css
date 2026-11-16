@@ -49,6 +49,8 @@
 	--card: #fff;
 	--input: #8b967d;
 	--ring: #527427;
+	--focus-ring-width: 2px;
+	--focus-ring-offset: 2px;
 	--destructive: #a13d27;
 	--destructive-foreground: #fff;
 	color-scheme: light;
@@ -79,7 +81,6 @@ a,
 input,
 select {
 	-webkit-tap-highlight-color: transparent;
-	outline-offset: 4px;
 }
 button {
 	cursor: pointer;
@@ -92,7 +93,16 @@ a {
 	text-decoration: none;
 }
 :focus-visible {
-	outline: 3px solid #527427;
+	outline: var(--focus-ring-width) solid var(--ring);
+	outline-offset: var(--focus-ring-offset);
+}
+@media (forced-colors: active) {
+	:root {
+		--ring: Highlight;
+	}
+}
+[data-slot="scroll-area-viewport"]:focus-visible {
+	outline-offset: calc(-1 * var(--focus-ring-offset));
 }
 ::selection {
 	background: var(--lime);

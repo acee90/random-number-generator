@@ -55,7 +55,6 @@ export default function RoomDrawResult({
 		connected &&
 		eligible &&
 		!readOnly &&
-		!isHost &&
 		!ownVote &&
 		optimisticVote?.drawId === draw.id &&
 		optimisticVote.participantId === selfId
@@ -85,7 +84,6 @@ export default function RoomDrawResult({
 			!connected ||
 			!eligible ||
 			readOnly ||
-			isHost ||
 			ownVote ||
 			(optimisticVote &&
 				(optimisticVote.drawId !== draw.id ||
@@ -99,7 +97,6 @@ export default function RoomDrawResult({
 		connected,
 		eligible,
 		readOnly,
-		isHost,
 		ownVote,
 		optimisticVote,
 		draw.id,
@@ -114,7 +111,6 @@ export default function RoomDrawResult({
 			!connected ||
 			!eligible ||
 			readOnly ||
-			isHost ||
 			ownVote ||
 			!participant
 		)
@@ -145,41 +141,24 @@ export default function RoomDrawResult({
 			data-own-choice={ownChoice}
 		>
 			<section className="room-result" aria-labelledby={titleId}>
-				<p className="room-eyebrow">이번 방의 추첨 결과</p>
-				<h3 id={titleId} ref={titleRef} tabIndex={-1}>
-					{winner.name}
-				</h3>
-				<p>{winner.category}</p>
-
-				{!isHost && (
+				<div className="room-result-summary">
+					<p className="room-result-eyebrow">당첨 메뉴</p>
+					<h3 id={titleId} ref={titleRef} tabIndex={-1}>
+						{winner.name}
+					</h3>
+					<p className="room-result-category">{winner.category}</p>
+				</div>
+				{!readOnly && (
 					<RoomDrawFeedback
 						mode="actions"
 						draw={draw}
 						selfId={selfId}
-						isHost={false}
+						isHost={isHost}
 						connected={connected}
 						pending={pending}
 						onVote={submitVote}
 						optimisticVote={activeOptimisticVote}
-						readOnly={readOnly}
 					/>
-				)}
-				{isHost && (
-					<div className="room-result-actions">
-						<Button
-							variant="default"
-							size="lg"
-							type="button"
-							className="room-next-round"
-							disabled={!canNext || nextPending}
-							onClick={onNext}
-						>
-							{nextPending
-								? "대기 화면으로 이동 중…"
-								: "다음 게임 대기 화면으로"}
-							<ArrowRight size={18} aria-hidden="true" />
-						</Button>
-					</div>
 				)}
 			</section>
 			<RoomDrawFeedback
@@ -193,6 +172,21 @@ export default function RoomDrawResult({
 				optimisticVote={activeOptimisticVote}
 				readOnly={readOnly}
 			/>
+			{isHost && !readOnly && (
+				<div className="room-result-actions">
+					<Button
+						variant="outline"
+						size="lg"
+						type="button"
+						className="room-next-round"
+						disabled={!canNext || nextPending || pending}
+						onClick={onNext}
+					>
+						{nextPending ? "대기 화면으로 이동 중…" : "다음 게임 대기 화면으로"}
+						<ArrowRight size={18} aria-hidden="true" />
+					</Button>
+				</div>
+			)}
 		</div>
 	);
 }

@@ -13,12 +13,23 @@
 	background: #fff;
 }
 
+.room-entry-heading {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	margin-block-end: 28px;
+}
+
+.room-entry-title-block {
+	min-inline-size: 0;
+}
+
 .room-entry-icon {
 	display: grid;
 	place-items: center;
 	inline-size: 48px;
 	block-size: 48px;
-	margin-block-end: 20px;
+	flex-shrink: 0;
 	border: 1px solid var(--ink);
 	border-radius: var(--control-radius, 2px);
 	background: var(--lime);
@@ -34,7 +45,8 @@
 
 .room-entry-card h1 {
 	margin: 0;
-	font-size: clamp(24px, 4.5vw, 28px);
+	font-size: clamp(21px, 4.5vw, 26px);
+	overflow-wrap: anywhere;
 	line-height: 1.4;
 	font-weight: 850;
 	letter-spacing: -0.05em;
@@ -42,17 +54,11 @@
 .room-entry-loading {
 	min-block-size: 240px;
 }
+.room-entry-loading > .room-entry-icon {
+	margin-block-end: 20px;
+}
 .room-entry-loading > .room-entry-error {
 	margin-block-start: 20px;
-}
-
-.room-entry-description {
-	margin: 10px 0 28px;
-	padding-block-end: 20px;
-	border-block-end: 1px solid var(--line);
-	font-size: 14px;
-	line-height: 1.6;
-	color: #556247;
 }
 
 .room-entry-form {
@@ -74,19 +80,39 @@
 	color: #556247;
 }
 
+.room-entry-input-wrap {
+	position: relative;
+}
 .room-entry-form input {
+	inline-size: 100%;
 	min-block-size: 52px;
+	padding-inline-end: 44px;
+}
+.room-entry-input-status {
+	position: absolute;
+	inset-inline-end: 14px;
+	inset-block-start: 50%;
+	display: grid;
+	place-items: center;
+	inline-size: 18px;
+	block-size: 18px;
+	transform: translateY(-50%);
+	color: var(--muted);
+	pointer-events: none;
+}
+.room-entry-input-wrap[data-status="available"] .room-entry-input-status {
+	color: #3f5e25;
+}
+.room-entry-input-wrap[data-status="taken"] .room-entry-input-status,
+.room-entry-input-wrap[data-status="invalid"] .room-entry-input-status,
+.room-entry-input-wrap[data-status="error"] .room-entry-input-status {
+	color: #a13322;
 }
 
-.room-entry-hint,
 .room-entry-error {
 	margin: 0;
 	font-size: 12px;
 	line-height: 1.6;
-}
-
-.room-entry-hint {
-	color: #556247;
 }
 
 .room-entry-error {
@@ -94,21 +120,14 @@
 }
 
 .room-entry-availability {
-	display: flex;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 76px;
 	align-items: center;
 	gap: 7px;
-	min-block-size: 40px;
+	min-block-size: 44px;
 	font-size: 12px;
 	line-height: 1.5;
 	color: #556247;
-}
-
-.room-entry-availability > svg {
-	flex-shrink: 0;
-}
-
-.room-entry-availability > span {
-	flex: 1;
 }
 
 .room-entry-availability[data-status="available"] {
@@ -122,11 +141,17 @@
 }
 
 .room-entry-recheck {
-	flex-shrink: 0;
+	grid-column: 2;
+	grid-row: 1;
+	inline-size: 76px;
+	min-block-size: 40px;
+}
+.room-entry-recheck[data-visible="false"] {
+	visibility: hidden;
 }
 .room-entry-submit {
 	inline-size: 100%;
-	margin-block-start: 12px;
+	margin-block-start: 0;
 }
 .room-entry-back {
 	display: flex;

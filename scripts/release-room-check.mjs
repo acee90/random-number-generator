@@ -449,6 +449,28 @@ async function run(config) {
 		});
 		pass("room-create-201");
 
+		activeStage = "entry-info";
+		const entryInfoResponse = await fetch(
+			`${config.origin}/api/lunch/rooms/${roomId}/entry-info`,
+			{
+				method: "GET",
+				cache: "no-store",
+				signal: AbortSignal.any([
+					controller.signal,
+					AbortSignal.timeout(config.timeoutMs),
+				]),
+			},
+		);
+		const entryInfo = await entryInfoResponse.json();
+		ensure(
+			entryInfoResponse.status === 200 &&
+				entryInfoResponse.headers.get("Cache-Control") === "no-store" &&
+				JSON.stringify(Object.keys(entryInfo)) === JSON.stringify(["title"]) &&
+				entryInfo.title === "릴리즈 #8 연결 검증",
+			"PREJOIN_ROOM_TITLE_NOT_PUBLIC_AND_BOUNDED",
+		);
+		pass("prejoin-entry-info-exposes-only-current-room-title");
+
 		activeStage = "auth-and-availability";
 		let host = await join(hostName, hostProof);
 		ensure(host.self.isHost === true, "HOST_AUTHORITY_MISSING");
@@ -884,7 +906,22 @@ async function run(config) {
 		activeStage = "irreversible-voting";
 		await Promise.all([complete(host, first.id), complete(guest, first.id)]);
 		const hostVote = await vote(host, first.id, "up");
-		ensure(hostVote.code === "HOST_CANNOT_VOTE", "HOST_VOTE_ACCEPTED");
+		ensure(hostVote.type === "snapshot", "HOST_VOTE_REJECTED");
+		const savedHostVote = hostVote.snapshot.draw.votes.find(
+			(entry) => entry.participantId === hostIdentity,
+		);
+		ensure(
+			savedHostVote?.vote === "up" &&
+				savedHostVote.name === hostName &&
+				Number.isSafeInteger(savedHostVote.reactionMs) &&
+				savedHostVote.reactionMs >= 0,
+			"INVALID_SAVED_HOST_VOTE",
+		);
+		const hostReplay = await vote(host, first.id, "down");
+		ensure(
+			hostReplay.code === "VOTE_ALREADY_CAST",
+			"HOST_VOTE_REPLAY_ACCEPTED",
+		);
 		const firstVote = await vote(guest, first.id, "up");
 		ensure(firstVote.type === "snapshot", "GUEST_VOTE_REJECTED");
 		const savedVote = firstVote.snapshot.draw.votes.find(
@@ -907,15 +944,21 @@ async function run(config) {
 		const voted = await waitSnapshot(
 			host,
 			(snapshot) =>
-				snapshot.draw?.id === first.id && snapshot.draw.votes?.length === 1,
+				snapshot.draw?.id === first.id && snapshot.draw.votes?.length === 2,
 		);
 		ensure(
 			voted.draw.votes.find((entry) => entry.participantId === guestIdentity)
-				?.vote === "up",
+				?.vote === "up" &&
+				JSON.stringify(
+					voted.draw.votes.find(
+						(entry) => entry.participantId === hostIdentity,
+					),
+				) === JSON.stringify(savedHostVote),
 			"FIRST_VOTE_CHANGED",
 		);
-		pass("host-denied-guest-one-irreversible-vote", {
+		pass("host-and-guest-one-irreversible-vote", {
 			reactionMs: savedVote.reactionMs,
+			hostReactionMs: savedHostVote.reactionMs,
 		});
 
 		activeStage = "freeze-and-history";
@@ -924,6 +967,18 @@ async function run(config) {
 		ensure(
 			JSON.stringify(voted.excludedIds) === JSON.stringify([firstWinnerId]),
 			"ON_DRAW_DID_NOT_SAVE_WINNER_LEDGER",
+		);
+		ensure(
+			voted.drawCount === 1 &&
+				voted.drawCountIsExact === true &&
+				voted.draw.roundNumber === 1 &&
+				voted.exclusionRecords?.length === 1 &&
+				voted.exclusionRecords[0].candidateId === firstWinnerId &&
+				voted.exclusionRecords[0].drawId === first.id &&
+				voted.exclusionRecords[0].roundNumber === 1 &&
+				voted.exclusionRecords[0].drawnAt ===
+					voted.draw.startedAt + voted.draw.durationMs,
+			"ON_DRAW_METADATA_NOT_SAVED",
 		);
 		const resultFilter = await command(host, {
 			type: "game-filter",
@@ -1068,6 +1123,11 @@ async function run(config) {
 		);
 		const historyVote = await vote(guest, first.id, "down");
 		ensure(historyVote.code === "VOTE_CLOSED", "HISTORY_VOTE_ACCEPTED");
+		const hostHistoryVote = await vote(host, first.id, "down");
+		ensure(
+			hostHistoryVote.code === "VOTE_CLOSED",
+			"HOST_HISTORY_VOTE_ACCEPTED",
+		);
 		await sync(host);
 		ensure(
 			JSON.stringify(
@@ -1088,6 +1148,15 @@ async function run(config) {
 			JSON.stringify(secondCompleted.excludedIds) ===
 				JSON.stringify([secondWinnerId]),
 			"OFF_DRAW_DID_NOT_REPLACE_WINNER_LEDGER",
+		);
+		ensure(
+			secondCompleted.drawCount === 2 &&
+				secondCompleted.draw.roundNumber === 2 &&
+				secondCompleted.exclusionRecords?.length === 1 &&
+				secondCompleted.exclusionRecords[0].candidateId === secondWinnerId &&
+				secondCompleted.exclusionRecords[0].drawId === second.id &&
+				secondCompleted.exclusionRecords[0].roundNumber === 2,
+			"OFF_DRAW_METADATA_DID_NOT_REPLACE_LEDGER_AND_KEEP_COUNT",
 		);
 		const enableAgain = await command(host, {
 			type: "options",
@@ -1124,6 +1193,8 @@ async function run(config) {
 			resetExclusions.type === "ack" &&
 				host.snapshot.status === "result" &&
 				host.snapshot.excludedIds.length === 0 &&
+				host.snapshot.exclusionRecords?.length === 0 &&
+				host.snapshot.drawCount === 2 &&
 				JSON.stringify(host.snapshot.draw) === currentResult &&
 				JSON.stringify(host.snapshot.history) === existingHistory,
 			"MANUAL_RESET_CHANGED_RESULT_OR_HISTORY",

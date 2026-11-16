@@ -93,8 +93,8 @@
 	}
 	.lunch-room.room-live .room-primary-column:focus-visible,
 	.lunch-room.room-live .room-chat-list:focus-visible {
-		outline: 2px solid #527427;
-		outline-offset: -2px;
+		outline: var(--focus-ring-width) solid var(--ring);
+		outline-offset: calc(-1 * var(--focus-ring-offset));
 	}
 	.lunch-room.room-live .room-primary-tabs {
 		position: sticky;
@@ -152,13 +152,12 @@
 	}
 	.lunch-room.room-live .room-result-layout > .room-result,
 	.lunch-room.room-live .room-draw-feedback[data-mode="results"] {
-		padding: 10px;
+		padding: 16px;
 		border: 0;
 		border-radius: 0;
 		background: transparent;
 		box-shadow: none;
 	}
-	.lunch-room.room-live .room-result > .room-eyebrow,
 	.lunch-room.room-live .room-draw-status,
 	.lunch-room.room-live
 		.room-draw-feedback[data-mode="actions"]
@@ -173,14 +172,19 @@
 		overflow: hidden;
 		white-space: nowrap;
 	}
-	.lunch-room.room-live .room-result h3 {
-		margin: 0 0 4px;
-		font-size: 22px;
-		line-height: 1.25;
+	.lunch-room.room-live .room-result-layout {
+		min-block-size: clamp(460px, calc(100dvh - 210px), 620px);
 	}
-	.lunch-room.room-live .room-result > p:not(.room-eyebrow) {
+	.lunch-room.room-live .room-result-summary {
+		min-block-size: 156px;
+		padding: 24px 12px;
+	}
+	.lunch-room.room-live .room-result h3 {
+		font-size: clamp(38px, 8cqi, 60px);
+		line-height: 1.14;
+	}
+	.lunch-room.room-live .room-result-category {
 		font-size: 13px;
-		line-height: 1.5;
 	}
 	.lunch-room.room-live .room-draw-feedback[data-mode="actions"] {
 		margin-block-start: 8px;
@@ -198,9 +202,9 @@
 		button {
 		flex-direction: row;
 		gap: 6px;
-		min-block-size: 72px;
-		padding: 22px 6px 10px;
-		font-size: 17px;
+		min-block-size: 84px;
+		padding: 22px 10px 14px;
+		font-size: 18px;
 	}
 	.lunch-room.room-live .room-feedback-choice-icon {
 		inline-size: 24px;
@@ -211,7 +215,8 @@
 		font-size: 11px;
 	}
 	.lunch-room.room-live .room-result-actions {
-		margin-block-start: 8px;
+		margin: 0;
+		padding: 16px;
 	}
 	.lunch-room.room-live .room-result-actions .room-next-round {
 		min-block-size: 48px;
@@ -244,25 +249,25 @@
 		.room-draw-feedback[data-mode="results"]
 		.room-feedback-tally {
 		display: grid;
-		grid-template-columns: 18px max-content max-content;
+		grid-template-columns: 24px max-content max-content;
 		justify-content: center;
 		align-items: center;
 		gap: 4px;
 		margin-block-end: 6px;
-		font-size: 12px;
+		font-size: 14px;
 	}
 	.lunch-room.room-live .room-feedback-tally > span {
 		grid-area: auto;
 	}
 	.lunch-room.room-live .room-feedback-tally-icon svg {
-		inline-size: 18px;
-		block-size: 18px;
+		inline-size: 24px;
+		block-size: 24px;
 	}
 	.lunch-room.room-live
 		.room-draw-feedback[data-mode="results"]
 		.room-feedback-tally
 		strong {
-		font-size: 24px;
+		font-size: 36px;
 	}
 	.lunch-room.room-live
 		.room-draw-feedback[data-mode="results"]
@@ -374,5 +379,13 @@
 		.room-lifecycle-panel
 		.room-wheel-stage:has(> .room-result-overlay) {
 		min-block-size: 0;
+	}
+}
+@media (max-width: 420px) {
+	.lunch-room.room-live .room-heading {
+		flex-wrap: wrap;
+	}
+	.lunch-room.room-live .room-title-block {
+		flex-basis: 100%;
 	}
 }

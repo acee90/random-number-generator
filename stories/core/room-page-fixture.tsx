@@ -311,7 +311,7 @@ export function RoomPageFixtureProvider({
 				(snapshot.status !== "collecting" &&
 					snapshot.status !== "reviewing" &&
 					snapshot.status !== "editing") ||
-				!getEligibleRoomCandidates(snapshot).length
+				!getEligibleRoomCandidates({ ...snapshot, excludeDrawn: false }).length
 			)
 				return false;
 			applySnapshot((value) => ({
@@ -685,7 +685,6 @@ export function RoomPageFixtureProvider({
 			const value = current.current;
 			const draw = value.snapshot.draw;
 			if (
-				options.isHost ||
 				!draw ||
 				draw.id !== drawId ||
 				!drawFinished(draw) ||
