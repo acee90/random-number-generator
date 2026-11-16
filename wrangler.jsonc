@@ -11,6 +11,9 @@
 	"observability": {
 		"enabled": true
 	},
+	"vars": {
+		"LUNCH_ROOM_LOCATION_HINT": "apac-ne"
+	},
 	"kv_namespaces": [
 		{
 			"binding": "SEED_POOL",
@@ -24,7 +27,7 @@
 		{ "tag": "lunch-rooms-v1", "new_sqlite_classes": ["LunchRoomServer"] }
 	],
 	"previews": {
-		"placement": { "region": "aws:ap-northeast-2" },
+		"placement": { "mode": "off" },
 		"vars": {
 			"LUNCH_ROOM_DIAGNOSTICS": "enabled",
 			"LUNCH_ROOM_LOCATION_HINT": "apac-ne"

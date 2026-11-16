@@ -84,6 +84,12 @@ DO 클래스를 구현하는 Worker는 일반 Version URL을 제공하지 않는
 
 Git 빌드의 비운영 명령은 `npx wrangler preview`, 운영 명령은 기존 `npx wrangler deploy`다. `wrangler.jsonc`의 `previews`는 같은 Worker의 `LunchRoomServer`를 참조해 미리보기별 DO namespace를 자동 분리하고, `SEED_POOL`은 전용 KV `jeommechu-room-latency-preview`에 연결한다. 이 KV를 사용하는 미리보기끼리는 공유하지만 운영 KV와는 분리된다. 운영 secret은 상속하지 않으며 미리보기 추첨은 공개 난수 대체 경로를 사용한다.
 
+신규 방의 동북아 DO 힌트는 `vars.LUNCH_ROOM_LOCATION_HINT=apac-ne`로 설정한다. 생성·닉네임·WebSocket의 최초 접근 경로가 같은 힌트를 사용한다. 운영 Worker의 `placement`는 기본값을 유지하며, DO-only 출시 검증용 Preview도 `previews.placement.mode=off`다. 힌트는 새 객체의 최초 접근에만 유효하고 기존 방·namespace·저장 상태를 이동시키지 않는다. 서울 고정이나 LAX 접속 경로 해소를 보장하는 설정도 아니다. 확정 출시 범위와 실제 배포·검증 상태는 [#47](https://github.com/acee90/random-number-generator/issues/47)에 기록한다.
+
+Cloudflare DO 목록의 `jeommechu_LunchRoomServer`는 운영 namespace다. `jeommechu_codex-asia-placement-baseline_LunchRoomServer`와 `jeommechu_codex-asia-placement-seoul_LunchRoomServer`는 비교용 Preview의 별도 namespace 명칭이다. 이 목록의 항목 수는 개별 방 수나 상시 서버 대수가 아니다. 방 데이터의 TTL 만료와 namespace 목록 삭제는 별개이며, 테스트 정리를 이유로 운영 namespace를 삭제하지 않는다.
+
+설정 변경 후 타입은 `npx wrangler types --env-file .env.example`로 갱신한다. 빈 예시 환경 파일을 사용해 기존 secret 이름의 타입을 보존하며 실제 운영 secret 값을 읽거나 배포하지 않는다.
+
 빌드 로그에서 실제 Preview URL·커밋을 확인하고 새 시험 방에서 닉네임·채팅·권한·재접속을 검증한 뒤 main을 병합한다. 운영 트래픽은 main 배포가 완료될 때까지 기존 버전을 유지한다. 진행·실제 URL·배포 전후 측정은 [#47](https://github.com/acee90/random-number-generator/issues/47)에서 관리한다.
 
 ### 최초 DO 마이그레이션과 운영 배포

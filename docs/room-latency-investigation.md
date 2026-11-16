@@ -133,3 +133,9 @@ npm run check:latency -- --origin https://jeommechu.dev --samples 5
 긴 사용자 접속 경로와 Worker 위치 계측 불일치는 미해결이며, 새 DO의 한국 처리와 사용자 체감 지연 개선은 구분한다. Cloudflare/ISP 문의는 전송하지 않았다.
 
 공식 근거: [Placement](https://developers.cloudflare.com/workers/configuration/placement/), [Preview 설정](https://developers.cloudflare.com/workers/previews/configuration/), [Preview 관측](https://developers.cloudflare.com/workers/previews/test-and-debug/), [DO 위치](https://developers.cloudflare.com/durable-objects/reference/data-location/), [Trace 속성](https://developers.cloudflare.com/workers/observability/traces/spans-and-attributes/).
+
+## DO 힌트만 적용하는 출시 범위 — 2026-11-16
+
+위 비교는 서울 Worker와 동북아 DO를 함께 적용한 당시 실험 기록이다. 이후 사용자가 DO 지역 힌트의 main 반영·운영 배포를 명시 요청했다. 이번 출시 범위는 `vars.LUNCH_ROOM_LOCATION_HINT=apac-ne`와 일관된 최초 접근 힌트이며, Worker의 서울 리전 설정은 포함하지 않는다. 같은 브랜치의 Preview도 Worker 기본 배치 + 동북아 신규 DO로 바꿔 회귀를 확인한다.
+
+기존 namespace와 `lunch-rooms-v1` migration은 유지하며 새 namespace를 만들거나 기존 방 데이터를 옮기지 않는다. 힌트는 신규 DO에만 적용된다. 앞선 조합의 지연 수치를 이번 DO-only 조건의 개선 증거로 사용하지 않는다. 실제 main 병합·운영 배포·새 방 검증 결과는 [#47](https://github.com/acee90/random-number-generator/issues/47)에서 구분해 관리한다.

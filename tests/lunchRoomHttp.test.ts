@@ -631,7 +631,12 @@ describe("lunch room location experiment", () => {
 		setting,
 		options,
 	}) => {
-		const configuredEnv = { ...env, LUNCH_ROOM_LOCATION_HINT: setting };
+		// Exercise absent/invalid runtime configuration as well as the generated
+		// production Env's literal "apac-ne" binding.
+		const configuredEnv = {
+			...env,
+			LUNCH_ROOM_LOCATION_HINT: setting,
+		} as unknown as Env;
 		const creation = await handleLunchRoomRequest(
 			createRequest(),
 			configuredEnv,
