@@ -39,7 +39,7 @@ async function checkPage(path, canonical) {
 		assert.equal(response.headers.get("X-Robots-Tag"), "noindex, nofollow");
 	assert.equal(meta("og:title"), document.title);
 	assert.equal(meta("twitter:title"), document.title);
-	assert.equal(meta("og:image"), `${canonicalOrigin}/og-jeommechu.png`);
+	assert.equal(meta("og:image"), `${canonicalOrigin}/og-jeommechu-simple.png`);
 	assert.equal(meta("twitter:image"), meta("og:image"));
 	assert.equal(meta("og:image:width"), "1200");
 	assert.equal(meta("og:image:height"), "630");
@@ -75,7 +75,7 @@ async function main() {
 		[
 			"/robots.txt",
 			"/sitemap.xml",
-			"/og-jeommechu.png",
+			"/og-jeommechu-simple.png",
 			"/naver593f51ab9c1bd96c45ef4d8f8be99cca.html",
 			"/manifest.json",
 		].map((path) => request(path)),

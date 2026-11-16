@@ -1,5 +1,5 @@
 export const siteOrigin = "https://jeommechu.dev";
-export const socialImage = `${siteOrigin}/og-jeommechu.png`;
+export const socialImage = `${siteOrigin}/og-jeommechu-simple.png`;
 export const privateRobots = "noindex, nofollow";
 
 export const lunchPageSeo = {
@@ -53,7 +53,7 @@ export function createSeoHead({
 			{ property: "og:image:type", content: "image/png" },
 			{
 				property: "og:image:alt",
-				content: "점메추 · 함께 정하는 오늘 점심, 점심 메뉴 룰렛",
+				content: "큰 점메추 글자와 라임색 점심 메뉴 룰렛",
 			},
 			{ name: "twitter:card", content: "summary_large_image" },
 			{ name: "twitter:title", content: title },
@@ -61,7 +61,7 @@ export function createSeoHead({
 			{ name: "twitter:image", content: socialImage },
 			{
 				name: "twitter:image:alt",
-				content: "점메추 · 함께 정하는 오늘 점심, 점심 메뉴 룰렛",
+				content: "큰 점메추 글자와 라임색 점심 메뉴 룰렛",
 			},
 		],
 		links: canonical ? [{ rel: "canonical", href: canonical }] : [],
