@@ -1,4 +1,4 @@
-import { FolderOpen, ListPlus, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { FolderOpen, ListPlus, Plus, Trash2 } from "lucide-react";
 import {
 	type ReactNode,
 	type RefObject,
@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import type { useLunchRoom } from "@/hooks/useLunchRoom";
 import { lunchCategories } from "@/lib/lunch";
 import {
@@ -42,7 +43,8 @@ import CandidateListLoadDialog, {
 	type CandidateListSelection,
 } from "./CandidateListLoadDialog";
 import CandidateListSaveDialog from "./CandidateListSaveDialog";
-import RoomGameFilter from "./RoomGameFilter";
+import RoomCandidateEditor from "./RoomCandidateEditor";
+import RoomExclusionPanel from "./RoomExclusionPanel";
 import "./room-lifecycle.css";
 
 type Room = ReturnType<typeof useLunchRoom>;
@@ -103,6 +105,9 @@ export default function RoomLifecyclePanel({
 	const locked = busy || pending || !connected || stagePending !== null;
 	const candidates = snapshot?.candidates ?? [];
 	const eligible = snapshot ? getEligibleRoomCandidates(snapshot) : [];
+	const preparedCount = snapshot
+		? getEligibleRoomCandidates({ ...snapshot, excludeDrawn: false }).length
+		: 0;
 	const eligibleIds = new Set(eligible.map((entry) => entry.id));
 	const eligibleProbability = eligible.length
 		? new Intl.NumberFormat("ko-KR", {
@@ -111,16 +116,17 @@ export default function RoomLifecyclePanel({
 			}).format(1 / eligible.length)
 		: "0%";
 	const excludedIds = snapshot?.excludedIds ?? [];
-	const excluded = candidates.filter((entry) => excludedIds.includes(entry.id));
-	const manualExcluded = candidates.filter(
-		(entry) =>
-			entry.included === false ||
-			snapshot?.gameFilter?.excludedIds.includes(entry.id),
-	);
 	const revision = snapshot?.revision ?? snapshot?.listVersion ?? 1;
 	const excludeDrawn = snapshot?.excludeDrawn ?? false;
 	const [recommendation, setRecommendation] = useState("");
 	const [recommendationCategory, setRecommendationCategory] = useState("");
+	const [recommendationCategoryOpen, setRecommendationCategoryOpen] =
+		useState(false);
+	const [recommendationCategoryDraft, setRecommendationCategoryDraft] =
+		useState("");
+	const recommendationCategoryTriggerRef = useRef<HTMLButtonElement | null>(
+		null,
+	);
 	const [recommendationPending, setRecommendationPending] = useState(false);
 	const recommendationAttempt = useRef(0);
 	const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
@@ -128,6 +134,7 @@ export default function RoomLifecyclePanel({
 	const [candidateViewOpen, setCandidateViewOpen] = useState(false);
 	const candidateViewTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const [discardOpen, setDiscardOpen] = useState(false);
+	const discardButtonRef = useRef<HTMLButtonElement | null>(null);
 	const [draftCandidates, setDraftCandidates] = useState<RoomCandidate[]>(() =>
 		candidates.map((entry) => ({ ...entry })),
 	);
@@ -143,8 +150,8 @@ export default function RoomLifecyclePanel({
 	);
 	const [draftStageInvalid, setDraftStageInvalid] = useState(false);
 	const [newName, setNewName] = useState("");
-	const [newCategory, setNewCategory] = useState("");
 	const [writing, setWriting] = useState(false);
+	const [editorGeneration, setEditorGeneration] = useState(0);
 	const [loadOpen, setLoadOpen] = useState(false);
 	const loadButtonRef = useRef<HTMLButtonElement | null>(null);
 	const newCandidateRef = useRef<HTMLInputElement | null>(null);
@@ -157,7 +164,6 @@ export default function RoomLifecyclePanel({
 	const [saveCandidates, setSaveCandidates] = useState<RoomCandidate[]>([]);
 	const [removeOwn, setRemoveOwn] = useState<RoomCandidate | null>(null);
 	const [editError, setEditError] = useState("");
-	const [editorMode, setEditorMode] = useState<"list" | "filter">("list");
 	const liveFilter = gameFilterFor(snapshot);
 	const liveFilterKey = filterSignature(liveFilter);
 	const [draftFilter, setDraftFilter] = useState<GameFilter>(() =>
@@ -179,8 +185,7 @@ export default function RoomLifecyclePanel({
 	const candidatesDirty =
 		JSON.stringify(draftCandidates) !== originalCandidates;
 	const dirty = candidatesDirty || filterDirty;
-	const unsaved =
-		dirty || Boolean(newName.trim()) || Boolean(newCategory.trim());
+	const unsaved = dirty || Boolean(newName.trim());
 	const sameDraftStage =
 		phase === draftPhase &&
 		(snapshot?.intakeId ?? null) === draftIntakeId &&
@@ -237,8 +242,8 @@ export default function RoomLifecyclePanel({
 		category: candidate.category.trim() || "미분류",
 		included: currentById.get(candidate.id)?.included ?? candidate.included,
 	}));
-	const previewEligible = snapshot
-		? getEligibleRoomCandidates({
+	const previewSnapshot = snapshot
+		? {
 				...snapshot,
 				candidates: filterDirty
 					? liveDraftCandidates.map((candidate) => ({
@@ -247,8 +252,19 @@ export default function RoomLifecyclePanel({
 						}))
 					: liveDraftCandidates,
 				gameFilter: draftFilter,
-			})
+			}
+		: null;
+	const previewEligible = previewSnapshot
+		? getEligibleRoomCandidates(previewSnapshot)
 		: [];
+	const previewPreparedCount = previewSnapshot
+		? getEligibleRoomCandidates({ ...previewSnapshot, excludeDrawn: false })
+				.length
+		: 0;
+
+	useEffect(() => {
+		if (phase !== "collecting") setRecommendationCategoryOpen(false);
+	}, [phase]);
 
 	// Only real shared changes rebase clean fields. Chat, view popups and local
 	// keystrokes must never replace a draft; only our own ACK completes a save.
@@ -294,6 +310,7 @@ export default function RoomLifecyclePanel({
 	function resetDraft() {
 		const current = liveSnapshot.current;
 		if (!current) return;
+		setEditorGeneration((generation) => generation + 1);
 		const copy = current.candidates.map((entry) => ({ ...entry }));
 		setDraftCandidates(copy);
 		setDraftFilter(gameFilterFor(current));
@@ -304,11 +321,11 @@ export default function RoomLifecyclePanel({
 		setDraftIntakeId(current.intakeId ?? null);
 		setDraftStageInvalid(false);
 		setNewName("");
-		setNewCategory("");
 		setEditError("");
 		lastEditAttempt.current = null;
 	}
-	function requestReset() {
+	function requestReset(trigger?: HTMLButtonElement | null) {
+		discardButtonRef.current = trigger ?? null;
 		if (unsaved) setDiscardOpen(true);
 		else resetDraft();
 	}
@@ -340,10 +357,6 @@ export default function RoomLifecyclePanel({
 	async function applyEdit(): Promise<boolean> {
 		if (!editable) return false;
 		if (!unsaved) return true;
-		if (!newName.trim() && newCategory.trim()) {
-			setEditError("분류와 함께 추가할 후보 이름을 입력해 주세요.");
-			return false;
-		}
 		let items = liveDraftCandidates;
 		const pendingName = newName.trim();
 		if (pendingName) {
@@ -354,17 +367,16 @@ export default function RoomLifecyclePanel({
 				return false;
 			}
 			items = [
-				...items,
 				{
 					id: crypto.randomUUID(),
 					name: pendingName,
-					category: newCategory.trim() || "미분류",
+					category: "미분류",
 					included: true,
 				},
+				...items,
 			];
 			setDraftCandidates(items);
 			setNewName("");
-			setNewCategory("");
 		}
 		if (items.some((entry) => !entry.name.trim())) {
 			setEditError("모든 후보 이름을 입력해 주세요.");
@@ -494,19 +506,19 @@ export default function RoomLifecyclePanel({
 		)
 			return;
 		setDraftCandidates((entries) => [
-			...entries,
 			{
 				id: crypto.randomUUID(),
 				name,
-				category: newCategory.trim() || "미분류",
+				category: "미분류",
 				included: true,
 			},
+			...entries,
 		]);
 		setNewName("");
-		setNewCategory("");
 	}
 	function importList(selection: CandidateListSelection) {
 		if (!editable) return false;
+		setEditorGeneration((generation) => generation + 1);
 		setDraftCandidates(
 			selection.candidates.map((candidate) => ({
 				...candidate,
@@ -514,10 +526,8 @@ export default function RoomLifecyclePanel({
 			})),
 		);
 		setDraftFilter({ categories: null, excludedIds: [] });
-		setEditorMode("list");
 		setSourceName(selection.name);
 		setNewName("");
-		setNewCategory("");
 		setWriting(true);
 		setEditError("");
 		setLoadOpen(false);
@@ -527,24 +537,25 @@ export default function RoomLifecyclePanel({
 	}
 	function selectList(selection: CandidateListSelection) {
 		if (!editable) return false;
-		if (draftCandidates.length > 0 || newName.trim() || newCategory.trim()) {
+		if (draftCandidates.length > 0 || newName.trim()) {
 			setPendingLoad(selection);
 			return false;
 		}
 		return importList(selection);
 	}
-	function openLoader(event: React.MouseEvent<HTMLButtonElement>) {
-		loadButtonRef.current = event.currentTarget;
+	function openLoader(trigger: HTMLButtonElement | null) {
+		loadButtonRef.current = trigger;
 		setLoadOpen(true);
 	}
-	function openSave() {
+	function openSave(trigger: HTMLButtonElement | null) {
 		if (!editable) return;
+		saveButtonRef.current = trigger;
 		const items = [...draftCandidates];
 		if (newName.trim())
-			items.push({
+			items.unshift({
 				id: crypto.randomUUID(),
 				name: newName.trim(),
-				category: newCategory.trim() || "미분류",
+				category: "미분류",
 				included: true,
 			});
 		setSaveCandidates(items);
@@ -555,7 +566,7 @@ export default function RoomLifecyclePanel({
 			candidate.included === false ||
 			snapshot?.gameFilter?.excludedIds.includes(candidate.id)
 		)
-			return "직접 제외";
+			return "후보 필터에서 제외";
 		if (
 			snapshot?.gameFilter?.categories &&
 			!snapshot.gameFilter.categories.includes(candidate.category || "미분류")
@@ -564,38 +575,6 @@ export default function RoomLifecyclePanel({
 		if (excludeDrawn && excludedIds.includes(candidate.id)) return "당첨 제외";
 		return "추첨 포함";
 	}
-	const gameOptions = (
-		<section
-			className="room-game-options room-next-options"
-			aria-labelledby={`${id}-game-options-title`}
-		>
-			<h3 id={`${id}-game-options-title`}>
-				{showResult ? "다음 게임 옵션" : "이번 게임 옵션"}
-			</h3>
-			<label>
-				<input
-					type="checkbox"
-					checked={excludeDrawn}
-					disabled={
-						!isHost ||
-						locked ||
-						["fetching", "drawing", "closed"].includes(phase)
-					}
-					onChange={(event) =>
-						void room.updateRoomOptions(event.target.checked, revision)
-					}
-				/>
-				중복 없이 추첨 · 뽑힌 후보 제외
-			</label>
-			<p>
-				{busy || phase === "fetching" || phase === "drawing"
-					? "추첨이 끝난 뒤 변경할 수 있습니다."
-					: showResult
-						? "다음 추첨에 적용됩니다. 이번 결과는 유지됩니다."
-						: "이번 추첨에 적용됩니다. 옵션을 끄기만 하면 제외 내역은 유지됩니다."}
-			</p>
-		</section>
-	);
 
 	return (
 		<section
@@ -603,9 +582,11 @@ export default function RoomLifecyclePanel({
 			data-phase={phase}
 			aria-label="게임 진행"
 		>
-			<div className="room-lifecycle-heading">
+			<div
+				className="room-lifecycle-heading"
+				hidden={isHost && listScreen && !showSetupChoice}
+			>
 				<div>
-					<p className="room-eyebrow">같은 방에서 계속 함께</p>
 					<h2>{phaseLabel}</h2>
 				</div>
 				<div className="room-lifecycle-tools">
@@ -614,13 +595,20 @@ export default function RoomLifecyclePanel({
 							variant="outline"
 							size="sm"
 							aria-haspopup="dialog"
+							aria-describedby={`${id}-candidate-count`}
 							onClick={(event) => {
 								candidateViewTriggerRef.current = event.currentTarget;
 								setCandidateViewOpen(true);
 							}}
 						>
-							후보 보기
+							후보 보기{" "}
+							<span className="room-candidate-count-badge" aria-hidden="true">
+								{eligible.length}
+							</span>
 						</Button>
+						<span className="sr-only" id={`${id}-candidate-count`}>
+							전체 후보 {candidates.length}개 중 이번 추첨 {eligible.length}개
+						</span>
 						<DialogContent
 							className="room-options-dialog"
 							aria-labelledby={`${id}-options-title`}
@@ -639,8 +627,8 @@ export default function RoomLifecyclePanel({
 									후보 보기
 								</DialogTitle>
 								<DialogDescription>
-									다음 추첨의 후보, 등록자와 적용 확률을 확인하는 조회
-									화면입니다.
+									전체 {candidates.length}개 · 이번 추첨 {eligible.length}개.
+									후보, 제외 사유와 적용 확률을 확인하세요.
 								</DialogDescription>
 							</DialogHeader>
 							<ul className="room-options-readonly">
@@ -701,7 +689,10 @@ export default function RoomLifecyclePanel({
 			)}
 			{listScreen ? (
 				<div className="room-intake-screen">
-					<p className="room-intake-description">
+					<p
+						className="room-intake-description"
+						hidden={isHost && !showSetupChoice}
+					>
 						{phase === "editing"
 							? isHost
 								? showSetupChoice
@@ -738,7 +729,7 @@ export default function RoomLifecyclePanel({
 								<Button
 									variant="outline"
 									disabled={!editable}
-									onClick={openLoader}
+									onClick={(event) => openLoader(event.currentTarget)}
 									aria-haspopup="dialog"
 								>
 									<FolderOpen size={24} aria-hidden="true" />
@@ -748,348 +739,158 @@ export default function RoomLifecyclePanel({
 							</div>
 						</section>
 					)}
-					{isHost && !showSetupChoice && (
-						<div className="room-intake-actions">
-							<Button
-								variant="outline"
-								disabled={locked}
-								onClick={() =>
-									void changeStage(phase === "collecting" ? "close" : "open")
-								}
-							>
-								{phase === "editing"
-									? "후보 추천받기"
-									: phase === "collecting"
-										? "접수 종료"
-										: "다시 접수받기"}
-							</Button>
-							<Button
-								disabled={
-									locked ||
-									((unsaved ? previewEligible.length : eligible.length) === 0 &&
-										!newName.trim())
-								}
-								onClick={() => void changeStage("finalize")}
-							>
-								{stagePending === "finalize" ? "마감 중…" : "마감"}
-							</Button>
-							<p>
-								{phase === "collecting"
-									? "접수 종료: 목록에서 계속 확인 · 마감: 룰렛 대기로 이동"
-									: "마감하면 변경사항을 적용하고 룰렛 대기로 이동합니다."}
-							</p>
-						</div>
-					)}
-					{!showSetupChoice && gameOptions}
 					{isHost ? (
 						!showSetupChoice && (
-							<section className="room-inline-editor" aria-label="후보 편집">
-								<div className="room-inline-source">
-									<p>{sourceName}</p>
-									<Button
-										variant="outline"
-										size="sm"
-										disabled={!editable}
-										onClick={openLoader}
-										aria-haspopup="dialog"
-									>
-										목록 불러오기
-									</Button>
-								</div>
-
-								<fieldset className="room-editor-modes">
-									<legend className="sr-only">후보 편집 방식</legend>
-									<Button
-										variant="ghost"
-										size="sm"
-										aria-pressed={editorMode === "list"}
-										onClick={() => setEditorMode("list")}
-									>
-										목록 편집
-									</Button>
-									<Button
-										variant="ghost"
-										size="sm"
-										aria-pressed={editorMode === "filter"}
-										onClick={() => setEditorMode("filter")}
-									>
-										게임 필터
-									</Button>
-								</fieldset>
-								{editorMode === "list" && (
-									<div className="room-candidate-add room-inline-add">
-										<label
-											className="room-candidate-field"
-											htmlFor={`${id}-new-name`}
-										>
-											<span>후보 이름</span>
-											<Input
-												ref={newCandidateRef}
-												id={`${id}-new-name`}
-												aria-label="새 후보 이름"
-												value={newName}
-												maxLength={80}
-												disabled={!editable}
-												onChange={(event) => setNewName(event.target.value)}
-												onKeyDown={(event) => {
-													if (
-														event.key === "Enter" &&
-														!event.nativeEvent.isComposing
-													) {
-														event.preventDefault();
-														addDraftCandidate();
-													}
-												}}
-											/>
-										</label>
-										<label
-											className="room-candidate-field"
-											htmlFor={`${id}-new-category`}
-										>
-											<span>분류 (선택)</span>
-											<Input
-												id={`${id}-new-category`}
-												aria-label="새 후보 분류"
-												list={`${id}-categories`}
-												value={newCategory}
-												maxLength={24}
-												disabled={!editable}
-												onChange={(event) => setNewCategory(event.target.value)}
-											/>
-										</label>
-										<Button
-											variant="outline"
-											disabled={
-												!editable ||
-												!newName.trim() ||
-												draftCandidates.length >= lunchRoomLimits.maxCandidates
-											}
-											onClick={addDraftCandidate}
-										>
-											<Plus size={16} aria-hidden="true" />
-											후보 추가
-										</Button>
-									</div>
-								)}
-
-								<div className="room-inline-toolbar">
-									<p className="room-intake-count">
-										전체 {draftCandidates.length}개 · 이번 추첨{" "}
-										{previewEligible.length}개
-										{unsaved ? " · 미적용 변경 있음" : ""}
-									</p>
-									<Button
-										variant="outline"
-										size="sm"
-										disabled={!editable || !unsaved}
-										onClick={() => void applyEdit()}
-									>
-										{["edit", "filter"].includes(room.mutationPending ?? "")
-											? "적용 중…"
-											: "변경 적용"}
-									</Button>
-									<Button
-										variant="ghost"
-										size="sm"
-										disabled={locked || !unsaved}
-										onClick={requestReset}
-									>
-										변경 취소
-									</Button>
-									<Button
-										variant="outline"
-										size="sm"
-										disabled={
-											!editable ||
-											(draftCandidates.length === 0 && !newName.trim())
-										}
-										ref={saveButtonRef}
-										onClick={openSave}
-									>
-										내 목록에 저장
-									</Button>
-								</div>
-								{editorMode === "list" &&
-									previewEligible.length === 0 &&
-									draftCandidates.length > 0 && (
-										<div className="room-edit-conflict">
-											<p>
-												현재 게임 조건에 맞는 후보가 없습니다. 후보 원본을
-												유지하고 필터를 초기화할 수 있어요.
-											</p>
-											<Button
-												variant="outline"
-												size="sm"
-												disabled={locked}
-												onClick={() =>
-													setDraftFilter({ categories: null, excludedIds: [] })
-												}
-											>
-												필터 초기화
-											</Button>
-										</div>
-									)}
-								{candidatesDirty &&
-									snapshot?.listVersion !== draftBaseVersion && (
-										<div className="room-edit-conflict">
-											<p>
-												편집하는 동안 공유 후보가 바뀌었습니다. 현재 초안은
-												유지됩니다.
-											</p>
-											<Button
-												variant="outline"
-												size="sm"
-												disabled={locked}
-												onClick={requestReset}
-											>
-												최신 후보 불러오기
-											</Button>
-										</div>
-									)}
-								{filterDirty &&
-									liveFilterKey !== originalFilter &&
-									!draftFilterMatchesLive && (
-										<div className="room-edit-conflict">
-											<p>
-												편집하는 동안 공유 필터가 바뀌었습니다. 현재 초안은
-												유지됩니다.
-											</p>
-											<Button
-												variant="outline"
-												size="sm"
-												disabled={locked}
-												onClick={requestReset}
-											>
-												최신 조건 불러오기
-											</Button>
-										</div>
-									)}
-								{!sameDraftStage && (
-									<div className="room-edit-conflict">
-										<p>
-											게임 단계가 바뀌어 적용을 잠갔습니다. 초안은 보관됩니다.
-											최신 목록을 확인한 뒤 다시 편집해 주세요.
-										</p>
-										<Button
-											variant="outline"
-											size="sm"
-											disabled={locked}
-											onClick={requestReset}
-										>
-											최신 목록으로 다시 편집
-										</Button>
-									</div>
-								)}
-								{editError && (
-									<p role="alert" className="room-error">
-										{editError}
-									</p>
-								)}
-								{room.error && (
-									<p role="alert" className="room-error">
-										{room.error}
-									</p>
-								)}
-								{editorMode === "filter" ? (
-									<RoomGameFilter
-										candidates={liveDraftCandidates}
-										filter={draftFilter}
-										eligibleIds={
-											new Set(previewEligible.map((candidate) => candidate.id))
-										}
-										excludedIds={excludedIds}
-										excludeDrawn={excludeDrawn}
-										disabled={!editable}
-										onChange={setDraftFilter}
-									/>
-								) : (
-									<ul className="room-intake-list room-inline-candidates">
-										{draftCandidates.map((candidate, index) => (
-											<li className="room-options-candidate" key={candidate.id}>
-												<label
-													className="room-candidate-field"
-													htmlFor={`${id}-${candidate.id}-name`}
-												>
-													<span>{index + 1}번 후보 이름</span>
-													<Input
-														id={`${id}-${candidate.id}-name`}
-														aria-label={`${index + 1}번 후보 이름`}
-														value={candidate.name}
-														maxLength={80}
-														disabled={!editable}
-														onChange={(event) =>
-															setDraftCandidates((entries) =>
-																entries.map((entry) =>
-																	entry.id === candidate.id
-																		? { ...entry, name: event.target.value }
-																		: entry,
-																),
-															)
+							<RoomCandidateEditor
+								title={
+									phase === "collecting"
+										? "후보 추천 접수 중"
+										: phase === "reviewing"
+											? "접수 종료 · 목록 확인"
+											: "후보 편집"
+								}
+								sourceName={sourceName}
+								candidates={draftCandidates}
+								filter={draftFilter}
+								onCandidatesChange={setDraftCandidates}
+								onFilterChange={setDraftFilter}
+								newName={newName}
+								onNewNameChange={setNewName}
+								onAdd={addDraftCandidate}
+								onLoad={openLoader}
+								onSave={openSave}
+								onDiscard={requestReset}
+								disabled={!editable}
+								unsaved={unsaved}
+								categorySuggestions={categorySuggestions}
+								newCandidateRef={newCandidateRef}
+								preparedCount={previewPreparedCount}
+								eligibleCount={previewEligible.length}
+								excludedIds={excludedIds}
+								excludeDrawn={excludeDrawn}
+								contextKey={[
+									snapshot?.roomId,
+									phase,
+									snapshot?.intakeId,
+									draftBaseVersion,
+									sameDraftStage,
+									editorGeneration,
+								].join(":")}
+								notices={
+									<>
+										{candidatesDirty &&
+											snapshot?.listVersion !== draftBaseVersion && (
+												<div className="room-edit-conflict">
+													<p>
+														편집하는 동안 공유 후보가 바뀌었습니다. 현재 초안은
+														유지됩니다.
+													</p>
+													<Button
+														variant="outline"
+														size="sm"
+														disabled={locked}
+														onClick={(event) => {
+															candidateViewTriggerRef.current =
+																event.currentTarget;
+															setCandidateViewOpen(true);
+														}}
+													>
+														공유 후보 보기
+													</Button>
+													<Button
+														variant="outline"
+														size="sm"
+														disabled={locked}
+														onClick={(event) =>
+															requestReset(event.currentTarget)
 														}
-													/>
-												</label>
-												<label
-													className="room-candidate-field"
-													htmlFor={`${id}-${candidate.id}-category`}
-												>
-													<span>분류 (선택)</span>
-													<Input
-														id={`${id}-${candidate.id}-category`}
-														aria-label={`${index + 1}번 후보 분류`}
-														list={`${id}-categories`}
-														value={
-															candidate.category === "미분류"
-																? ""
-																: candidate.category
+													>
+														최신 후보 불러오기
+													</Button>
+												</div>
+											)}
+										{filterDirty &&
+											liveFilterKey !== originalFilter &&
+											!draftFilterMatchesLive && (
+												<div className="room-edit-conflict">
+													<p>
+														편집하는 동안 공유 필터가 바뀌었습니다. 현재 초안은
+														유지됩니다.
+													</p>
+													<Button
+														variant="outline"
+														size="sm"
+														disabled={locked}
+														onClick={(event) =>
+															requestReset(event.currentTarget)
 														}
-														maxLength={24}
-														disabled={!editable}
-														onChange={(event) =>
-															setDraftCandidates((entries) =>
-																entries.map((entry) =>
-																	entry.id === candidate.id
-																		? { ...entry, category: event.target.value }
-																		: entry,
-																),
-															)
-														}
-													/>
-												</label>
+													>
+														최신 조건 불러오기
+													</Button>
+												</div>
+											)}
+										{!sameDraftStage && (
+											<div className="room-edit-conflict">
+												<p>
+													게임 단계가 바뀌어 적용을 잠갔습니다. 초안은
+													보관됩니다. 최신 목록을 확인한 뒤 다시 편집해 주세요.
+												</p>
 												<Button
-													variant="ghost"
-													size="icon"
-													className="room-candidate-delete"
-													aria-label={`${candidate.name} 후보 삭제`}
-													disabled={!editable}
-													onClick={() =>
-														setDraftCandidates((entries) =>
-															entries.filter(
-																(entry) => entry.id !== candidate.id,
-															),
-														)
-													}
+													variant="outline"
+													size="sm"
+													disabled={locked}
+													onClick={(event) => requestReset(event.currentTarget)}
 												>
-													<Trash2 size={16} aria-hidden="true" />
+													최신 목록으로 다시 편집
 												</Button>
-												<small>
-													{candidate.ownerName
-														? `${candidate.ownerName} 추천`
-														: "방장 후보"}
-													{excludedIds.includes(candidate.id)
-														? " · 당첨 제외 내역 있음"
-														: ""}
-												</small>
-											</li>
-										))}
-									</ul>
-								)}
-
-								{draftCandidates.length === 0 && (
-									<p className="room-candidate-empty">
-										첫 후보를 추가해 주세요.
-									</p>
-								)}
-							</section>
+											</div>
+										)}
+										{editError && (
+											<p role="alert" className="room-error">
+												{editError}
+											</p>
+										)}
+										{room.error && (
+											<p role="alert" className="room-error">
+												{room.error}
+											</p>
+										)}
+									</>
+								}
+							>
+								<div className="room-editor-stage-actions">
+									<label
+										className="room-intake-switch"
+										htmlFor={`${id}-intake-enabled`}
+									>
+										<Switch
+											id={`${id}-intake-enabled`}
+											aria-label="후보 추천받기"
+											checked={phase === "collecting"}
+											disabled={locked || !sameDraftStage}
+											aria-busy={
+												stagePending === "open" || stagePending === "close"
+											}
+											onCheckedChange={(checked) => {
+												if (checked === (phase === "collecting")) return;
+												void changeStage(checked ? "open" : "close");
+											}}
+										/>
+										<span>후보 추천받기</span>
+									</label>
+									<Button
+										disabled={
+											locked ||
+											!sameDraftStage ||
+											((unsaved ? previewPreparedCount : preparedCount) === 0 &&
+												!newName.trim())
+										}
+										onClick={() => void changeStage("finalize")}
+									>
+										{stagePending === "finalize" ? "마감 중…" : "마감"}
+									</Button>
+								</div>
+							</RoomCandidateEditor>
 						)
 					) : (
 						<>
@@ -1102,7 +903,7 @@ export default function RoomLifecyclePanel({
 									}}
 								>
 									<Label htmlFor={`${id}-recommend`}>후보 추천</Label>
-									<div className="room-candidate-add">
+									<div className="room-candidate-add room-recommend-add">
 										<Input
 											id={`${id}-recommend`}
 											value={recommendation}
@@ -1117,27 +918,7 @@ export default function RoomLifecyclePanel({
 												setRecommendation(event.target.value)
 											}
 										/>
-										<label
-											className="room-candidate-field"
-											htmlFor={`${id}-recommend-category`}
-										>
-											<span>분류 (선택)</span>
-											<Input
-												id={`${id}-recommend-category`}
-												aria-label="추천 후보 분류"
-												list={`${id}-categories`}
-												value={recommendationCategory}
-												maxLength={24}
-												disabled={
-													phase !== "collecting" ||
-													locked ||
-													recommendationPending
-												}
-												onChange={(event) =>
-													setRecommendationCategory(event.target.value)
-												}
-											/>
-										</label>
+
 										<Button
 											type="submit"
 											disabled={
@@ -1150,6 +931,23 @@ export default function RoomLifecyclePanel({
 											{recommendationPending ? "추천 보내는 중…" : "추천하기"}
 										</Button>
 									</div>
+									<Button
+										variant="ghost"
+										size="sm"
+										className="room-recommend-category"
+										aria-haspopup="dialog"
+										aria-label="추천 후보 분류 변경"
+										ref={recommendationCategoryTriggerRef}
+										disabled={
+											phase !== "collecting" || locked || recommendationPending
+										}
+										onClick={() => {
+											setRecommendationCategoryDraft(recommendationCategory);
+											setRecommendationCategoryOpen(true);
+										}}
+									>
+										{recommendationCategory || "미분류"} · 분류 변경
+									</Button>
 									{phase === "reviewing" && (
 										<p className="room-panel-note">
 											접수가 다시 열릴 때까지 입력한 내용은 보관합니다.
@@ -1160,7 +958,7 @@ export default function RoomLifecyclePanel({
 							<div className="room-intake-count">
 								전체 {candidates.length}개 · 이번 추첨 {eligible.length}개
 							</div>
-							<ul className="room-intake-list">
+							<ul className="room-intake-list room-recommend-list">
 								{candidates.map((candidate) => (
 									<li key={candidate.id}>
 										<div>
@@ -1169,13 +967,14 @@ export default function RoomLifecyclePanel({
 												{candidate.ownerName
 													? `${candidate.ownerName} 추천`
 													: "방장 후보"}
-												{candidate.included === false
-													? " · 직접 제외"
-													: excludeDrawn && excludedIds.includes(candidate.id)
-														? " · 당첨 제외"
-														: ""}
+												{exclusionReason(candidate) === "추첨 포함"
+													? ""
+													: ` · ${exclusionReason(candidate)}`}
 											</small>
 										</div>
+										<span className="room-recommend-row-category">
+											{candidate.category || "미분류"}
+										</span>
 										{phase === "collecting" &&
 											candidate.ownerId === room.self?.id && (
 												<Button
@@ -1185,7 +984,7 @@ export default function RoomLifecyclePanel({
 													onClick={() => setRemoveOwn(candidate)}
 													aria-label={`${candidate.name} 내 추천 삭제`}
 												>
-													삭제
+													<Trash2 size={16} aria-hidden="true" />
 												</Button>
 											)}
 									</li>
@@ -1205,63 +1004,35 @@ export default function RoomLifecyclePanel({
 				</div>
 			) : (
 				<>
-					<div className="room-roulette-and-exclusions">
+					<div
+						className="room-roulette-and-exclusions"
+						data-result={showResult || undefined}
+					>
 						<div className="room-lifecycle-main">{children(requestStart)}</div>
-						<aside className="room-exclusion-panel" aria-label="후보 제외 목록">
-							<h3>
-								{excludeDrawn ? "제외된 후보" : "저장된 제외 후보"}{" "}
-								<span>{excluded.length}</span>
-							</h3>
-							{!excludeDrawn && <p>중복 제외 꺼짐 · 지금은 추첨에 포함돼요.</p>}
-							<ul>
-								{excluded.map((candidate) => (
-									<li key={candidate.id}>{candidate.name}</li>
-								))}
-							</ul>
-							{excluded.length === 0 && <p>제외 내역이 없습니다.</p>}
-							{manualExcluded.length > 0 && (
-								<>
-									<h4>직접 제외 {manualExcluded.length}개</h4>
-									<ul>
-										{manualExcluded.map((candidate) => (
-											<li key={candidate.id}>{candidate.name}</li>
-										))}
-									</ul>
-								</>
-							)}
-							{isHost && (
-								<Button
-									variant="outline"
-									size="sm"
-									disabled={locked || excludedIds.length === 0}
-									onClick={() => {
-										setLocalError("");
-										setConfirmation({ kind: "reset", revision });
-									}}
-								>
-									<RotateCcw size={14} aria-hidden="true" />
-									제외 목록 초기화
-								</Button>
-							)}
-						</aside>
+						<RoomExclusionPanel
+							snapshot={snapshot}
+							isHost={isHost}
+							locked={locked}
+							busy={busy}
+							showResult={showResult}
+							onToggle={(checked) =>
+								void room.updateRoomOptions(checked, revision)
+							}
+							onReset={() => {
+								setLocalError("");
+								setConfirmation({ kind: "reset", revision });
+							}}
+						/>
 					</div>
-					{gameOptions}
 					{!showResult && !busy && (
 						<>
-							<div className="room-current-candidates">
-								<h3>이번 추첨 후보 {eligible.length}개</h3>
-								<ul>
-									{eligible.map((candidate) => (
-										<li key={candidate.id}>{candidate.name}</li>
-									))}
-								</ul>
-								{eligible.length === 0 && (
-									<p>
-										추첨할 후보가 없습니다. 후보 편집에서 필터를 변경하거나,
-										당첨 제외 목록을 초기화해 주세요.
-									</p>
-								)}
-							</div>
+							{eligible.length === 0 && (
+								<output className="room-waiting-empty">
+									{isHost
+										? "추첨할 후보가 없습니다. 후보 편집에서 필터를 변경하거나 당첨 제외 목록을 초기화해 주세요."
+										: "추첨할 후보가 없습니다. 방장이 후보를 준비할 때까지 기다려 주세요."}
+								</output>
+							)}
 							{isHost && (
 								<div className="room-waiting-actions">
 									<Button
@@ -1271,19 +1042,67 @@ export default function RoomLifecyclePanel({
 									>
 										후보 편집
 									</Button>
-									<Button
-										variant="outline"
-										disabled={locked}
-										onClick={() => void room.openIntake()}
-									>
-										후보 추천받기
-									</Button>
 								</div>
 							)}
 						</>
 					)}
 				</>
 			)}
+			<Dialog
+				open={recommendationCategoryOpen && phase === "collecting"}
+				onOpenChange={setRecommendationCategoryOpen}
+			>
+				<DialogContent
+					className="room-category-dialog"
+					onCloseAutoFocus={(event) => {
+						event.preventDefault();
+						recommendationCategoryTriggerRef.current?.focus();
+					}}
+				>
+					<DialogHeader>
+						<DialogTitle>추천 후보 분류</DialogTitle>
+						<DialogDescription>
+							분류는 선택 사항입니다. 직접 입력하거나 기존 분류를 선택하세요.
+						</DialogDescription>
+					</DialogHeader>
+					<form
+						onSubmit={(event) => {
+							event.preventDefault();
+							if (phase !== "collecting" || locked || recommendationPending)
+								return;
+							setRecommendationCategory(
+								recommendationCategoryDraft.normalize("NFC").trim(),
+							);
+							setRecommendationCategoryOpen(false);
+						}}
+					>
+						<Label htmlFor={`${id}-recommendation-category`}>분류 (선택)</Label>
+						<Input
+							id={`${id}-recommendation-category`}
+							aria-label="추천 후보 분류"
+							value={recommendationCategoryDraft}
+							list={`${id}-categories`}
+							maxLength={24}
+							disabled={locked || recommendationPending}
+							onChange={(event) =>
+								setRecommendationCategoryDraft(event.target.value)
+							}
+						/>
+						<DialogFooter>
+							<Button
+								type="button"
+								variant="outline"
+								onClick={() => setRecommendationCategoryOpen(false)}
+							>
+								취소
+							</Button>
+							<Button type="submit" disabled={locked || recommendationPending}>
+								적용
+							</Button>
+						</DialogFooter>
+					</form>
+				</DialogContent>
+			</Dialog>
 			<CandidateListLoadDialog
 				open={loadOpen}
 				onOpenChange={setLoadOpen}
@@ -1393,7 +1212,14 @@ export default function RoomLifecyclePanel({
 				</AlertDialogContent>
 			</AlertDialog>
 			<AlertDialog open={discardOpen} onOpenChange={setDiscardOpen}>
-				<AlertDialogContent>
+				<AlertDialogContent
+					onCloseAutoFocus={(event) => {
+						event.preventDefault();
+						if (discardButtonRef.current?.isConnected)
+							discardButtonRef.current.focus();
+						else newCandidateRef.current?.focus();
+					}}
+				>
 					<AlertDialogHeader>
 						<AlertDialogTitle>편집한 내용을 버릴까요?</AlertDialogTitle>
 						<AlertDialogDescription>

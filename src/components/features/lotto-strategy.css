@@ -51,11 +51,6 @@
 	cursor: not-allowed;
 }
 
-.lotto-mode-card:focus-within {
-	outline: 3px solid #527427;
-	outline-offset: 3px;
-}
-
 .lotto-mode-title {
 	display: flex;
 	align-items: center;
@@ -339,11 +334,6 @@
 
 .lotto-excluded-details > summary::-webkit-details-marker {
 	display: none;
-}
-
-.lotto-excluded-details > summary:focus-visible {
-	outline: 3px solid #865143;
-	outline-offset: 3px;
 }
 
 .lotto-excluded-title {

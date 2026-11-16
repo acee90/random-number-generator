@@ -11,8 +11,8 @@ interface TestSocket extends EventTarget {
 	readyState: number;
 	options: Record<string, unknown>;
 	send: ReturnType<typeof vi.fn<(raw: string) => boolean>>;
-	close: ReturnType<typeof vi.fn>;
-	reconnect: ReturnType<typeof vi.fn>;
+	close: ReturnType<typeof vi.fn<() => void>>;
+	reconnect: ReturnType<typeof vi.fn<() => void>>;
 }
 const mocks = vi.hoisted(() => ({
 	sockets: [] as TestSocket[],
@@ -232,7 +232,7 @@ describe("irreversible current-result feedback", () => {
 		expect(sent("vote")).toHaveLength(1);
 	});
 
-	it("refuses host, unfinished and archived results but has no short voting deadline", () => {
+	it("refuses identities outside the draw roster, unfinished and archived results but has no short voting deadline", () => {
 		const draw = feedbackDraw();
 		const { result } = renderHook(() => useLunchRoom(roomId));
 		joined(true, snapshot({ draw }));
@@ -260,6 +260,50 @@ describe("irreversible current-result feedback", () => {
 			serverTime: Date.now(),
 		});
 		act(() => expect(result.current.vote(draw.id, "down")).toBe(true));
+		expect(sent("vote")).toHaveLength(1);
+	});
+
+	it("lets an eligible host vote once and reconciles its authoritative ballot without replaying on reconnect", () => {
+		const draw = {
+			...feedbackDraw(),
+			participants: [{ id: "host-client", name: "민수", isHost: true }],
+		};
+		const current = snapshot({ draw, status: "result" });
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(true, current);
+		act(() => {
+			expect(result.current.vote(draw.id, "up")).toBe(true);
+			expect(result.current.vote(draw.id, "down")).toBe(false);
+		});
+		expect(sent("vote")).toHaveLength(1);
+		expect(result.current.votePendingDrawId).toBe(draw.id);
+		const confirmed = {
+			...current,
+			draw: {
+				...draw,
+				votes: [
+					{
+						participantId: "host-client",
+						name: "민수",
+						vote: "up" as const,
+						timestamp: Date.now(),
+						reactionMs: 2800,
+					},
+				],
+			},
+		};
+		receive({ type: "snapshot", snapshot: confirmed, serverTime: Date.now() });
+		expect(result.current.votePendingDrawId).toBeNull();
+		act(() => expect(result.current.vote(draw.id, "down")).toBe(false));
+		act(() => socket().close());
+		opened();
+		receive({
+			type: "snapshot",
+			snapshot: confirmed,
+			serverTime: Date.now(),
+			self: { id: "host-client", isHost: true },
+		});
+		act(() => expect(result.current.vote(draw.id, "down")).toBe(false));
 		expect(sent("vote")).toHaveLength(1);
 	});
 

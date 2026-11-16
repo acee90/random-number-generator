@@ -48,11 +48,16 @@ function initialProps() {
 		connected: true,
 		pending: false,
 		readOnly: false,
+		canNext: false,
 		onNext: vi.fn(),
 	};
 }
-function resultHarness() {
+function resultHarness(host = false) {
 	const original = initialProps();
+	if (host) {
+		original.isHost = true;
+		original.draw.participants = [{ id: "self", name: "방장", isHost: true }];
+	}
 	const send = vi.fn<(_id: string, _choice: RoomDrawVote["vote"]) => boolean>(
 		() => true,
 	);
@@ -93,6 +98,71 @@ function setMobileViewport(mobile: boolean) {
 }
 
 describe("optimistic room result voting", () => {
+	it("lets the host vote optimistically and keeps next-game navigation separate until the vote settles", () => {
+		const { original, send, update, container } = resultHarness(true);
+		const next = screen.getByRole("button", {
+			name: "다음 게임 대기 화면으로",
+		}) as HTMLButtonElement;
+		update({ canNext: true });
+		expect(next.disabled).toBe(false);
+		expect(next.getAttribute("data-variant")).toBe("outline");
+		expect(
+			screen.getByRole("heading", { name: original.draw.candidates[0].name }),
+		).toBeTruthy();
+		expect(
+			container.querySelector(".room-result-summary")?.textContent,
+		).toContain("당첨 메뉴");
+		fireEvent.click(screen.getByRole("button", { name: "좋아요 투표" }));
+		expect(send).toHaveBeenCalledExactlyOnceWith("optimistic-round", "up");
+		expect(next.disabled).toBe(true);
+		expect(screen.getByText("3명 참여")).toBeTruthy();
+		expect(
+			container
+				.querySelector(".room-result-layout")
+				?.getAttribute("data-own-choice"),
+		).toBe("up");
+		expect(
+			screen.getByRole("list", { name: "좋아요 투표한 참가자" }).textContent,
+		).toContain("방장");
+		update({
+			pending: false,
+			draw: {
+				...original.draw,
+				votes: [
+					...(original.draw.votes ?? []),
+					{ ...ballot("self", "up", 700), name: "방장" },
+				],
+			},
+		});
+		expect(next.disabled).toBe(false);
+		fireEvent.click(screen.getByRole("button", { name: "싫어요 투표" }));
+		expect(send).toHaveBeenCalledOnce();
+	});
+	it("keeps an archived host result read-only and presents the complete long winner name", () => {
+		const original = initialProps();
+		const onVote = vi.fn(() => true);
+		const longName = "아주 긴 당첨 메뉴 이름 ".repeat(6).trim();
+		render(
+			<RoomDrawResult
+				{...original}
+				isHost
+				readOnly
+				draw={{
+					...original.draw,
+					candidates: [{ ...original.draw.candidates[0], name: longName }],
+				}}
+				onVote={onVote}
+			/>,
+		);
+		expect(screen.getByRole("heading", { name: longName }).textContent).toBe(
+			longName,
+		);
+		expect(screen.queryByRole("button", { name: "좋아요 투표" })).toBeNull();
+		expect(
+			screen.queryByRole("button", { name: "다음 게임 대기 화면으로" }),
+		).toBeNull();
+		expect(onVote).not.toHaveBeenCalled();
+	});
 	it("updates selection, count and own row immediately, then confirms without duplication or a second burst", () => {
 		const { original, send, update, container } = resultHarness();
 		const result = container.querySelector(".room-result-layout");

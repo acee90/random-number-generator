@@ -65,6 +65,15 @@ export interface RoomGameFilter {
 	excludedIds: string[];
 }
 
+export interface RoomExclusionRecord {
+	candidateId: string;
+	drawId: string;
+	drawnAt: number;
+	roundNumber?: number;
+	/** False only when numbering was reconstructed from truncated legacy history. */
+	roundNumberIsExact?: boolean;
+}
+
 export interface RoomDraw {
 	id: string;
 	candidates: LunchPlace[];
@@ -83,6 +92,8 @@ export interface RoomDraw {
 	excludeDrawn?: boolean;
 	excludedIdsBefore?: string[];
 	gameFilter?: RoomGameFilter;
+	roundNumber?: number;
+	roundNumberIsExact?: boolean;
 }
 
 export interface RoomSnapshot {
@@ -112,6 +123,10 @@ export interface RoomSnapshot {
 	excludeDrawn?: boolean;
 	excludedIds?: string[];
 	gameFilter?: RoomGameFilter;
+	exclusionRecords?: RoomExclusionRecord[];
+	/** Counts successful draws; resetting the exclusion ledger does not reset it. */
+	drawCount?: number;
+	drawCountIsExact?: boolean;
 }
 
 export function getRoomPhase(snapshot: RoomSnapshot): RoomSnapshot["status"] {
@@ -145,8 +160,7 @@ export function isRoomDrawVoter(
 	return Boolean(
 		participantId &&
 			draw.participants?.some(
-				(participant) =>
-					participant.id === participantId && !participant.isHost,
+				(participant) => participant.id === participantId,
 			),
 	);
 }
@@ -636,6 +650,10 @@ function parseDraw(value: unknown): RoomDraw | null {
 		value.startedAt < value.timestamp ||
 		(value.requestedAt !== undefined &&
 			(!isTime(value.requestedAt) || value.requestedAt > value.timestamp)) ||
+		(value.roundNumber !== undefined && !isVersion(value.roundNumber)) ||
+		(value.roundNumberIsExact !== undefined &&
+			(typeof value.roundNumberIsExact !== "boolean" ||
+				value.roundNumber === undefined)) ||
 		!isVersion(value.listVersion) ||
 		value.durationMs !== lunchRoomLimits.drawDurationMs ||
 		value.fromRotation !== 0 ||
@@ -706,7 +724,50 @@ function parseDraw(value: unknown): RoomDraw | null {
 			: { excludeDrawn: value.excludeDrawn as boolean }),
 		...(excludedIdsBefore === undefined ? {} : { excludedIdsBefore }),
 		...(gameFilter === undefined ? {} : { gameFilter }),
+		...(value.roundNumber === undefined
+			? {}
+			: { roundNumber: value.roundNumber as number }),
+		...(value.roundNumberIsExact === undefined
+			? {}
+			: { roundNumberIsExact: value.roundNumberIsExact as boolean }),
 	};
+}
+
+function parseExclusionRecords(value: unknown): RoomExclusionRecord[] | null {
+	if (!Array.isArray(value) || value.length > lunchRoomLimits.maxCandidates)
+		return null;
+	const records: RoomExclusionRecord[] = [];
+	const candidates = new Set<string>();
+	const draws = new Set<string>();
+	for (const entry of value) {
+		if (
+			!isRecord(entry) ||
+			!isId(entry.candidateId) ||
+			!isId(entry.drawId) ||
+			!isTime(entry.drawnAt) ||
+			candidates.has(entry.candidateId) ||
+			draws.has(entry.drawId) ||
+			(entry.roundNumber !== undefined && !isVersion(entry.roundNumber)) ||
+			(entry.roundNumberIsExact !== undefined &&
+				(typeof entry.roundNumberIsExact !== "boolean" ||
+					entry.roundNumber === undefined))
+		)
+			return null;
+		candidates.add(entry.candidateId);
+		draws.add(entry.drawId);
+		records.push({
+			candidateId: entry.candidateId,
+			drawId: entry.drawId,
+			drawnAt: entry.drawnAt,
+			...(entry.roundNumber === undefined
+				? {}
+				: { roundNumber: entry.roundNumber as number }),
+			...(entry.roundNumberIsExact === undefined
+				? {}
+				: { roundNumberIsExact: entry.roundNumberIsExact as boolean }),
+		});
+	}
+	return records;
 }
 
 function parseCandidateIdList(value: unknown): string[] | null {
@@ -904,6 +965,10 @@ export function parseRoomSnapshot(value: unknown): RoomSnapshot | null {
 		value.excludedIds === undefined
 			? []
 			: parseCandidateIdList(value.excludedIds);
+	const exclusionRecords =
+		value.exclusionRecords === undefined
+			? undefined
+			: parseExclusionRecords(value.exclusionRecords);
 	const gameFilter =
 		value.gameFilter === undefined
 			? undefined
@@ -916,6 +981,27 @@ export function parseRoomSnapshot(value: unknown): RoomSnapshot | null {
 		!messages ||
 		!history ||
 		!excludedIds ||
+		exclusionRecords === null ||
+		exclusionRecords?.some(
+			(entry) =>
+				!excludedIds?.includes(entry.candidateId) ||
+				!candidates.some((candidate) => candidate.id === entry.candidateId),
+		) ||
+		(value.drawCount !== undefined &&
+			(typeof value.drawCount !== "number" ||
+				!Number.isSafeInteger(value.drawCount) ||
+				value.drawCount < 0 ||
+				value.drawCount <
+					new Set([
+						...history.map((entry) => entry.id),
+						...(draw ? [draw.id] : []),
+					]).size ||
+				[...history, ...(draw ? [draw] : []), ...(exclusionRecords ?? [])].some(
+					(entry) => (entry.roundNumber ?? 0) > (value.drawCount as number),
+				))) ||
+		(value.drawCountIsExact !== undefined &&
+			(typeof value.drawCountIsExact !== "boolean" ||
+				value.drawCount === undefined)) ||
 		gameFilter === null ||
 		(gameFilter &&
 			candidates &&
@@ -966,6 +1052,13 @@ export function parseRoomSnapshot(value: unknown): RoomSnapshot | null {
 		intakeId: (value.intakeId as string | null | undefined) ?? null,
 		excludeDrawn: (value.excludeDrawn as boolean | undefined) ?? false,
 		excludedIds,
+		...(exclusionRecords === undefined ? {} : { exclusionRecords }),
+		...(value.drawCount === undefined
+			? {}
+			: { drawCount: value.drawCount as number }),
+		...(value.drawCountIsExact === undefined
+			? {}
+			: { drawCountIsExact: value.drawCountIsExact as boolean }),
 		...(gameFilter === undefined ? {} : { gameFilter }),
 	};
 }

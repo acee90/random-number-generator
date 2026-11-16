@@ -1,0 +1,767 @@
+<div id="candidate-simple-wireframe" aria-label="후보 편집 단순화 시안">
+  <div class="ce-caption"><span>후보 편집 · 단순화안</span><span>동작 확인용 예시</span></div>
+  <div class="ce-roles" id="ce-roles">
+    <section class="ce-window" aria-label="방장 화면">
+      <header class="ce-appbar"><strong>점메추<span>.</span></strong><span class="ce-role">방장</span></header>
+      <div class="ce-room"><h2>오늘 점심 추첨</h2><span>참가 4명</span></div>
+      <div id="ce-host"></div>
+    </section>
+    <section class="ce-window" id="ce-guest-window" aria-label="참가자 화면">
+      <header class="ce-appbar"><strong>점메추<span>.</span></strong><span class="ce-role">참가자 · 민지</span></header>
+      <div class="ce-room"><h2>오늘 점심 추첨</h2><span>참가 4명</span></div>
+      <div id="ce-guest"></div>
+    </section>
+  </div>
+  <p class="ce-live" id="ce-live" aria-live="polite"></p>
+  <datalist id="ce-categories"></datalist>
+  <div id="ce-row-popup" class="ce-row-popup" popover="auto" role="menu" aria-label="후보 관리"></div>
+  <dialog id="ce-modal" aria-labelledby="ce-modal-title"></dialog>
+  <dialog id="ce-confirm" aria-labelledby="ce-confirm-title"></dialog>
+</div>
+<style>
+#candidate-simple-wireframe {
+  --ce-paper: light-dark(#f7f7f2,#20231e);
+  --ce-panel: light-dark(#fff,#2a2e27);
+  --ce-ink: light-dark(#272b24,#eef0e7);
+  --ce-muted: light-dark(#646b5e,#bcc3b3);
+  --ce-line: light-dark(#d8decd,#56604d);
+  --ce-input: light-dark(#8b967d,#a1ad92);
+  --ce-soft: light-dark(#edf2e3,#343d2c);
+  --ce-lime: light-dark(#d6f266,#d6f266);
+  --ce-lime-ink: light-dark(#272b24,#272b24);
+  --ce-ring: light-dark(#527427,#d6f266);
+  --ce-danger: light-dark(#a13d27,#ffb69e);
+  color: var(--ce-ink); color-scheme: inherit;
+  font: 14px/1.5 "Pretendard","Noto Sans KR",system-ui,sans-serif;
+}
+#candidate-simple-wireframe * { box-sizing: border-box; }
+#candidate-simple-wireframe [hidden] { display: none !important; }
+#candidate-simple-wireframe h2,#candidate-simple-wireframe h3,#candidate-simple-wireframe p { margin: 0; }
+#candidate-simple-wireframe button,#candidate-simple-wireframe input,#candidate-simple-wireframe textarea { font: inherit; }
+#candidate-simple-wireframe button,#candidate-simple-wireframe summary { cursor: pointer; }
+#candidate-simple-wireframe button {
+  min-height: 40px; padding: 8px 12px; border: 1px solid var(--ce-input);
+  border-radius: 3px; background: var(--ce-panel); color: var(--ce-ink);
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  overflow-wrap: anywhere;
+}
+#candidate-simple-wireframe button:disabled { opacity: .5; cursor: not-allowed; }
+#candidate-simple-wireframe .ce-primary { background: var(--ce-lime); color: var(--ce-lime-ink); border-color: var(--ce-lime-ink); font-weight: 700; }
+#candidate-simple-wireframe .ce-quiet { border-color: transparent; background: transparent; }
+#candidate-simple-wireframe .ce-icon { width: 40px; padding: 8px; flex-shrink: 0; }
+#candidate-simple-wireframe .ce-danger { color: var(--ce-danger); }
+#candidate-simple-wireframe :focus-visible { outline: 3px solid var(--ce-ring); outline-offset: 2px; }
+#candidate-simple-wireframe input:not([type="checkbox"]),#candidate-simple-wireframe textarea {
+  width: 100%; min-width: 0; min-height: 42px; padding: 8px 10px;
+  border: 1px solid var(--ce-input); border-radius: 3px;
+  background: var(--ce-panel); color: var(--ce-ink); font-size: 16px;
+}
+#candidate-simple-wireframe input[type="checkbox"] { width: 18px; height: 18px; flex: 0 0 auto; accent-color: var(--ce-ring); }
+#candidate-simple-wireframe label { display: grid; gap: 6px; }
+#candidate-simple-wireframe i { width: 17px; height: 17px; display: inline-block; flex-shrink: 0; }
+#candidate-simple-wireframe .ce-caption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-bottom: 14px; padding-right: 96px; color: var(--ce-muted); font-size: 12px; }
+#candidate-simple-wireframe .ce-roles { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(0,1fr); gap: 18px; align-items: start; }
+#candidate-simple-wireframe .ce-roles.ce-host-only { grid-template-columns: minmax(0,1fr); max-width: 650px; margin-inline: auto; }
+#candidate-simple-wireframe .ce-window { min-width: 0; background: var(--ce-panel); border: 1px solid var(--ce-input); }
+#candidate-simple-wireframe .ce-appbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--ce-paper); border-bottom: 1px solid var(--ce-line); }
+#candidate-simple-wireframe .ce-appbar strong { font-size: 20px; letter-spacing: -.5px; }
+#candidate-simple-wireframe .ce-appbar strong span { color: var(--ce-ring); }
+#candidate-simple-wireframe .ce-role { font-size: 12px; padding: 3px 7px; background: var(--ce-soft); }
+#candidate-simple-wireframe .ce-room { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; padding: 16px 16px 0; }
+#candidate-simple-wireframe .ce-room h2 { font-size: 17px; font-weight: 700; }
+#candidate-simple-wireframe .ce-room > span { font-size: 12px; color: var(--ce-muted); }
+#candidate-simple-wireframe .ce-pane { padding: 16px; min-width: 0; }
+#candidate-simple-wireframe .ce-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 14px; position: relative; }
+#candidate-simple-wireframe .ce-heading h3 { font-size: 19px; font-weight: 700; }
+#candidate-simple-wireframe .ce-heading-title { display: flex; align-items: center; gap: 4px; min-width: 0; }
+#candidate-simple-wireframe .ce-heading-title > button { margin-left: -10px; }
+#candidate-simple-wireframe .ce-menu { position: relative; }
+#candidate-simple-wireframe .ce-menu > summary { list-style: none; display: grid; place-items: center; width: 40px; min-height: 40px; border: 1px solid var(--ce-line); border-radius: 3px; }
+#candidate-simple-wireframe .ce-menu > summary::-webkit-details-marker { display: none; }
+#candidate-simple-wireframe .ce-menu-items { position: absolute; right: 0; top: calc(100% + 5px); z-index: 5; width: 206px; max-width: calc(100vw - 30px); padding: 5px; border: 1px solid var(--ce-input); border-radius: 4px; background: var(--ce-panel); box-shadow: 0 8px 24px color-mix(in srgb,var(--ce-ink) 15%,transparent); }
+#candidate-simple-wireframe .ce-menu-items button { display: flex; width: 100%; justify-content: flex-start; border: 0; padding: 9px 10px; }
+#candidate-simple-wireframe .ce-menu-items button:hover { background: var(--ce-soft); }
+#candidate-simple-wireframe .ce-row-popup {
+  position: fixed; inset: auto; margin: 0; padding: 5px;
+  width: 208px; max-width: calc(100vw - 16px);
+  border: 1px solid var(--ce-input); border-radius: 4px;
+  background: var(--ce-panel); color: var(--ce-ink);
+  box-shadow: 0 6px 20px color-mix(in srgb,var(--ce-ink) 15%,transparent);
+}
+#candidate-simple-wireframe .ce-row-popup:popover-open { display: grid; gap: 2px; }
+#candidate-simple-wireframe .ce-row-popup::backdrop { background: transparent; }
+#candidate-simple-wireframe .ce-popup-owner { padding: 6px 9px; font-size: 12px; color: var(--ce-muted); }
+#candidate-simple-wireframe .ce-row-popup button { width: 100%; justify-content: flex-start; border: 0; padding: 9px; text-align: left; }
+#candidate-simple-wireframe .ce-row-popup button:hover { background: var(--ce-soft); }
+#candidate-simple-wireframe .ce-add { display: flex; align-items: center; gap: 7px; }
+#candidate-simple-wireframe .ce-add input { flex: 1; min-width: 0; }
+#candidate-simple-wireframe .ce-listbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; margin-block: 12px 4px; }
+#candidate-simple-wireframe .ce-count { font-size: 12px; color: var(--ce-muted); }
+#candidate-simple-wireframe .ce-filter-button { min-height: 36px; font-size: 12px; padding: 6px 8px; }
+#candidate-simple-wireframe button[aria-pressed="true"] { background: var(--ce-soft); border-color: var(--ce-ring); }
+#candidate-simple-wireframe .ce-filters { display: grid; gap: 12px; padding-block: 12px; border-bottom: 1px solid var(--ce-line); }
+#candidate-simple-wireframe .ce-filter-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+#candidate-simple-wireframe .ce-chip { border-radius: 999px; font-size: 12px; min-height: 36px; padding: 6px 10px; }
+#candidate-simple-wireframe .ce-filter-caption { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; color: var(--ce-muted); }
+#candidate-simple-wireframe .ce-active-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-block: 8px; font-size: 12px; color: var(--ce-muted); }
+#candidate-simple-wireframe .ce-list { padding: 0; margin: 0; list-style: none; }
+#candidate-simple-wireframe .ce-row { display: grid; grid-template-columns: minmax(0,1fr) auto auto; gap: 5px; align-items: center; min-height: 44px; padding-block: 4px; border-bottom: 1px solid var(--ce-line); }
+#candidate-simple-wireframe .ce-row.ce-selecting { grid-template-columns: auto minmax(0,1fr) auto auto; }
+#candidate-simple-wireframe .ce-row.ce-excluded .ce-name { color: var(--ce-muted); }
+#candidate-simple-wireframe .ce-name-column { min-width: 0; }
+#candidate-simple-wireframe .ce-name { padding: 6px 0; min-height: 32px; max-width: 100%; text-align: left; justify-content: flex-start; border: 0; background: transparent; font-size: 15px; }
+#candidate-simple-wireframe .ce-name:hover { text-decoration: underline; text-underline-offset: 4px; }
+#candidate-simple-wireframe .ce-name-column small { display: block; color: var(--ce-muted); font-size: 11px; }
+#candidate-simple-wireframe .ce-tag { min-height: 32px; max-width: 110px; font-size: 12px; padding: 5px 8px; border-color: var(--ce-line); background: var(--ce-paper); }
+#candidate-simple-wireframe .ce-row-edit { display: flex; align-items: center; gap: 4px; }
+#candidate-simple-wireframe .ce-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--ce-line); }
+#candidate-simple-wireframe .ce-footer-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+#candidate-simple-wireframe .ce-dirty { font-size: 12px; color: var(--ce-muted); margin-top: 8px; }
+#candidate-simple-wireframe .ce-note { color: var(--ce-muted); font-size: 13px; }
+#candidate-simple-wireframe .ce-error { color: var(--ce-danger); font-size: 13px; margin-block: 8px; }
+#candidate-simple-wireframe .ce-stage { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; font-size: 12px; color: var(--ce-muted); }
+#candidate-simple-wireframe .ce-stage > strong { color: var(--ce-ink); font-weight: 500; background: var(--ce-soft); padding: 4px 7px; }
+#candidate-simple-wireframe .ce-notice { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 8px 10px; margin-block: 10px; background: var(--ce-soft); font-size: 12px; }
+#candidate-simple-wireframe .ce-notice button { min-height: 32px; padding: 4px 6px; font-size: 12px; }
+#candidate-simple-wireframe .ce-empty { text-align: center; padding-block: 26px; display: grid; gap: 12px; }
+#candidate-simple-wireframe .ce-empty h3 { font-size: 19px; }
+#candidate-simple-wireframe .ce-paths { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+#candidate-simple-wireframe .ce-paths button { min-height: 108px; flex-direction: column; align-items: flex-start; padding: 14px; text-align: left; }
+#candidate-simple-wireframe .ce-paths small { font-size: 12px; color: var(--ce-muted); }
+#candidate-simple-wireframe .ce-guest-list { margin-top: 14px; }
+#candidate-simple-wireframe .ce-guest-row { min-height: 50px; display: flex; align-items: center; gap: 8px; padding-block: 8px; border-bottom: 1px solid var(--ce-line); }
+#candidate-simple-wireframe .ce-guest-row > div { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+#candidate-simple-wireframe .ce-guest-row small { display: block; color: var(--ce-muted); font-size: 11px; }
+#candidate-simple-wireframe .ce-guest-category { font-size: 12px; color: var(--ce-muted); }
+#candidate-simple-wireframe .ce-wheel { width: min(100%,250px); aspect-ratio: 1; border: 2px solid var(--ce-input); border-radius: 50%; margin: 18px auto; display: grid; place-items: center; background: conic-gradient(var(--ce-soft) 0deg 60deg,var(--ce-panel) 60deg 120deg,var(--ce-soft) 120deg 180deg,var(--ce-panel) 180deg 240deg,var(--ce-soft) 240deg 300deg,var(--ce-panel) 300deg); position: relative; }
+#candidate-simple-wireframe .ce-wheel::before { content: "▼"; position: absolute; top: -14px; }
+#candidate-simple-wireframe .ce-wheel > button { border-radius: 50%; width: 100px; height: 100px; flex-direction: column; }
+#candidate-simple-wireframe .ce-exclusions { padding-block: 12px; border-block: 1px solid var(--ce-line); margin-block: 14px; }
+#candidate-simple-wireframe .ce-exclusion-toggle { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+#candidate-simple-wireframe .ce-exclusion-toggle label { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+#candidate-simple-wireframe .ce-result { text-align: center; padding-block: 20px; }
+#candidate-simple-wireframe .ce-result h3 { font-size: 25px; margin-block: 12px; }
+#candidate-simple-wireframe .ce-live { font-size: 12px; color: var(--ce-muted); margin-top: 10px; }
+#candidate-simple-wireframe dialog { padding: 20px; width: min(430px,calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; border: 1px solid var(--ce-input); border-radius: 6px; color: var(--ce-ink); background: var(--ce-panel); }
+#candidate-simple-wireframe dialog::backdrop { background: light-dark(#1b231b66,#0009); }
+#candidate-simple-wireframe .ce-dialog-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+#candidate-simple-wireframe .ce-dialog-heading h3 { font-size: 19px; }
+#candidate-simple-wireframe .ce-dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+#candidate-simple-wireframe .ce-dialog-form { display: grid; gap: 12px; }
+#candidate-simple-wireframe .ce-source { display: grid; gap: 8px; margin-top: 12px; }
+#candidate-simple-wireframe .ce-source button { justify-content: space-between; text-align: left; }
+#candidate-simple-wireframe .ce-source small { color: var(--ce-muted); font-size: 12px; }
+#candidate-simple-wireframe .ce-readonly { list-style: none; margin: 12px 0; padding: 0; }
+#candidate-simple-wireframe .ce-readonly li { padding: 9px 0; border-bottom: 1px solid var(--ce-line); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; }
+#candidate-simple-wireframe .ce-readonly small { color: var(--ce-muted); }
+@media (max-width: 820px) { #candidate-simple-wireframe .ce-roles { grid-template-columns: minmax(0,1fr); } }
+@media (max-width: 420px) {
+  #candidate-simple-wireframe .ce-pane { padding: 12px; }
+  #candidate-simple-wireframe .ce-room { padding-inline: 12px; }
+  #candidate-simple-wireframe .ce-tag { max-width: 90px; }
+  #candidate-simple-wireframe .ce-caption { padding-right: 0; }
+  #candidate-simple-wireframe .ce-paths { grid-template-columns: 1fr; }
+}
+@media (pointer: coarse) {
+  #candidate-simple-wireframe button,#candidate-simple-wireframe .ce-menu > summary { min-height: 44px; }
+  #candidate-simple-wireframe .ce-icon { width: 44px; }
+}
+</style>
+<script>
+(() => {
+  const root = document.getElementById("candidate-simple-wireframe");
+  const host = root.querySelector("#ce-host");
+  const guest = root.querySelector("#ce-guest");
+  const modal = root.querySelector("#ce-modal");
+  const confirm = root.querySelector("#ce-confirm");
+  const rowPopup = root.querySelector("#ce-row-popup");
+  const copy = value => JSON.parse(JSON.stringify(value));
+  const esc = value => String(value == null ? "" : value).replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+  const icon = name => '<i data-lucide="' + name + '" aria-hidden="true"></i>';
+  const base = [
+    { id:"sample-1", name:"김치찌개", category:"한식" },
+    { id:"sample-2", name:"돈가스", category:"일식" },
+    { id:"sample-3", name:"초밥", category:"일식" },
+    { id:"sample-4", name:"비빔밥", category:"한식" },
+    { id:"sample-5", name:"카레", category:"미분류", owner:"민지" },
+    { id:"sample-6", name:"샐러드", category:"샐러드", owner:"준호" }
+  ];
+  const team = [
+    { name:"쌀국수", category:"아시안" }, { name:"제육볶음", category:"한식" },
+    { name:"수제버거", category:"팀 추천" }, { name:"덮밥", category:"일식" }
+  ];
+  const settings = { example:"혼합 후보", showGuest:true, failSave:false };
+  function initial(example) {
+    const items = example === "빈 목록" ? [] : example === "긴 목록"
+      ? Array.from({ length:24 }, (_,i) => ({ ...base[i % base.length], id:"long-" + i, name:base[i % base.length].name + " " + (Math.floor(i / 6) + 1) }))
+      : copy(base);
+    return { v:1, example, phase:"editing", items, shared:copy(items), categories:null, manual:[],
+      sharedCategories:null, sharedManual:[], sharedVersion:1, draftVersion:1,
+      started:items.length > 0, readyBefore:items.length > 0, newName:"", query:"", filterOpen:false,
+      editId:null, editName:"", guestName:"", guestCategory:"미분류", error:"",
+      excludeDrawn:false, drawn:[], winner:null, library:[], failNext:false };
+  }
+  function restore(raw) {
+    if (!raw || raw.v !== 1 || !Array.isArray(raw.items) || !Array.isArray(raw.shared)) return initial("혼합 후보");
+    const value = { ...initial(raw.example), ...raw, pending:false, error:"", editId:null };
+    if (value.phase === "drawing") value.phase = "waiting";
+    return value;
+  }
+  const initialSaved = window.openai && window.openai.widgetState && window.openai.widgetState.privateContent;
+  let lastSavedState = JSON.stringify(initialSaved || null);
+  let state = restore(initialSaved);
+  settings.example = state.example;
+  settings.showGuest = state.showGuest !== false;
+  let pendingAction = null;
+  let modalReturn = null;
+  let modalReturnNode = null;
+  let lastTrigger = null;
+  let confirmationAction = null;
+  let undo = null;
+  let drawingTimer = null;
+  let saveDraftItems = [];
+  let rowPopupActive = false;
+  let rowPopupTrigger = null;
+  let rowPopupItemId = null;
+  function uid() { return "candidate-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2,7); }
+  function selected(items, cats, manual, applyDrawn) {
+    return items.filter(item => (cats === null || cats.includes(item.category)) && !manual.includes(item.id) && (!applyDrawn || !state.excludeDrawn || !state.drawn.includes(item.id)));
+  }
+  function draftSelected() { return selected(state.items,state.categories,state.manual,false); }
+  function readySelected() { return selected(state.shared,state.sharedCategories,state.sharedManual,true); }
+  function dirty() {
+    return JSON.stringify([state.items,state.categories,state.manual]) !== JSON.stringify([state.shared,state.sharedCategories,state.sharedManual]) ||
+      !!state.newName.trim() || !!state.editId;
+  }
+  function persist() {
+    if (!window.openai || !window.openai.setWidgetState) return;
+    const snapshot = { ...state, pending:false, error:"", editId:null,showGuest:settings.showGuest };
+    const privateContent = JSON.stringify(snapshot).length < 14000 ? snapshot : null;
+    lastSavedState = JSON.stringify(privateContent);
+    window.openai.setWidgetState({
+      modelContent:{ view:"후보 편집 단순화", phase:state.phase, draftCount:state.items.length, selectedCount:draftSelected().length, filterOpen:state.filterOpen },
+      privateContent
+    }).catch(() => {});
+  }
+  function icons() { if (globalThis.lucide) lucide.createIcons({ attrs:{ width:17,height:17 } }); }
+  function focus(selector) { requestAnimationFrame(() => {
+    const el = root.querySelector(selector);
+    const target = el && el.getClientRects().length ? el : root.querySelector("details.ce-menu > summary") || root.querySelector("button");
+    if (target) target.focus();
+  }); }
+  function announce(text) { root.querySelector("#ce-live").textContent = text; }
+  function disabled() { return state.pending ? " disabled" : ""; }
+  function button(action,text,cls,attrs) {
+    return '<button type="button" data-action="' + action + '" class="' + (cls || "") + '"' + (attrs || "") + disabled() + '>' + text + '</button>';
+  }
+  function hostMenu() {
+    return '<details class="ce-menu"><summary aria-label="목록 작업">' + icon("ellipsis") + '</summary><div class="ce-menu-items">' +
+      button("load","목록 불러오기") + button("save","내 목록에 저장","",state.items.length || state.newName.trim() ? "" : " disabled") +
+      button("bulk","여러 개 추가") + button("clear","전체 비우기","ce-danger",state.items.length ? "" : " disabled") +
+      (dirty() ? button("discard","변경 취소") : "") + '</div></details>';
+  }
+  function filters() {
+    const cats = [...new Set(state.items.map(item => item.category))];
+    const chosen = state.categories === null ? cats : state.categories;
+    const active = state.categories !== null || state.manual.length > 0;
+    let html = '<div class="ce-listbar"><span class="ce-count">전체 후보 ' + state.items.length + '개</span>' +
+      button("filter-toggle",icon("sliders-horizontal") + '필터' + (active ? ' · 적용 중' : ""),"ce-filter-button",' aria-expanded="' + state.filterOpen + '" aria-controls="ce-filter-panel"') + '</div>';
+    if (state.filterOpen) {
+      html += '<div class="ce-filters" id="ce-filter-panel"><div class="ce-filter-chips">' +
+        button("filter-all","전체","ce-chip",' aria-pressed="' + (state.categories === null) + '"') +
+        cats.map(cat => button("filter-cat",esc(cat),"ce-chip",' data-category="' + esc(cat) + '" aria-pressed="' + chosen.includes(cat) + '"')).join("") +
+        '</div><label>후보 찾기<input type="search" id="ce-search" value="' + esc(state.query) + '" placeholder="이름으로 찾기" aria-label="후보 찾기"' + disabled() + '></label>' +
+        '<div class="ce-filter-caption"><span>체크한 후보를 추첨에 넣어요.</span>' + button("filter-reset","필터 초기화","ce-quiet") + '</div></div>';
+    } else if (active) {
+      html += '<div class="ce-active-filter"><span>분류·개별 선택 적용 중</span>' + button("filter-reset","초기화","ce-quiet") + '</div>';
+    }
+    return html;
+  }
+  function row(item) {
+    const checked = !state.manual.includes(item.id);
+    const editing = state.editId === item.id;
+    let name = editing
+      ? '<form class="ce-row-edit" data-form="rename"><input id="ce-row-name" value="' + esc(state.editName) + '" maxlength="80" aria-label="후보 이름 수정"' + disabled() + '><button type="submit" class="ce-icon" aria-label="이름 수정 완료"' + disabled() + '>' + icon("check") + '</button></form>'
+      : button("rename",esc(item.name),"ce-name",' data-id="' + esc(item.id) + '" aria-label="' + esc(item.name) + ' 이름 수정"');
+    return '<li class="ce-row' + (state.filterOpen ? ' ce-selecting' : '') + (!checked ? ' ce-excluded' : '') + '">' +
+      (state.filterOpen ? '<input type="checkbox" data-select="' + esc(item.id) + '" aria-label="' + esc(item.name) + ' 추첨 포함"' + (checked ? " checked" : "") + disabled() + '>' : "") +
+      '<div class="ce-name-column">' + name + (item.owner ? '<small>' + esc(item.owner) + ' 추천' + (!checked ? ' · 추첨 제외' : '') + '</small>' : !checked ? '<small>추첨 제외</small>' : '') + '</div>' +
+      button("category",esc(item.category),"ce-tag",' data-id="' + esc(item.id) + '" aria-label="' + esc(item.name + " 분류 " + item.category + " 변경") + '"') +
+      button("row-menu",icon("ellipsis"),"ce-icon ce-quiet",' data-id="' + esc(item.id) + '" aria-label="' + esc(item.name) + ' 후보 관리" aria-haspopup="menu" aria-expanded="false" aria-controls="ce-row-popup"') + '</li>';
+  }
+  function editHost() {
+    const starting = !state.started && state.items.length === 0;
+    const heading = starting ? "후보 만들기" : "후보 편집";
+    let html = '<div class="ce-pane"><div class="ce-heading"><div class="ce-heading-title">' +
+      (state.readyBefore && state.phase === "editing" ? button("back",icon("chevron-left"),"ce-icon ce-quiet",' aria-label="대기 화면으로"') : "") +
+      '<h3>' + heading + '</h3></div>' + (!starting ? hostMenu() : "") + '</div>';
+    if (starting) return html + '<div class="ce-empty"><h3>추첨할 후보를 준비해요</h3><p class="ce-note">직접 입력하거나 목록을 가져오세요.</p></div><div class="ce-paths">' +
+      button("write",icon("plus") + '<strong>새로 작성</strong><small>원하는 후보를 직접 입력</small>') +
+      button("load",icon("folder-open") + '<strong>목록 불러오기</strong><small>기본 목록 · 내 목록</small>') + '</div></div>';
+    if (state.phase === "collecting" || state.phase === "reviewing") {
+      html += '<div class="ce-stage"><strong>' + (state.phase === "collecting" ? "추천 접수 중" : "접수 종료") + '</strong><span>' +
+        (state.phase === "collecting" ? "참가자가 후보를 추가할 수 있어요." : "목록을 정리한 뒤 마감하세요.") + '</span></div>';
+    }
+    if (state.draftVersion !== state.sharedVersion && dirty()) {
+      html += '<div class="ce-notice">새 추천이 도착했어요. 초안은 보관 중입니다.' + button("review-remote","최신 목록 확인","ce-quiet") + '</div>';
+    }
+    html += '<form class="ce-add" data-form="add"><input id="ce-new-name" aria-label="추가할 후보 이름" placeholder="후보 이름 입력 후 Enter" value="' + esc(state.newName) + '" maxlength="80"' + disabled() + '>' +
+      '<button type="submit" class="ce-icon" aria-label="후보 추가"' + (state.newName.trim() ? disabled() : " disabled") + '>' + icon("plus") + '</button></form>' +
+      filters();
+    const visible = state.items.filter(item => (state.categories === null || state.categories.includes(item.category)) && item.name.toLowerCase().includes(state.query.trim().toLowerCase()));
+    html += '<ul class="ce-list">' + visible.map(row).join("") + '</ul>';
+    if (!visible.length) html += '<p class="ce-note" style="padding-block:20px">' + (!state.items.length ? "첫 후보를 추가해 주세요." : state.query ? "검색 결과가 없어요. 다른 이름으로 찾아보세요." : "선택한 분류가 없어요. 필터에서 분류를 선택해 주세요.") + '</p>';
+    if (state.error) html += '<p class="ce-error" role="alert">' + esc(state.error) + '</p>';
+    if (undo) html += '<div class="ce-notice">' + esc(undo.item.name) + ' 삭제됨' + button("undo","되돌리기","ce-quiet") + '</div>';
+    const side = state.phase === "collecting" ? button("close-intake","접수 종료","ce-quiet") : state.phase === "reviewing" ? button("open-intake","다시 접수받기","ce-quiet") : button("open-intake","추천받기","ce-quiet");
+    html += '<div class="ce-footer"><span class="ce-count">추첨 ' + draftSelected().length + '개</span><div class="ce-footer-actions">' + side +
+      button("finalize",state.pending ? "저장 중…" : "마감","ce-primary",draftSelected().length || state.newName.trim() ? "" : " disabled") + '</div></div>' +
+      (dirty() ? '<p class="ce-dirty">초안 변경됨 · 마감하면 저장돼요.</p>' : "") + '</div>';
+    return html;
+  }
+  function guestRows() {
+    return '<ul class="ce-list ce-guest-list">' + state.shared.map(item => {
+      const included = selected([item],state.sharedCategories,state.sharedManual,state.phase === "waiting").length > 0;
+      return '<li class="ce-guest-row"><div>' + esc(item.name) + '<small>' + (item.owner === "민지" ? "내 추천" : item.owner ? esc(item.owner) + " 추천" : "방장 후보") + (!included ? " · 추첨 제외" : "") + '</small></div><span class="ce-guest-category">' + esc(item.category) + '</span>' +
+        (state.phase === "collecting" && item.owner === "민지" ? button("guest-delete",icon("trash-2"),"ce-icon ce-quiet",' data-id="' + esc(item.id) + '" aria-label="' + esc(item.name) + ' 내 추천 삭제"') : "") + '</li>';
+    }).join("") + '</ul>';
+  }
+  function editGuest() {
+    let html = '<div class="ce-pane"><div class="ce-heading"><h3>' + (state.phase === "collecting" ? "후보 추천" : state.phase === "reviewing" ? "접수 종료" : "후보 준비 중") + '</h3></div>';
+    if (state.phase === "editing") html += '<p class="ce-note">방장이 후보를 편집하고 있어요.</p>';
+    else {
+      const closed = state.phase !== "collecting";
+      html += '<p class="ce-note">' + (closed ? "접수가 다시 열리면 추천할 수 있어요." : "함께 고를 후보를 추천해 주세요.") + '</p><form class="ce-add" data-form="recommend" style="margin-top:12px">' +
+        '<input id="ce-guest-name" aria-label="추천할 후보 이름" placeholder="추천할 후보 이름" value="' + esc(state.guestName) + '" maxlength="80"' + (closed || state.pending ? " disabled" : "") + '><button type="submit"' + (closed || state.pending || !state.guestName.trim() ? " disabled" : "") + '>추천</button></form>' +
+        button("guest-category",esc(state.guestCategory) + icon("chevron-down"),"ce-tag",' style="margin-top:8px" aria-label="추천 분류 ' + esc(state.guestCategory) + ' 변경"' + (closed ? " disabled" : ""));
+    }
+    html += '<div class="ce-count" style="margin-top:14px">공유된 후보 ' + state.shared.length + '개</div>' + guestRows();
+    if (!state.shared.length) html += '<p class="ce-note" style="margin-top:18px">아직 후보가 없어요.' + (state.phase === "collecting" ? " 첫 후보를 추천해 주세요." : "") + '</p>';
+    return html + '</div>';
+  }
+  function reason(item) {
+    if (state.sharedManual.includes(item.id)) return "직접 제외";
+    if (state.sharedCategories !== null && !state.sharedCategories.includes(item.category)) return "분류로 제외";
+    if (state.excludeDrawn && state.drawn.includes(item.id)) return "당첨 제외";
+    return "추첨 포함";
+  }
+  function waiting(isHost) {
+    const pool = readySelected();
+    const result = state.phase === "result";
+    const drawing = state.phase === "drawing";
+    let html = '<div class="ce-pane"><div class="ce-heading"><h3>' + (result ? "추첨 결과" : drawing ? "추첨 중" : "룰렛 대기") + '</h3>' +
+      button("view-candidates","후보 보기 " + pool.length,"ce-quiet") + '</div>';
+    if (result) html += '<div class="ce-result"><p class="ce-note">이번 추첨 결과</p><h3>' + esc(state.winner && state.winner.name) + '</h3>' +
+      (isHost ? button("next","다음 게임 대기로","ce-primary") : '<p class="ce-note">방장이 다음 게임을 준비하고 있어요.</p>') + '</div>';
+    else html += '<div class="ce-wheel">' + (isHost ? button("spin",'<strong>' + (drawing ? "추첨 중…" : "돌리기") + '</strong><small>' + pool.length + '개</small>',"ce-primary",drawing || !pool.length ? " disabled" : "") : '<span>방장 시작 대기</span>') + '</div>';
+    html += '<div class="ce-exclusions"><div class="ce-exclusion-toggle"><span>뽑힌 후보 제외</span><label><input type="checkbox" data-repeat="true" aria-label="' + (isHost ? "방장" : "참가자") + ' 중복 제외"' + (state.excludeDrawn ? " checked" : "") + (!isHost || drawing ? " disabled" : "") + '>' + (state.excludeDrawn ? "켜짐" : "꺼짐") + '</label></div><p class="ce-note">저장된 제외 ' + state.drawn.length + '개' + (!state.excludeDrawn && state.drawn.length ? " · 지금은 추첨에 포함" : "") + '</p>';
+    if (state.drawn.length) html += '<p class="ce-note" style="margin-top:6px">' + state.shared.filter(item => state.drawn.includes(item.id)).map(item => esc(item.name)).join(" · ") + '</p>' + (isHost ? button("reset-drawn","제외 내역 초기화","ce-quiet",' style="margin-top:6px"' + (drawing ? " disabled" : "")) : "");
+    html += '</div>';
+    if (!pool.length && !result) html += '<p class="ce-note">뽑힌 후보 제외를 끄거나 내역을 초기화하면 다시 추첨할 수 있어요.</p>';
+    if (isHost && !result && !drawing) html += button("edit","후보 편집","",' style="margin-top:12px"');
+    return html + '</div>';
+  }
+  function render() {
+    closeRowPopup(false);
+    root.querySelector("#ce-live").textContent = "";
+    const listPhase = ["editing","collecting","reviewing"].includes(state.phase);
+    host.innerHTML = listPhase ? editHost() : waiting(true);
+    guest.innerHTML = listPhase ? editGuest() : waiting(false);
+    root.querySelector("#ce-guest-window").hidden = !settings.showGuest;
+    root.querySelector("#ce-roles").classList.toggle("ce-host-only",!settings.showGuest);
+    const cats = [...new Set(["한식","일식","중식","분식","양식","샐러드","아시안","미분류",...state.items.map(item => item.category)])];
+    root.querySelector("#ce-categories").innerHTML = cats.map(cat => '<option value="' + esc(cat) + '"></option>').join("");
+    icons();
+  }
+  function renderAndSave(selector) { render(); persist(); if (selector) focus(selector); }
+  function flush() {
+    if (state.editId) {
+      const input = root.querySelector("#ce-row-name");
+      const name = (input ? input.value : state.editName).trim();
+      if (!name) { state.error = "후보 이름을 입력해 주세요."; render(); focus("#ce-row-name"); return false; }
+      state.items = state.items.map(item => item.id === state.editId ? { ...item,name } : item);
+      state.editId = null;
+    }
+    state.error = "";
+    return true;
+  }
+  function flushNew() {
+    if (!flush()) return false;
+    if (state.newName.trim()) {
+      state.items.push({ id:uid(),name:state.newName.trim(),category:"미분류" });
+      state.newName = "";
+    }
+    return true;
+  }
+  function publish() {
+    state.shared = copy(state.items);
+    state.sharedCategories = copy(state.categories);
+    state.sharedManual = [...state.manual];
+    const ids = new Set(state.items.map(item => item.id));
+    state.drawn = state.drawn.filter(id => ids.has(id));
+    state.sharedVersion++;
+    state.draftVersion = state.sharedVersion;
+    undo = null;
+  }
+  function changeStage(action) {
+    if (state.pending || !flushNew()) return;
+    if (dirty() && state.draftVersion !== state.sharedVersion) {
+      state.error = "공유 후보가 바뀌었어요. 최신 목록을 확인해 주세요.";
+      renderAndSave(); return;
+    }
+    if (action === "finalize" && !draftSelected().length) { state.error = "추첨에 넣을 후보를 한 개 이상 선택해 주세요."; renderAndSave(); return; }
+    state.pending = true; pendingAction = action; render();
+    setTimeout(() => {
+      if (!root.isConnected) return;
+      state.pending = false;
+      if (state.failNext) {
+        state.failNext = false;
+        state.error = "저장하지 못했어요. 입력은 유지했습니다. 다시 시도해 주세요.";
+        renderAndSave(); return;
+      }
+      publish();
+      state.phase = action === "finalize" ? "waiting" : action === "open-intake" ? "collecting" : "reviewing";
+      if (action === "finalize") state.readyBefore = true;
+      state.error = ""; pendingAction = null; renderAndSave();
+      announce(action === "finalize" ? "후보를 저장하고 룰렛 대기로 이동했습니다." : state.phase === "collecting" ? "추천 접수를 시작했습니다." : "접수를 종료했습니다.");
+    },450);
+  }
+  function selectorFor(action,id) { return '[data-action="' + action + '"]' + (id ? '[data-id="' + id + '"]' : ""); }
+  function closeRowPopup(restoreFocus) {
+    const trigger = rowPopupTrigger;
+    if (rowPopupActive) rowPopup.hidePopover();
+    rowPopupActive = false; rowPopupItemId = null;
+    if (trigger && trigger.isConnected) {
+      trigger.setAttribute("aria-expanded","false");
+      if (restoreFocus) trigger.focus({ preventScroll:true });
+    }
+  }
+  function openRowPopup(item,trigger,lastItem,toggle) {
+    if (toggle && rowPopupActive && rowPopupItemId === item.id) { closeRowPopup(true); return; }
+    closeRowPopup(false);
+    const headerMenu = root.querySelector("details.ce-menu[open]");
+    if (headerMenu) headerMenu.open = false;
+    rowPopupTrigger = trigger; rowPopupItemId = item.id;
+    rowPopup.setAttribute("aria-label",item.name + " 후보 관리");
+    rowPopup.innerHTML = '<div class="ce-popup-owner" role="presentation">등록자 · ' + esc(item.owner || "방장") + '</div>' +
+      '<button type="button" role="menuitem" data-action="row-include" data-id="' + esc(item.id) + '">' +
+      (state.manual.includes(item.id) ? icon("check") + "추첨에 포함" : icon("circle-minus") + "이번 추첨에서 제외") + '</button>' +
+      '<button type="button" role="menuitem" data-action="row-delete" data-id="' + esc(item.id) + '" class="ce-danger">' + icon("trash-2") + '후보 삭제</button>';
+    icons(); rowPopup.showPopover(); rowPopupActive = true;
+    trigger.setAttribute("aria-expanded","true");
+    const anchor = trigger.getBoundingClientRect();
+    const box = rowPopup.getBoundingClientRect();
+    const view = root.ownerDocument.defaultView;
+    const panel = trigger.closest(".ce-window").getBoundingClientRect();
+    const bottom = Math.min(view.innerHeight,panel.bottom) - 8;
+    const left = Math.max(8,Math.min(anchor.right - box.width,view.innerWidth - box.width - 8));
+    let top = anchor.bottom + 5;
+    if (top + box.height > bottom) top = anchor.top - box.height - 5;
+    top = Math.max(8,Math.min(top,view.innerHeight - box.height - 8));
+    rowPopup.style.left = left + "px"; rowPopup.style.top = top + "px";
+    const items = rowPopup.querySelectorAll('[role="menuitem"]');
+    items[lastItem ? items.length - 1 : 0].focus({ preventScroll:true });
+  }
+  rowPopup.addEventListener("beforetoggle",event => {
+    if (event.newState === "closed") {
+      rowPopupActive = false; rowPopupItemId = null;
+      if (rowPopupTrigger && rowPopupTrigger.isConnected) rowPopupTrigger.setAttribute("aria-expanded","false");
+    }
+  });
+  rowPopup.addEventListener("focusout",() => requestAnimationFrame(() => {
+    if (rowPopupActive && !rowPopup.contains(root.ownerDocument.activeElement) && root.ownerDocument.activeElement !== rowPopupTrigger) closeRowPopup(false);
+  }));
+  root.ownerDocument.addEventListener("scroll",() => closeRowPopup(false),{ capture:true,passive:true });
+  window.addEventListener("resize",() => closeRowPopup(false));
+  function closeModal() {
+    modal.close(); modal.innerHTML = "";
+    const original = modalReturnNode;
+    if (original && original.isConnected) requestAnimationFrame(() => {
+      if (original.isConnected && original.getClientRects().length) original.focus();
+      else if (modalReturn) focus(modalReturn);
+    });
+    else if (modalReturn) focus(modalReturn);
+  }
+  function dialog(title,body,returnSelector) {
+    modalReturn = returnSelector || null;
+    modalReturnNode = lastTrigger;
+    modal.innerHTML = '<div class="ce-dialog-heading"><h3 id="ce-modal-title">' + title + '</h3><button type="button" data-action="modal-close" class="ce-icon ce-quiet" aria-label="닫기">' + icon("x") + '</button></div>' + body;
+    modal.showModal(); icons();
+  }
+  function closeConfirm() { confirm.close(); confirmationAction = null; }
+  function ask(title,text,onAccept,acceptLabel) {
+    confirmationAction = onAccept;
+    confirm.innerHTML = '<h3 id="ce-confirm-title">' + esc(title) + '</h3><p class="ce-note" style="margin-top:10px">' + esc(text) + '</p><div class="ce-dialog-actions"><button type="button" data-action="confirm-cancel">계속 편집</button><button type="button" data-action="confirm-accept" class="ce-primary">' + esc(acceptLabel || "확인") + '</button></div>';
+    confirm.showModal();
+  }
+  function resetDraft() {
+    state.items = copy(state.shared); state.categories = copy(state.sharedCategories);
+    state.manual = [...state.sharedManual]; state.draftVersion = state.sharedVersion;
+    state.newName = ""; state.editId = null; state.error = ""; undo = null;
+  }
+  function sourceList() {
+    const sources = [
+      { key:"base",name:"기본 음식점 목록",note:"예시 6개",items:base },
+      { key:"team",name:"우리 팀 점심",note:"예시 4개",items:team },
+      { key:"number",name:"1~10 번호",note:"예시 10개",items:Array.from({ length:10 },(_,i) => ({ name:String(i+1),category:"미분류" })) },
+      ...state.library.map((list,i) => ({ key:"saved-" + i,name:list.name,note:"내 목록 · " + list.items.length + "개",items:list.items }))
+    ];
+    return sources;
+  }
+  function openLoad() {
+    dialog("목록 불러오기",'<p class="ce-note">사본을 가져와 이 목록에서 편집합니다.</p><div class="ce-source">' +
+      sourceList().map(source => '<button type="button" data-action="source" data-source="' + source.key + '"><span>' + esc(source.name) + '</span><small>' + source.note + '</small></button>').join("") +
+      '</div><div class="ce-dialog-actions"><button type="button" data-action="modal-close">취소</button></div>',selectorFor("load"));
+  }
+  function loadSource(key) {
+    const source = sourceList().find(entry => entry.key === key);
+    if (!source) return;
+    const apply = () => {
+      state.items = source.items.map(item => ({ id:uid(),name:item.name,category:item.category || "미분류" }));
+      state.categories = null; state.manual = []; state.query = ""; state.newName = "";
+      state.editId = null; state.started = true; state.error = ""; undo = null;
+      closeModal(); renderAndSave("#ce-new-name"); announce(source.name + " 사본을 불러왔습니다.");
+    };
+    if (state.items.length || state.newName.trim() || state.editId) ask("현재 후보 목록을 바꿀까요?","작성 중인 후보와 입력이 선택한 목록의 사본으로 바뀝니다. 원본 저장 목록은 유지됩니다.",apply,"목록 바꾸기");
+    else apply();
+  }
+  function openCategory(item) {
+    dialog("분류 변경",'<form data-form="category" class="ce-dialog-form"><label>' + esc(item ? item.name : "추천할 후보") +
+      '<input id="ce-category-value" list="ce-categories" maxlength="24" placeholder="분류 입력 · 비우면 미분류" value="' + esc((item ? item.category : state.guestCategory) === "미분류" ? "" : item ? item.category : state.guestCategory) + '" autofocus></label>' +
+      '<div class="ce-dialog-actions"><button type="button" data-action="modal-close">취소</button><button type="submit" class="ce-primary">확인</button></div></form>',item ? selectorFor("category",item.id) : selectorFor("guest-category"));
+    modal.dataset.itemId = item ? item.id : "";
+  }
+  function viewCandidates() {
+    dialog("후보 보기",'<p class="ce-note">전체 ' + state.shared.length + '개 · 이번 추첨 ' + readySelected().length + '개</p><ul class="ce-readonly">' +
+      state.shared.map(item => '<li><span>' + esc(item.name) + '</span><small>' + esc(reason(item)) + '</small></li>').join("") +
+      '</ul><div class="ce-dialog-actions"><button type="button" data-action="modal-close">닫기</button></div>',selectorFor("view-candidates"));
+  }
+  function spin(confirmed) {
+    if (state.phase !== "waiting" || !readySelected().length) return;
+    if (!state.excludeDrawn && state.drawn.length && !confirmed) {
+      ask("제외 내역을 초기화하고 돌릴까요?","기존 내역을 초기화하고 이번에 뽑힌 후보부터 기록합니다.",() => spin(true),"초기화하고 돌리기"); return;
+    }
+    const winner = copy(readySelected()[0]);
+    state.phase = "drawing"; renderAndSave();
+    drawingTimer = setTimeout(() => {
+      if (!root.isConnected) return;
+      state.winner = winner;
+      state.drawn = state.excludeDrawn ? [...new Set([...state.drawn,winner.id])] : [winner.id];
+      state.phase = "result"; renderAndSave(); announce(winner.name + " 예시 결과가 나왔습니다.");
+    },800);
+  }
+  root.addEventListener("input",event => {
+    const el = event.target;
+    if (el.id === "ce-new-name") {
+      state.newName = el.value;
+      const add = el.form && el.form.querySelector('button[type="submit"]');
+      if (add) add.disabled = !el.value.trim() || state.pending;
+      const save = root.querySelector('[data-action="save"]');
+      if (save) save.disabled = (!state.items.length && !el.value.trim()) || state.pending;
+    } else if (el.id === "ce-row-name") state.editName = el.value;
+    else if (el.id === "ce-guest-name") {
+      state.guestName = el.value;
+      el.form.querySelector('button[type="submit"]').disabled = !el.value.trim() || state.phase !== "collecting";
+    } else if (el.id === "ce-search") {
+      const start = el.selectionStart;
+      state.query = el.value; render(); focus("#ce-search");
+      requestAnimationFrame(() => { const input = root.querySelector("#ce-search"); if (input && input.setSelectionRange) { try { input.setSelectionRange(start,start); } catch {} } });
+    }
+  });
+  root.addEventListener("change",event => {
+    const el = event.target;
+    if (el.dataset.select) {
+      const ids = new Set(state.manual);
+      if (el.checked) ids.delete(el.dataset.select); else ids.add(el.dataset.select);
+      state.manual = [...ids]; renderAndSave('[data-select="' + el.dataset.select + '"]');
+    } else if (el.dataset.repeat) { state.excludeDrawn = el.checked; renderAndSave('[data-repeat="true"]'); }
+  });
+  root.addEventListener("submit",event => {
+    const form = event.target.closest("form[data-form]");
+    if (!form) return; event.preventDefault();
+    if (state.pending) return;
+    if (form.dataset.form === "add") {
+      if (!state.newName.trim() || !flush()) return;
+      state.items.push({ id:uid(),name:state.newName.trim(),category:"미분류" });
+      state.newName = ""; state.started = true; renderAndSave("#ce-new-name");
+    } else if (form.dataset.form === "rename") {
+      if (flush()) renderAndSave("#ce-new-name");
+    } else if (form.dataset.form === "category") {
+      const category = root.querySelector("#ce-category-value").value.trim() || "미분류";
+      const itemId = modal.dataset.itemId;
+      if (itemId) state.items = state.items.map(item => item.id === itemId ? { ...item,category } : item);
+      else state.guestCategory = category;
+      closeModal(); renderAndSave(itemId ? selectorFor("category",itemId) : selectorFor("guest-category"));
+    } else if (form.dataset.form === "bulk") {
+      const lines = root.querySelector("#ce-bulk-value").value.split(/\r?\n/).map(name => name.trim()).filter(Boolean);
+      if (!lines.length) { root.querySelector("#ce-bulk-value").focus(); return; }
+      state.items.push(...lines.map(name => ({ id:uid(),name:name.slice(0,80),category:"미분류" })));
+      state.started = true; closeModal(); renderAndSave("#ce-new-name"); announce(lines.length + "개 후보를 추가했습니다.");
+    } else if (form.dataset.form === "save") {
+      const name = root.querySelector("#ce-save-name").value.trim();
+      if (!name) return;
+      state.library.push({ name,items:saveDraftItems.map(item => ({ name:item.name,category:item.category })) });
+      closeModal(); renderAndSave(); announce("내 목록에 사본을 저장했습니다.");
+    } else if (form.dataset.form === "recommend" && state.phase === "collecting" && state.guestName.trim()) {
+      const wasDirty = dirty();
+      state.shared.push({ id:uid(),name:state.guestName.trim(),category:state.guestCategory,owner:"민지" });
+      state.sharedVersion++;
+      if (!wasDirty) { state.items = copy(state.shared); state.draftVersion = state.sharedVersion; }
+      state.guestName = ""; state.guestCategory = "미분류"; renderAndSave("#ce-guest-name"); announce("후보를 추천했습니다.");
+    }
+  });
+  root.addEventListener("click",event => {
+    const submit = event.target.closest('button[type="submit"]');
+    if (submit && root.contains(submit)) {
+      event.preventDefault();
+      if (!submit.disabled && submit.form) submit.form.dispatchEvent(new Event("submit",{ bubbles:true,cancelable:true }));
+      return;
+    }
+    const target = event.target.closest("[data-action]");
+    if (!target || !root.contains(target) || target.disabled) return;
+    const action = target.dataset.action;
+    if (action === "modal-close") { closeModal(); return; }
+    if (action === "confirm-cancel") { closeConfirm(); return; }
+    if (action === "confirm-accept") { const accept = confirmationAction; closeConfirm(); if (accept) accept(); return; }
+    if (state.pending) return;
+    lastTrigger = target;
+    const item = state.items.find(entry => entry.id === target.dataset.id);
+    if (["finalize","open-intake","close-intake"].includes(action)) { changeStage(action); return; }
+    if (action === "write") { state.started = true; renderAndSave("#ce-new-name"); }
+    else if (action === "load") { if (flush()) openLoad(); }
+    else if (action === "source") loadSource(target.dataset.source);
+    else if (action === "rename" && item) {
+      if (!flush()) return;
+      state.editId = item.id; state.editName = item.name; renderAndSave("#ce-row-name");
+    } else if (action === "category" && item) { if (flush()) { render(); openCategory(item); } }
+    else if (action === "guest-category" && state.phase === "collecting") openCategory(null);
+    else if (action === "row-menu" && item) {
+      const wasEditing = !!state.editId;
+      if (!flush()) return;
+      if (wasEditing) renderAndSave();
+      const trigger = wasEditing ? root.querySelector(selectorFor("row-menu",item.id)) : target;
+      openRowPopup(state.items.find(entry => entry.id === item.id),trigger,false,true);
+    } else if (action === "row-include" && item) {
+      state.manual = state.manual.includes(item.id) ? state.manual.filter(id => id !== item.id) : [...state.manual,item.id];
+      closeRowPopup(false); renderAndSave(selectorFor("row-menu",item.id));
+    } else if (action === "row-delete" && item) {
+      undo = { item:copy(item),index:state.items.indexOf(item),excluded:state.manual.includes(item.id) };
+      state.items = state.items.filter(entry => entry.id !== item.id); state.manual = state.manual.filter(id => id !== item.id);
+      closeRowPopup(false); renderAndSave("#ce-new-name"); announce(item.name + " 삭제됨. 되돌릴 수 있습니다.");
+    } else if (action === "undo" && undo) {
+      state.items.splice(Math.min(undo.index,state.items.length),0,undo.item);
+      if (undo.excluded) state.manual.push(undo.item.id);
+      undo = null; renderAndSave();
+    } else if (action === "filter-toggle") {
+      if (!flush()) return;
+      state.filterOpen = !state.filterOpen;
+      if (!state.filterOpen) state.query = "";
+      renderAndSave(selectorFor("filter-toggle"));
+    } else if (action === "filter-cat") {
+      const cats = state.categories === null ? [...new Set(state.items.map(entry => entry.category))] : state.categories;
+      state.categories = cats.includes(target.dataset.category) ? cats.filter(cat => cat !== target.dataset.category) : [...cats,target.dataset.category];
+      renderAndSave('[data-action="filter-cat"][data-category="' + target.dataset.category.replace(/["\\]/g,"") + '"]');
+    } else if (action === "filter-all" || action === "filter-reset") {
+      state.categories = null; if (action === "filter-reset") state.manual = []; renderAndSave(selectorFor("filter-toggle"));
+    } else if (action === "bulk") {
+      if (!flush()) return;
+      dialog("여러 개 추가",'<form data-form="bulk" class="ce-dialog-form"><label>한 줄에 후보 하나<textarea id="ce-bulk-value" rows="6" placeholder="김치찌개&#10;돈가스&#10;샐러드" autofocus required></textarea></label><div class="ce-dialog-actions"><button type="button" data-action="modal-close">취소</button><button type="submit" class="ce-primary">후보 추가</button></div></form>',selectorFor("bulk"));
+    } else if (action === "save") {
+      if (!flush() || (!state.items.length && !state.newName.trim())) return;
+      saveDraftItems = copy(state.items);
+      if (state.newName.trim()) saveDraftItems.push({ name:state.newName.trim(),category:"미분류" });
+      dialog("내 목록에 저장",'<form data-form="save" class="ce-dialog-form"><label>목록 이름<input id="ce-save-name" value="우리 점심 후보" maxlength="40" required autofocus></label><p class="ce-note">전체 후보 ' + saveDraftItems.length + '개를 새 사본으로 저장합니다.</p><div class="ce-dialog-actions"><button type="button" data-action="modal-close">취소</button><button type="submit" class="ce-primary">저장</button></div></form>',selectorFor("save"));
+    } else if (action === "clear") {
+      ask("후보를 모두 비울까요?","편집 중인 후보와 필터를 비웁니다. 적용된 공유 목록과 저장본은 유지됩니다.",() => { state.items = []; state.categories = null; state.manual = []; state.editId = null; state.newName = ""; state.query = ""; undo = null; renderAndSave("#ce-new-name"); },"전체 비우기");
+    } else if (action === "discard" || action === "back") {
+      if (action === "back" && state.phase !== "editing") return;
+      const apply = () => { resetDraft(); if (action === "back") state.phase = "waiting"; renderAndSave("#ce-new-name"); };
+      if (dirty()) ask("편집한 내용을 버릴까요?","아직 적용하지 않은 변경만 버립니다. 공유 후보와 저장 목록은 유지됩니다.",apply,"변경 버리기"); else apply();
+    } else if (action === "review-remote") {
+      dialog("새 추천 확인",'<p class="ce-note">현재 초안은 보관 중입니다. 최신 공유 목록 ' + state.shared.length + '개를 확인해 주세요.</p><ul class="ce-readonly">' +
+        state.shared.filter(entry => !state.items.some(local => local.id === entry.id)).map(entry => '<li>' + esc(entry.name) + '<small>' + esc(entry.owner || "방장") + ' 추천</small></li>').join("") +
+        '</ul><div class="ce-dialog-actions"><button type="button" data-action="modal-close">초안 유지</button><button type="button" data-action="use-latest">최신 목록 사용</button></div>',selectorFor("review-remote"));
+    } else if (action === "use-latest") {
+      ask("최신 목록으로 바꿀까요?","적용하지 않은 편집 초안을 버리고 새 추천을 포함한 공유 목록을 불러옵니다.",() => { resetDraft(); closeModal(); renderAndSave("#ce-new-name"); },"최신 목록 사용");
+    } else if (action === "guest-delete") {
+      const entry = state.shared.find(value => value.id === target.dataset.id && value.owner === "민지");
+      if (!entry || state.phase !== "collecting") return;
+      ask("내 추천을 삭제할까요?",entry.name + " 후보가 공유 목록에서 삭제됩니다.",() => {
+        if (state.phase !== "collecting") return;
+        const wasDirty = dirty();
+        state.shared = state.shared.filter(value => value.id !== entry.id);
+        state.sharedManual = state.sharedManual.filter(id => id !== entry.id); state.sharedVersion++;
+        if (!wasDirty) { state.items = copy(state.shared); state.manual = [...state.sharedManual]; state.draftVersion = state.sharedVersion; }
+        renderAndSave("#ce-guest-name");
+      },"추천 삭제");
+    } else if (action === "view-candidates") viewCandidates();
+    else if (action === "edit" && state.phase === "waiting") { resetDraft(); state.phase = "editing"; renderAndSave("#ce-new-name"); }
+    else if (action === "spin") spin(false);
+    else if (action === "next" && state.phase === "result") { state.phase = "waiting"; renderAndSave(); }
+    else if (action === "reset-drawn" && state.phase !== "drawing") ask("제외 내역을 초기화할까요?","모든 당첨 제외 내역을 비웁니다. 현재 결과는 유지됩니다.",() => { state.drawn = []; renderAndSave(); },"초기화");
+  });
+  root.addEventListener("keydown",event => {
+    if (rowPopupActive && rowPopup.contains(event.target)) {
+      const items = [...rowPopup.querySelectorAll('[role="menuitem"]')];
+      const index = items.indexOf(root.ownerDocument.activeElement);
+      if (["ArrowDown","ArrowUp","Home","End"].includes(event.key)) {
+        event.preventDefault();
+        const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+        items[next].focus({ preventScroll:true }); return;
+      }
+      if (event.key === "Escape") { event.preventDefault(); closeRowPopup(true); return; }
+    }
+    const rowTrigger = event.target.closest('[data-action="row-menu"]');
+    if (rowTrigger && ["ArrowDown","ArrowUp"].includes(event.key) && !state.pending) {
+      event.preventDefault();
+      const wasEditing = !!state.editId;
+      const itemId = rowTrigger.dataset.id;
+      if (!flush()) return;
+      if (wasEditing) renderAndSave();
+      const item = state.items.find(entry => entry.id === itemId);
+      const trigger = wasEditing ? root.querySelector(selectorFor("row-menu",itemId)) : rowTrigger;
+      if (item) openRowPopup(item,trigger,event.key === "ArrowUp");
+      return;
+    }
+    if (event.key === "Enter" && event.target.tagName === "INPUT" && !event.isComposing) {
+      const form = event.target.closest("form[data-form]");
+      if (form) {
+        event.preventDefault();
+        form.dispatchEvent(new Event("submit",{ bubbles:true,cancelable:true }));
+        return;
+      }
+    }
+    if (event.key !== "Escape" || modal.open || confirm.open) return;
+    const menu = root.querySelector("details[open]");
+    if (menu) { menu.open = false; menu.querySelector("summary").focus(); return; }
+    if (state.editId) { const id = state.editId; state.editId = null; state.error = ""; renderAndSave(selectorFor("rename",id)); }
+  });
+  modal.addEventListener("cancel",event => { event.preventDefault(); closeModal(); });
+  confirm.addEventListener("cancel",event => { event.preventDefault(); closeConfirm(); });
+  window.addEventListener("openai:set_globals",event => {
+    const saved = event.detail && event.detail.globals && event.detail.globals.widgetState;
+    if (!saved || !saved.privateContent || modal.open || confirm.open || state.pending) return;
+    const signature = JSON.stringify(saved.privateContent);
+    if (signature === lastSavedState) return;
+    lastSavedState = signature;
+    state = restore(saved.privateContent); settings.example = state.example;
+    settings.showGuest = state.showGuest !== false;
+    render();
+  });
+  render();
+  if (globalThis.Tweak) {
+    const tweak = new Tweak({ container:root,onChange:() => {
+      if (settings.example !== state.example) {
+        if (drawingTimer) clearTimeout(drawingTimer);
+        if (confirm.open) closeConfirm(); if (modal.open) closeModal();
+        state = initial(settings.example); undo = null;
+      }
+      if (settings.failSave) { state.failNext = true; settings.failSave = false; }
+      renderAndSave();
+    } });
+    tweak.addSelect(settings,"example",{ label:"예시 목록",options:["혼합 후보","빈 목록","긴 목록"] });
+    tweak.addToggle(settings,"showGuest",{ label:"참가자 화면 함께 보기" });
+    tweak.addToggle(settings,"failSave",{ label:"다음 저장 실패 예시" });
+  }
+})();
+</script>

@@ -704,6 +704,95 @@ describe("lunch room location experiment", () => {
 	});
 });
 
+describe("lunch room entry info HTTP", () => {
+	const path = `/api/lunch/rooms/${roomId}/entry-info`;
+	it("returns only the current title via a single initialized read without identity proofs", async () => {
+		party.roomFetch.mockResolvedValueOnce(
+			Response.json({
+				title: "  오늘 점심  ",
+				participants: ["private-name"],
+				hostToken: "private-token",
+			}),
+		);
+		const response = await responseFor(new Request(`${origin}${path}`));
+		expect(response.status).toBe(200);
+		expect(response.headers.get("Cache-Control")).toBe("no-store");
+		expect(await response.json()).toEqual({ title: "오늘 점심" });
+		expect(party.getServerByName).not.toHaveBeenCalled();
+		expect(party.get).toHaveBeenCalledExactlyOnceWith(
+			"named-room-id",
+			undefined,
+		);
+		const internal = party.roomFetch.mock.calls[0][0] as Request;
+		expect(internal.url).toBe(
+			"https://lunch-room.internal/_internal/lunch-room/entry-info",
+		);
+		expect(internal.method).toBe("GET");
+		expect(internal.headers.get("x-partykit-room")).toBe(roomId);
+		expect(internal.body).toBeNull();
+		expect(party.initialize).not.toHaveBeenCalled();
+		expect(party.routePartykitRequest).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		404, 410,
+	])("preserves missing/expired status %s without forwarding private fields", async (status) => {
+		party.roomFetch.mockResolvedValueOnce(
+			Response.json(
+				{ title: "private", error: "private-token", participants: ["private"] },
+				{ status },
+			),
+		);
+		const response = await responseFor(new Request(`${origin}${path}`));
+		expect(response.status).toBe(status);
+		expect(await response.json()).toEqual(
+			status === 410
+				? { code: "ROOM_EXPIRED", error: "방이 만료됐습니다." }
+				: { code: "ROOM_NOT_FOUND", error: "방을 찾을 수 없습니다." },
+		);
+	});
+
+	it.each([
+		{},
+		{ title: " " },
+		{ title: "가".repeat(61) },
+	])("fails closed on malformed success %j", async (body) => {
+		party.roomFetch.mockResolvedValueOnce(Response.json(body));
+		const response = await responseFor(new Request(`${origin}${path}`));
+		expect(response.status).toBe(503);
+		expect(await response.json()).toEqual({
+			code: "ENTRY_INFO_UNAVAILABLE",
+			error: "방 정보를 불러오지 못했습니다.",
+		});
+	});
+
+	it("restricts the route, method, and cross-origin requests before room lookup", async () => {
+		const invalid = await responseFor(
+			new Request(`${origin}/api/lunch/rooms/not-a-uuid/entry-info`),
+		);
+		expect(invalid.status).toBe(404);
+		const method = await responseFor(
+			new Request(`${origin}${path}`, { method: "POST" }),
+		);
+		expect(method.status).toBe(405);
+		expect(method.headers.get("Allow")).toBe("GET");
+		const foreignHeaders: HeadersInit[] = [
+			{ Origin: "https://foreign.example" },
+			{ Origin: "null" },
+			{ "Sec-Fetch-Site": "cross-site" },
+		];
+		for (const headers of foreignHeaders)
+			expect(
+				(await responseFor(new Request(`${origin}${path}`, { headers })))
+					.status,
+			).toBe(403);
+		expect(
+			await handleLunchRoomRequest(new Request(`${origin}${path}/extra`), env),
+		).toBeNull();
+		expect(party.get).not.toHaveBeenCalled();
+	});
+});
+
 describe("unrelated request fallback", () => {
 	it.each([
 		"/",

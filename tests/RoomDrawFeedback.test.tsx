@@ -264,10 +264,18 @@ describe("completed room draw feedback", () => {
 		expect(document.querySelector(".room-feedback-burst")).toBeNull();
 	});
 
-	it("shows only the live tally and lists to the host", () => {
-		const current = props(draw([vote("동료 하나"), vote("동료 둘", "down")]));
+	it("offers the host the same ballot while retaining the live tally and voter lists", () => {
+		const current = props({
+			...draw([vote("동료 하나"), vote("동료 둘", "down")]),
+			participants: [{ id: "myself", name: "방장", isHost: true }],
+		});
 		render(<RoomDrawFeedback {...current} isHost />);
-		expect(screen.queryAllByRole("button")).toHaveLength(0);
+		expect(screen.getAllByRole("button")).toHaveLength(2);
+		fireEvent.click(screen.getByRole("button", { name: "좋아요 투표" }));
+		expect(current.onVote).toHaveBeenCalledExactlyOnceWith(
+			"draw-feedback",
+			"up",
+		);
 		expect(screen.getByText("2명 참여")).toBeTruthy();
 		expect(
 			screen.getByRole("list", { name: "좋아요 투표한 참가자" }).textContent,
@@ -275,7 +283,6 @@ describe("completed room draw feedback", () => {
 		expect(
 			screen.getByRole("list", { name: "싫어요 투표한 참가자" }).textContent,
 		).toContain("동료 둘");
-		expect(current.onVote).not.toHaveBeenCalled();
 	});
 
 	it("shows pending feedback and blocks repeated votes while a request is in flight", () => {

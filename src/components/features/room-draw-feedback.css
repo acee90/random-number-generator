@@ -112,9 +112,9 @@
 	display: none;
 }
 .room-draw-feedback[data-mode="actions"] {
-	margin-block-start: 16px;
-	padding-block-start: 16px;
-	border-block-start-color: var(--section-line, #68715e);
+	margin: 0;
+	padding: 0;
+	border: 0;
 }
 .room-draw-feedback[data-mode="actions"] .room-feedback-heading h4 {
 	font-size: 16px;
@@ -140,6 +140,9 @@
 	border-block: 2px solid var(--ink);
 }
 .room-draw-feedback[data-mode="results"] .room-feedback-list {
+	display: flex;
+	flex-direction: column;
+	min-block-size: 146px;
 	--team-color: #4c742c;
 	--team-particle: var(--lime);
 	padding: 0 10px 4px;
@@ -170,7 +173,7 @@
 	justify-content: center;
 	align-items: center;
 	gap: 8px;
-	min-block-size: 68px;
+	min-block-size: 88px;
 	margin: 0 -10px;
 	padding: 10px;
 	border-block-end: 1px solid #ced7bb;
@@ -197,12 +200,22 @@
 	color: var(--ink);
 }
 .room-draw-feedback[data-mode="results"] .room-feedback-list ul {
+	flex: 1;
+	align-content: start;
 	max-block-size: 300px;
 	overflow-y: auto;
 	overscroll-behavior: contain;
 	scrollbar-width: thin;
 	margin-block-start: 0;
 	gap: 0;
+}
+.room-draw-feedback[data-mode="results"] .room-feedback-empty {
+	display: grid;
+	place-items: center;
+	flex: 1;
+	min-block-size: 48px;
+	margin: 0;
+	padding: 8px;
 }
 .room-draw-feedback[data-mode="results"]
 	.room-feedback-list[data-selected="true"] {
@@ -591,9 +604,9 @@
 	.lunch-room.room-live
 		.room-draw-feedback[data-mode="results"]
 		.room-feedback-tally {
-		min-block-size: 48px;
+		min-block-size: 76px;
 		margin-inline: -6px;
-		padding: 6px;
+		padding: 10px 6px;
 	}
 	.room-draw-feedback[data-own-choice] .room-feedback-tally {
 		padding-block-end: 22px;
@@ -604,8 +617,8 @@
 		padding-block-end: 22px;
 	}
 	.room-feedback-tally:focus-visible {
-		outline: 2px solid var(--team-color, #3f5e25);
-		outline-offset: 2px;
+		outline: var(--focus-ring-width) solid var(--ring);
+		outline-offset: var(--focus-ring-offset);
 	}
 	.room-feedback-tally .room-feedback-team-selection {
 		position: absolute;

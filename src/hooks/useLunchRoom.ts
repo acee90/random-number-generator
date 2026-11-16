@@ -1217,7 +1217,6 @@ export function useLunchRoom(
 		const draw = current?.draw;
 		if (
 			!self ||
-			self.isHost ||
 			!current ||
 			!draw ||
 			draw.id !== drawId ||

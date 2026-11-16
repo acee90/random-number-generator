@@ -23,7 +23,12 @@ import {
 import {
 	nicknameCheckPath,
 	readBoundedRoomJson,
+	roomEntryInfoPath,
 } from "@/lib/lunchRoomRequest.server";
+import {
+	hydrateRoomDrawMetadata,
+	recordRoomDrawMetadata,
+} from "@/lib/roomDrawMetadata";
 import { consumeFromPool } from "@/services/seedPool";
 
 export type RoomEnv = Cloudflare.Env;
@@ -79,6 +84,11 @@ interface NicknameAvailabilityResult {
 		error?: string;
 		code?: string;
 	};
+}
+
+interface EntryInfoResult {
+	status: number;
+	body: { title?: string; code?: string; error?: string };
 }
 
 const roomKey = "lunch-room:v1";
@@ -155,6 +165,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 							.slice(0, maxGuestTokenMappings),
 					),
 				};
+				hydrateRoomDrawMetadata(this.room.snapshot);
 			}
 		}
 		if (this.room) this.migrateCurrentNicknames();
@@ -264,6 +275,9 @@ export class LunchRoomServer extends Server<RoomEnv> {
 					intakeId: null,
 					excludeDrawn: false,
 					excludedIds: [],
+					exclusionRecords: [],
+					drawCount: 0,
+					drawCountIsExact: true,
 					gameFilter: { categories: null, excludedIds: [] },
 					candidates,
 					participants: [],
@@ -354,7 +368,39 @@ export class LunchRoomServer extends Server<RoomEnv> {
 		});
 	}
 
+	async getEntryInfo(): Promise<EntryInfoResult> {
+		return this.exclusive(async () => {
+			await this.load();
+			// This read does not refresh presence/TTL or run expiry mutations.
+			// A cold PartyServer wake still performs its normal onStart recovery.
+			if (
+				this.expired ||
+				(this.room && Date.now() >= this.room.snapshot.expiresAt)
+			)
+				return {
+					status: 410,
+					body: { code: "ROOM_EXPIRED", error: "방이 만료됐습니다." },
+				};
+			if (!this.room)
+				return {
+					status: 404,
+					body: { code: "ROOM_NOT_FOUND", error: "방을 찾을 수 없습니다." },
+				};
+			return { status: 200, body: { title: this.room.snapshot.title } };
+		});
+	}
+
 	async onRequest(request: Request): Promise<Response> {
+		if (
+			request.method === "GET" &&
+			new URL(request.url).pathname === roomEntryInfoPath
+		) {
+			const result = await this.getEntryInfo();
+			return Response.json(result.body, {
+				status: result.status,
+				headers: { "Cache-Control": "no-store" },
+			});
+		}
 		if (
 			request.method !== "POST" ||
 			new URL(request.url).pathname !== nicknameCheckPath
@@ -591,7 +637,10 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			}
 			if (
 				message.action === "finalize" &&
-				getEligibleRoomCandidates(snapshot).length === 0
+				// Drawn exclusions are a waiting-screen game option. Finalizing the
+				// selected pool must still allow returning there to recover it.
+				getEligibleRoomCandidates({ ...snapshot, excludeDrawn: false })
+					.length === 0
 			) {
 				fail("NO_CANDIDATES", "추첨에 포함할 후보가 한 개 이상 필요합니다.");
 				return;
@@ -710,6 +759,9 @@ export class LunchRoomServer extends Server<RoomEnv> {
 					snapshot.excludedIds = snapshot.excludedIds?.filter(
 						(id) => id !== message.candidateId,
 					);
+					snapshot.exclusionRecords = snapshot.exclusionRecords?.filter(
+						(entry) => entry.candidateId !== message.candidateId,
+					);
 					if (snapshot.gameFilter)
 						snapshot.gameFilter.excludedIds =
 							snapshot.gameFilter.excludedIds.filter(
@@ -736,6 +788,9 @@ export class LunchRoomServer extends Server<RoomEnv> {
 						snapshot.excludedIds = snapshot.excludedIds?.filter((id) =>
 							ids.has(id),
 						);
+						snapshot.exclusionRecords = snapshot.exclusionRecords?.filter(
+							(entry) => ids.has(entry.candidateId),
+						);
 						if (snapshot.gameFilter)
 							snapshot.gameFilter.excludedIds =
 								snapshot.gameFilter.excludedIds.filter((id) => ids.has(id));
@@ -755,6 +810,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 					break;
 				case "reset-exclusions":
 					snapshot.excludedIds = [];
+					snapshot.exclusionRecords = [];
 					break;
 			}
 			if (message.type !== "room-edit" || message.candidates)
@@ -989,15 +1045,6 @@ export class LunchRoomServer extends Server<RoomEnv> {
 	) {
 		const participant = connection.state?.participant;
 		if (!this.room || !participant) return;
-		if (participant.isHost || participant.id === this.room.hostParticipantId) {
-			this.sendError(
-				connection,
-				"HOST_CANNOT_VOTE",
-				"참가자만 추첨 결과에 투표할 수 있습니다.",
-				message.id,
-			);
-			return;
-		}
 		if (this.room.snapshot.history.some((draw) => draw.id === message.drawId)) {
 			this.sendError(
 				connection,
@@ -1152,12 +1199,17 @@ export class LunchRoomServer extends Server<RoomEnv> {
 	) {
 		if (!this.room) return;
 		const requestId = message.id;
-		if (this.room.processedStarts.includes(requestId)) {
+		const snapshot = this.room.snapshot;
+		if (
+			this.room.processedStarts.includes(requestId) ||
+			snapshot.draw?.id === requestId ||
+			snapshot.history.some((draw) => draw.id === requestId) ||
+			snapshot.exclusionRecords?.some((record) => record.drawId === requestId)
+		) {
 			this.sendSnapshot(connection);
 			this.send(connection, { type: "ack", requestId });
 			return;
 		}
-		const snapshot = this.room.snapshot;
 		if (snapshot.status !== "waiting" || snapshot.draw) {
 			this.sendError(
 				connection,
@@ -1284,7 +1336,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 					return;
 				const before = structuredClone(this.room);
 				const timestamp = Date.now();
-				this.room.snapshot.draw = {
+				const draw: RoomDraw = {
 					...metadata,
 					id: requestId,
 					candidates,
@@ -1298,6 +1350,12 @@ export class LunchRoomServer extends Server<RoomEnv> {
 					listVersion,
 					votes: [],
 				};
+				recordRoomDrawMetadata(
+					this.room.snapshot,
+					draw,
+					metadata.excludeDrawn ?? false,
+				);
+				this.room.snapshot.draw = draw;
 				const winnerId = candidates[winnerIndex].id;
 				this.room.snapshot.excludedIds = metadata.excludeDrawn
 					? [...new Set([...(metadata.excludedIdsBefore ?? []), winnerId])]
@@ -1512,16 +1570,20 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			connection.state.closing
 		)
 			return;
+		const excludedIds =
+			this.room.snapshot.status === "drawing" && this.room.snapshot.draw
+				? this.room.snapshot.draw.excludeDrawn
+					? (this.room.snapshot.draw.excludedIdsBefore ?? [])
+					: []
+				: (this.room.snapshot.excludedIds ?? []);
 		this.send(connection, {
 			type: "snapshot",
 			snapshot: {
 				...this.room.snapshot,
-				excludedIds:
-					this.room.snapshot.status === "drawing" && this.room.snapshot.draw
-						? this.room.snapshot.draw.excludeDrawn
-							? (this.room.snapshot.draw.excludedIdsBefore ?? [])
-							: []
-						: (this.room.snapshot.excludedIds ?? []),
+				excludedIds,
+				exclusionRecords: this.room.snapshot.exclusionRecords?.filter((entry) =>
+					excludedIds.includes(entry.candidateId),
+				),
 				participants: this.participants(excludeSocketId),
 			},
 			serverTime: Date.now(),

@@ -6,6 +6,7 @@ import {
 	getEligibleRoomCandidates,
 	getRoomPhase,
 	isLunchRoomId,
+	isRoomDrawVoter,
 	lunchRoomLimits,
 	normalizeLunchRoomNickname,
 	parseClientMessage,
@@ -23,6 +24,24 @@ import {
 const now = 1_800_000_000_000;
 const roomId = "fc76a783-253a-47c7-95cd-5a7c9851d675";
 const ids = sampleLunchPlaces.slice(0, 3).map((place) => place.id);
+
+describe("current draw voter eligibility", () => {
+	it("allows the host and guests captured at draw start, but not absent or unknown identities", () => {
+		const draw = makeDraw({
+			participants: [
+				{ id: "host-1", name: "방장", isHost: true },
+				{ id: "guest-1", name: "참가자", isHost: false },
+			],
+		});
+		expect(isRoomDrawVoter(draw, "host-1")).toBe(true);
+		expect(isRoomDrawVoter(draw, "guest-1")).toBe(true);
+		expect(isRoomDrawVoter(draw, "late-guest")).toBe(false);
+		expect(isRoomDrawVoter(draw)).toBe(false);
+		expect(
+			isRoomDrawVoter({ ...draw, participants: undefined }, "host-1"),
+		).toBe(false);
+	});
+});
 
 function makeDraw(overrides: Partial<RoomDraw> = {}): RoomDraw {
 	return {
