@@ -1084,6 +1084,94 @@ describe("LunchRoomServer", () => {
 		});
 	});
 
+	it("returns opt-in timings only to the sender after storage and never persists telemetry", async () => {
+		const { server, context } = await room();
+		const sender = await connect(server, context, "측정");
+		const other = await connect(server, context, "다른사람");
+		const info = vi.spyOn(console, "info").mockImplementation(() => {});
+		const diagnosticId = crypto.randomUUID();
+		const originalPut = context.storage.put.bind(context.storage);
+		let release!: () => void;
+		const blocked = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		vi.spyOn(context.storage, "put").mockImplementation(async (key, value) => {
+			await blocked;
+			await originalPut(key, value);
+		});
+		const before = sender.sent.length;
+		const pending = send(server, sender, {
+			type: "chat",
+			id: "traced-message",
+			text: "private diagnostic text",
+			diagnosticId,
+		});
+		await vi.waitFor(() => expect(context.storage.put).toHaveBeenCalled());
+		expect(sender.sent).toHaveLength(before);
+		await vi.advanceTimersByTimeAsync(200);
+		release();
+		await pending;
+		expect(latestSnapshot(sender).chatTrace).toMatchObject({ diagnosticId });
+		expect(latestSnapshot(sender).chatTrace?.saveMs).toBeGreaterThanOrEqual(
+			200,
+		);
+		const raw = JSON.parse(sender.sent.at(-1) as string);
+		raw.chatTrace.queueMs = -1;
+		expect(parseServerMessage(JSON.stringify(raw))).toMatchObject({
+			type: "snapshot",
+		});
+		expect(
+			(
+				parseServerMessage(JSON.stringify(raw)) as Extract<
+					ServerMessage,
+					{ type: "snapshot" }
+				>
+			).chatTrace,
+		).toBeUndefined();
+		expect(latestSnapshot(other).chatTrace).toBeUndefined();
+		expect(JSON.stringify([...context.storage.values])).not.toContain(
+			diagnosticId,
+		);
+		expect(JSON.stringify(info.mock.calls)).toContain(diagnosticId);
+		expect(JSON.stringify(info.mock.calls)).not.toContain(
+			"private diagnostic text",
+		);
+		expect(JSON.stringify(info.mock.calls)).not.toContain(context.id.name);
+		// Telemetry is transient; later snapshots must not replay it.
+		await send(server, sender, {
+			type: "chat",
+			id: "traced-message",
+			text: "duplicate",
+		});
+		expect(latestSnapshot(sender).chatTrace).toBeUndefined();
+		expect(
+			latestSnapshot(sender).snapshot.messages.filter(
+				(entry) => entry.id === "traced-message",
+			),
+		).toHaveLength(1);
+	});
+
+	it("ignores malformed opt-in IDs and does not instrument ordinary chat or rejected chat", async () => {
+		const { server, context } = await room();
+		const sender = await connect(server, context, "측정");
+		const info = vi.spyOn(console, "info").mockImplementation(() => {});
+		await send(server, sender, {
+			type: "chat",
+			id: "plain-chat",
+			text: "hello",
+			diagnosticId: "private invalid value",
+		});
+		expect(latestSnapshot(sender).chatTrace).toBeUndefined();
+		await send(server, sender, {
+			type: "chat",
+			id: "too-fast",
+			text: "hello",
+			diagnosticId: crypto.randomUUID(),
+		});
+		expect(hasError(sender, "CHAT_RATE_LIMIT")).toBe(true);
+		expect(info).not.toHaveBeenCalled();
+	});
+
 	it("keeps at most 100 chat messages and rejects oversized or invalid messages", async () => {
 		const { server, context } = await room();
 		const guest = await connect(server, context, "손님");

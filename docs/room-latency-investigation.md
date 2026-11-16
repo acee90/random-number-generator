@@ -139,3 +139,30 @@ npm run check:latency -- --origin https://jeommechu.dev --samples 5
 위 비교는 서울 Worker와 동북아 DO를 함께 적용한 당시 실험 기록이다. 이후 사용자가 DO 지역 힌트의 main 반영·운영 배포를 명시 요청했다. 이번 출시 범위는 `vars.LUNCH_ROOM_LOCATION_HINT=apac-ne`와 일관된 최초 접근 힌트이며, Worker의 서울 리전 설정은 포함하지 않는다. 같은 브랜치의 Preview도 Worker 기본 배치 + 동북아 신규 DO로 바꿔 회귀를 확인한다.
 
 기존 namespace와 `lunch-rooms-v1` migration은 유지하며 새 namespace를 만들거나 기존 방 데이터를 옮기지 않는다. 힌트는 신규 DO에만 적용된다. 앞선 조합의 지연 수치를 이번 DO-only 조건의 개선 증거로 사용하지 않는다. 실제 main 병합·운영 배포·새 방 검증 결과는 [#47](https://github.com/acee90/random-number-generator/issues/47)에서 구분해 관리한다.
+
+## 메시지별 지연 구간 계측 — 2026-11-16
+
+관련 이슈: [#47](https://github.com/acee90/random-number-generator/issues/47). 구현·검증·운영 배포 상태는 이슈에서 관리한다.
+
+방 주소에 `?debugRoom=1`을 붙이고 입장한 뒤 채팅을 보내면 브라우저 콘솔에 `[room chat trace]` JSON이 출력된다. 각 전송마다 별도 UUID `diagnosticId`가 생성된다. Cloudflare Logs/Traces에서 같은 ID의 `[room chat trace]` 서버 로그를 검색해 해당 DO 호출을 찾는다. 메시지 ID·본문·닉네임·방 ID·인증 토큰은 진단 로그에 넣지 않는다. 일반 접속은 진단 ID·타이머·서버 진단 로그를 만들지 않는다.
+
+| 필드 | 의미 |
+| --- | --- |
+| `clientSentAt`, `clientReceivedAt`, `clientAckAt` | 브라우저 전송 직전, message 핸들러 진입, 서버 확정 snapshot을 ACK로 처리한 절대시각(ms) |
+| `rttMs` | 전송 직전부터 message 핸들러 진입까지의 단조시계 경과시간 |
+| `parseMs`, `ackHandlingMs` | 수신 JSON·프로토콜 검증 시간, 이후 해당 메시지 ACK 확인까지의 처리 시간. React 화면 커밋 시간은 아님 |
+| `server.serverReceivedAt`, `server.serverSendAt` | DO onMessage 진입, 발신자 snapshot 직렬화·소켓 enqueue 직전의 절대시각(ms) |
+| `server.queueMs` | onMessage 이후 앱의 exclusive 큐 진입까지 |
+| `server.prepareMs` | 프로토콜 파싱 및 큐 진입 후 load·만료·권한·중복/속도 검사와 메시지 준비까지(큐 대기 제외) |
+| `server.saveMs`, `server.alarmMs` | durable 저장, 알람 갱신 대기 시간 |
+| `server.serverTotalMs` | onMessage 진입부터 발신자 snapshot 직렬화 직전까지. 큐/사전처리/저장/알람 외 snapshot 준비 등도 포함 |
+| `outsideServerMs` | `rttMs - serverTotalMs`의 0 이상 값. 네트워크뿐 아니라 DO 핸들러 이전 대기·직렬화·Cloudflare 전달·브라우저 스케줄링을 포함 |
+| `maxEventLoopLagMs` | 해당 전송이 대기 중일 때 100ms 타이머의 최대 관측 지연. CPU 작업·브라우저 스케줄링·백그라운드 제한의 영향을 받으며 네트워크 시간은 아님 |
+| `hiddenDuring` | 전송에서 ACK 사이 한 번이라도 문서가 숨겨졌는지 |
+| `eventDispatchAgeMs` | MessageEvent 생성 시각과 핸들러 진입의 차이. 유효 범위일 때만 기록하며 네트워크 패킷 도착 시각은 아님 |
+
+서버 로그는 `boundary=broadcast-enqueued`로 전체 broadcast enqueue 이후를 기록한다. 따라서 snapshot에 실린 직렬화 직전 시간과 로그의 broadcast 완료 시간은 경계가 다르며, 어느 쪽도 실제 네트워크 flush 완료를 보장하지 않는다. 서버 진단은 발신자 snapshot의 부가 필드이고 메시지 durable 저장/인증/속도 제한을 바꾸지 않는다. 다른 참가자에게 전파하거나 저장하지 않고 후속 snapshot에도 재사용하지 않는다.
+
+`clockSynchronized=false`를 항상 기록한다. 클라이언트와 서버 시계 오차/경로 비대칭을 보정하지 않았으므로 절대시각을 빼서 상행/하행 지연을 확정하지 않는다. 기존 ping의 중간시각 추정도 일방향 시간을 보장하지 않는다. `server=null`이면 이전 서버/후속 snapshot 등으로 직접 계측이 연결되지 않은 상태다. 성공 ACK만 구간 로그를 내며 실패·연결 종료·15초 미확인·닫기·컴포넌트 해제 때 진단 타이머와 visibility listener를 정리한다. 늦은 ACK와 기존 채팅 상태 처리는 유지한다.
+
+판독 예: RTT가 2600ms이고 서버 처리 10ms면 약2590ms는 서버 핸들러 밖의 구간이다. 동시에 이벤트 루프 지연이 2000ms면 브라우저 정지가 기여했을 수 있다. 이벤트 루프 지연이 작더라도 패킷 손실/TCP 재전송으로 확정하지 않으며 전송 계층 증거가 추가로 필요하다. 현재 계측은 본인 ACK를 대상으로 하고 다른 참가자의 수신 지연은 별도다.

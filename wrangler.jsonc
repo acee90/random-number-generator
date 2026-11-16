@@ -9,7 +9,8 @@
 	"compatibility_flags": ["nodejs_compat"],
 	"main": "src/worker.ts",
 	"observability": {
-		"enabled": true
+		"enabled": true,
+		"traces": { "enabled": true, "head_sampling_rate": 1 }
 	},
 	"vars": {
 		"LUNCH_ROOM_LOCATION_HINT": "apac-ne"
