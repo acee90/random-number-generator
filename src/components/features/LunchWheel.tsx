@@ -85,10 +85,13 @@ export function LunchWheel({
 	drawText?: string;
 }) {
 	const size = candidates.length;
-	const labels = candidates.map((place, index) => ({
-		id: place.id,
-		text: `${candidateNumbers[index]} ${place.name.length > 5 ? `${place.name.slice(0, 4)}…` : place.name}`,
-	}));
+	const labels = candidates.map((place, index) => {
+		const characters = Array.from(place.name);
+		return {
+			id: place.id,
+			text: `${candidateNumbers[index]} ${characters.length > 5 ? `${characters.slice(0, 4).join("")}…` : place.name}`,
+		};
+	});
 	const background = size
 		? `conic-gradient(${candidates
 				.map(
