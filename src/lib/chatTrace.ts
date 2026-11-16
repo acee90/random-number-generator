@@ -38,6 +38,7 @@ export function beginChatTrace() {
 				wallAt: number;
 				parsedAt: number;
 				eventTimeStamp: number;
+				bytes?: number;
 			},
 		) {
 			if (stopped) return;
@@ -61,6 +62,7 @@ export function beginChatTrace() {
 						clientReceivedAt: received.wallAt,
 						clientAckAt: Date.now(),
 						rttMs,
+						responseBytes: received.bytes ?? null,
 						parseMs: received.parsedAt - received.at,
 						ackHandlingMs: acknowledgedAt - received.parsedAt,
 						maxEventLoopLagMs,

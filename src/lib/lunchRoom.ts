@@ -178,6 +178,7 @@ export type ClientMessage =
 			hostToken?: string;
 			guestToken?: string;
 			updateName?: boolean;
+			chatProtocol?: "delta-v1";
 	  }
 	| { type: "activity" }
 	| { type: "chat"; id: string; text: string; diagnosticId?: string }
@@ -240,6 +241,7 @@ export interface ChatTrace {
 	prepareMs: number;
 	saveMs: number;
 	alarmMs: number;
+	syncMs?: number;
 	serverTotalMs: number;
 }
 
@@ -277,15 +279,33 @@ function parseChatTrace(value: unknown): ChatTrace | undefined {
 		)
 	)
 		return;
+	if (
+		value.syncMs !== undefined &&
+		(typeof value.syncMs !== "number" ||
+			!Number.isFinite(value.syncMs) ||
+			value.syncMs < 0 ||
+			value.syncMs > 86400000)
+	)
+		return;
 	return Object.fromEntries(
-		["diagnosticId", "serverReceivedAt", "serverSendAt", ...keys].map((key) => [
-			key,
-			value[key],
-		]),
+		[
+			...(value.syncMs === undefined ? [] : ["syncMs"]),
+			"diagnosticId",
+			"serverReceivedAt",
+			"serverSendAt",
+			...keys,
+		].map((key) => [key, value[key]]),
 	) as unknown as ChatTrace;
 }
 
 export type ServerMessage =
+	| {
+			type: "chat-ack" | "chat-message";
+			roomId: string;
+			message: ChatMessage;
+			serverTime: number;
+			chatTrace?: ChatTrace;
+	  }
 	| { type: "ack"; requestId: string }
 	| {
 			type: "snapshot";
@@ -461,6 +481,9 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
 			return {
 				type: "join",
 				name,
+				...(value.chatProtocol === "delta-v1"
+					? { chatProtocol: "delta-v1" as const }
+					: {}),
 				...(value.updateName === undefined
 					? {}
 					: { updateName: value.updateName as boolean }),
@@ -1133,6 +1156,26 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
 			return isId(value.requestId)
 				? { type: "ack", requestId: value.requestId }
 				: null;
+		case "chat-ack":
+		case "chat-message": {
+			const message = parseChatMessage(value.message);
+			if (
+				!isLunchRoomId(value.roomId) ||
+				!isTime(value.serverTime) ||
+				!message ||
+				message.event
+			)
+				return null;
+			const chatTrace =
+				value.type === "chat-ack" ? parseChatTrace(value.chatTrace) : undefined;
+			return {
+				type: value.type,
+				roomId: value.roomId,
+				message,
+				serverTime: value.serverTime,
+				...(chatTrace ? { chatTrace } : {}),
+			};
+		}
 		case "snapshot": {
 			const snapshot = parseRoomSnapshot(value.snapshot);
 			const chatTrace = parseChatTrace(value.chatTrace);

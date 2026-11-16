@@ -75,6 +75,7 @@ interface SocketState {
 	lastChatAt?: number;
 	lastActiveAt?: number;
 	closing?: boolean;
+	chatProtocol?: "delta-v1";
 }
 
 interface NicknameAvailabilityResult {
@@ -941,6 +942,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 		connection.setState({
 			...state,
 			lastActiveAt: Date.now(),
+			chatProtocol: message.chatProtocol,
 			participant: {
 				id: participantId,
 				name,
@@ -1034,6 +1036,10 @@ export class LunchRoomServer extends Server<RoomEnv> {
 		await this.save();
 		const alarmStarted = performance.now();
 		await this.scheduleAlarm();
+		const syncStarted = performance.now();
+		// Debug only: await the durability boundary that otherwise gates socket output.
+		// A failed flush must not emit a successful acknowledgement.
+		if (timing && message.diagnosticId) await this.ctx.storage.sync();
 		const ready = performance.now();
 		const chatTrace: ChatTrace | undefined =
 			timing && message.diagnosticId
@@ -1044,12 +1050,13 @@ export class LunchRoomServer extends Server<RoomEnv> {
 						queueMs: timing.queueMs,
 						prepareMs: saveStarted - timing.started - timing.queueMs,
 						saveMs: alarmStarted - saveStarted,
-						alarmMs: ready - alarmStarted,
+						alarmMs: syncStarted - alarmStarted,
+						syncMs: ready - syncStarted,
 						serverTotalMs: ready - timing.started,
 					}
 				: undefined;
-		this.publish(
-			undefined,
+		this.publishChat(
+			connection,
 			chatTrace && timing
 				? { connection, chatTrace, started: timing.started }
 				: undefined,
@@ -1635,24 +1642,43 @@ export class LunchRoomServer extends Server<RoomEnv> {
 		});
 	}
 
-	private publish(
-		excludeSocketId?: string,
+	private publishChat(
+		sender: Connection<SocketState>,
 		diagnostic?: {
 			connection: Connection<SocketState>;
 			chatTrace: ChatTrace;
 			started: number;
 		},
 	) {
+		if (!this.room) return;
+		const message = this.room.snapshot.messages.at(-1);
+		if (!message) return;
 		for (const connection of this.getConnections<SocketState>()) {
-			if (connection.state?.socketId !== excludeSocketId)
+			if (!connection.state?.participant || connection.state.closing) continue;
+			const isSender = connection.state.socketId === sender.state?.socketId;
+			if (connection.state.chatProtocol !== "delta-v1") {
 				this.sendSnapshot(
 					connection,
-					excludeSocketId,
-					diagnostic &&
-						diagnostic.connection.state?.socketId === connection.state?.socketId
-						? diagnostic
-						: undefined,
+					undefined,
+					isSender ? diagnostic : undefined,
 				);
+				continue;
+			}
+			this.send(connection, {
+				type: isSender ? "chat-ack" : "chat-message",
+				roomId: this.room.snapshot.roomId,
+				message,
+				serverTime: Date.now(),
+				...(isSender && diagnostic
+					? {
+							chatTrace: {
+								...diagnostic.chatTrace,
+								serverSendAt: Date.now(),
+								serverTotalMs: performance.now() - diagnostic.started,
+							},
+						}
+					: {}),
+			});
 		}
 		if (diagnostic) {
 			try {
@@ -1666,8 +1692,15 @@ export class LunchRoomServer extends Server<RoomEnv> {
 					}),
 				);
 			} catch {
-				/* Diagnostics must never fail a chat. */
+				/* Optional diagnostics must not fail a chat. */
 			}
+		}
+	}
+
+	private publish(excludeSocketId?: string) {
+		for (const connection of this.getConnections<SocketState>()) {
+			if (connection.state?.socketId !== excludeSocketId)
+				this.sendSnapshot(connection, excludeSocketId);
 		}
 	}
 

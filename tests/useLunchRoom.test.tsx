@@ -1033,6 +1033,140 @@ describe("immediate own-chat display and acknowledgement", () => {
 		receive({ type: "snapshot", snapshot: current, serverTime: Date.now() });
 	}
 
+	it("finishes debug traces from the small ACK with sync timing and wire payload size", () => {
+		window.history.replaceState(null, "", "?debugRoom=1");
+		try {
+			const info = vi.spyOn(console, "info").mockImplementation(() => {});
+			const { result } = renderHook(() => useLunchRoom(roomId));
+			joined();
+			act(() => result.current.sendChat("김밥 어때요?"));
+			const { id, diagnosticId } = sent("chat")[0];
+			expect(diagnosticId).toEqual(expect.any(String));
+			const chatTrace = {
+				diagnosticId,
+				serverReceivedAt: Date.now(),
+				serverSendAt: Date.now(),
+				queueMs: 0,
+				prepareMs: 0,
+				saveMs: 0,
+				alarmMs: 0,
+				syncMs: 7,
+				serverTotalMs: 7,
+			};
+			const raw = JSON.stringify({
+				type: "chat-ack",
+				roomId,
+				message: acknowledgeChat(id).messages[0],
+				serverTime: Date.now(),
+				chatTrace,
+			});
+			receive(raw);
+			const log = info.mock.calls
+				.map(([value]) => String(value))
+				.find((value) => value.startsWith("[room chat trace] "));
+			if (!log) throw new Error("Missing chat trace");
+			const trace = JSON.parse(log.slice("[room chat trace] ".length));
+			expect(trace.server.syncMs).toBe(7);
+			expect(trace.responseBytes).toBe(
+				new TextEncoder().encode(raw).byteLength,
+			);
+			expect(result.current.localChatMessages).toEqual([]);
+		} finally {
+			window.history.replaceState(null, "", "/");
+		}
+	});
+
+	it("reconciles a small durable ACK and peer delta without replacing room state", () => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined();
+		const candidates = result.current.snapshot?.candidates;
+		act(() => result.current.sendChat("김밥 어때요?"));
+		const id = sent("chat")[0].id;
+		const own = acknowledgeChat(id).messages[0];
+		const ack = {
+			type: "chat-ack",
+			roomId,
+			message: own,
+			serverTime: Date.now(),
+		};
+		receive(ack);
+		expect(result.current.localChatMessages).toEqual([]);
+		expect(result.current.snapshot?.messages).toEqual([own]);
+		receive(ack);
+		const peer = {
+			...own,
+			id: "peer-chat",
+			participantId: "guest-client",
+			text: "좋아요",
+		};
+		receive({
+			type: "chat-message",
+			roomId,
+			message: peer,
+			serverTime: Date.now(),
+		});
+		expect(result.current.snapshot?.messages).toEqual([own, peer]);
+		expect(result.current.snapshot?.candidates).toBe(candidates);
+		// Reconnect/full snapshots remain authoritative and do not duplicate deltas.
+		publish(snapshot({ messages: [own, peer] }));
+		expect(result.current.snapshot?.messages).toEqual([own, peer]);
+		act(() => vi.advanceTimersByTime(15000));
+		expect(result.current.error).toBe("");
+	});
+
+	it("does not confirm a different participant's message or another room's delta", () => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined();
+		act(() => result.current.sendChat("김밥 어때요?"));
+		const id = sent("chat")[0].id;
+		const entry = acknowledgeChat(id).messages[0];
+		receive({
+			type: "chat-ack",
+			roomId,
+			message: { ...entry, participantId: "other" },
+			serverTime: Date.now(),
+		});
+		expect(result.current.localChatMessages).toHaveLength(1);
+		receive({
+			type: "chat-ack",
+			roomId: "fc76a783-253a-47c7-95cd-5a7c9851d675",
+			message: entry,
+			serverTime: Date.now(),
+		});
+		expect(result.current.localChatMessages).toHaveLength(1);
+		expect(result.current.error).toContain("방에서 받은 정보를");
+	});
+
+	it("bounds delta history and ignores deltas before admission", () => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		const entry = acknowledgeChat("new").messages[0];
+		receive({
+			type: "chat-message",
+			roomId,
+			message: entry,
+			serverTime: Date.now(),
+		});
+		expect(result.current.snapshot).toBeNull();
+		joined(
+			true,
+			snapshot({
+				messages: Array.from({ length: 100 }, (_, i) => ({
+					...entry,
+					id: `old-${i}`,
+				})),
+			}),
+		);
+		receive({
+			type: "chat-message",
+			roomId,
+			message: entry,
+			serverTime: Date.now(),
+		});
+		expect(result.current.snapshot?.messages).toHaveLength(100);
+		expect(result.current.snapshot?.messages[0].id).toBe("old-1");
+		expect(result.current.snapshot?.messages.at(-1)).toEqual(entry);
+	});
+
 	it("shows the sent text immediately without changing authoritative room data, then reconciles by message ID", () => {
 		const { result } = renderHook(() => useLunchRoom(roomId));
 		joined();
@@ -1281,6 +1415,7 @@ describe("explicit lunch room admission", () => {
 		opened();
 		expect(sent("join")[0]).toEqual({
 			type: "join",
+			chatProtocol: "delta-v1",
 			name: "Strict 방장",
 			updateName: true,
 			hostToken: token,
@@ -1326,6 +1461,7 @@ describe("explicit lunch room admission", () => {
 		opened();
 		expect(sent("join")[0]).toEqual({
 			type: "join",
+			chatProtocol: "delta-v1",
 			name: "다른 방장",
 			updateName: true,
 			hostToken: token,
@@ -1384,7 +1520,13 @@ describe("explicit lunch room admission", () => {
 		expect(result.current.entryLoading).toBe(false);
 		opened();
 		expect(sent("join")).toEqual([
-			{ type: "join", name: "Eric", updateName: true, hostToken: token },
+			{
+				type: "join",
+				chatProtocol: "delta-v1",
+				name: "Eric",
+				updateName: true,
+				hostToken: token,
+			},
 		]);
 		expect(result.current.self).toBeNull();
 		expect(mocks.saveName).not.toHaveBeenCalled();
@@ -1426,7 +1568,13 @@ describe("explicit lunch room admission", () => {
 		act(() => expect(result.current.enter("지수")).toBe(true));
 		opened();
 		expect(sent("join")).toEqual([
-			{ type: "join", name: "지수", updateName: true, guestToken },
+			{
+				type: "join",
+				chatProtocol: "delta-v1",
+				name: "지수",
+				updateName: true,
+				guestToken,
+			},
 		]);
 		joined(
 			false,
@@ -1453,6 +1601,7 @@ describe("explicit lunch room admission", () => {
 		opened();
 		expect(sent("join").at(-1)).toEqual({
 			type: "join",
+			chatProtocol: "delta-v1",
 			name: "민수",
 			hostToken: token,
 		});
@@ -1552,7 +1701,12 @@ describe("lunch room connection lifecycle", () => {
 		expect(mocks.readGuestToken).not.toHaveBeenCalled();
 		opened();
 		expect(sent("join")).toEqual([
-			{ type: "join", name: "민수", hostToken: token },
+			{
+				type: "join",
+				chatProtocol: "delta-v1",
+				name: "민수",
+				hostToken: token,
+			},
 		]);
 		expect(sent("ping")).toHaveLength(1);
 		expect(result.current.connection).toBe("connecting");
@@ -1570,6 +1724,7 @@ describe("lunch room connection lifecycle", () => {
 		expect(mocks.sockets).toHaveLength(1);
 		expect(sent("join").at(-1)).toEqual({
 			type: "join",
+			chatProtocol: "delta-v1",
 			name: "새 이름",
 			updateName: true,
 			hostToken: token,
@@ -1594,7 +1749,12 @@ describe("lunch room connection lifecycle", () => {
 		const restored = renderHook(() => useLunchRoom(roomId, true));
 		opened();
 		expect(sent("join")).toEqual([
-			{ type: "join", name: "민수", hostToken: token },
+			{
+				type: "join",
+				chatProtocol: "delta-v1",
+				name: "민수",
+				hostToken: token,
+			},
 		]);
 		expect(restored.result.current.self).toBeNull();
 		expect(restored.result.current.connection).toBe("connecting");
@@ -1617,7 +1777,9 @@ describe("lunch room connection lifecycle", () => {
 		const { result } = renderHook(() => useLunchRoom(roomId, true));
 		joined(false);
 		expect(mocks.readHost).toHaveBeenCalledWith(roomId);
-		expect(sent("join")).toEqual([{ type: "join", name: "민수", guestToken }]);
+		expect(sent("join")).toEqual([
+			{ type: "join", chatProtocol: "delta-v1", name: "민수", guestToken },
+		]);
 		expect(mocks.readGuestToken).toHaveBeenCalledExactlyOnceWith(roomId);
 		expect(result.current.self?.isHost).toBe(false);
 		act(() => {
@@ -1659,7 +1821,9 @@ describe("lunch room connection lifecycle", () => {
 		mocks.readHost.mockReturnValue(undefined);
 		const { result } = renderHook(() => useLunchRoom(roomId));
 		joined(false);
-		expect(sent("join")).toEqual([{ type: "join", name: "민수", guestToken }]);
+		expect(sent("join")).toEqual([
+			{ type: "join", chatProtocol: "delta-v1", name: "민수", guestToken },
+		]);
 		expect(socket().options).not.toHaveProperty("query");
 		expect(JSON.stringify(socket().options)).not.toContain(guestToken);
 		act(() => {
@@ -1670,9 +1834,15 @@ describe("lunch room connection lifecycle", () => {
 		joined(false);
 		expect(mocks.readGuestToken).toHaveBeenCalledExactlyOnceWith(roomId);
 		expect(sent("join")).toEqual([
-			{ type: "join", name: "민수", guestToken },
-			{ type: "join", name: "새 손님", guestToken, updateName: true },
-			{ type: "join", name: "민수", guestToken },
+			{ type: "join", chatProtocol: "delta-v1", name: "민수", guestToken },
+			{
+				type: "join",
+				chatProtocol: "delta-v1",
+				name: "새 손님",
+				guestToken,
+				updateName: true,
+			},
+			{ type: "join", chatProtocol: "delta-v1", name: "민수", guestToken },
 		]);
 		expect(JSON.stringify(result.current)).not.toContain(guestToken);
 	});
@@ -1688,7 +1858,12 @@ describe("lunch room connection lifecycle", () => {
 		});
 		joined(false, current);
 		expect(sent("join")).toEqual([
-			{ type: "join", name: "다른 방에서 쓴 이름", guestToken },
+			{
+				type: "join",
+				chatProtocol: "delta-v1",
+				name: "다른 방에서 쓴 이름",
+				guestToken,
+			},
 		]);
 		expect(result.current.nickname).toBe("이 방의 저장 이름");
 		expect(mocks.saveName).toHaveBeenLastCalledWith("이 방의 저장 이름");
@@ -1707,6 +1882,7 @@ describe("lunch room connection lifecycle", () => {
 		act(() => expect(result.current.rename(" 직접 고른 이름 ")).toBe(true));
 		expect(sent("join").at(-1)).toEqual({
 			type: "join",
+			chatProtocol: "delta-v1",
 			name: "직접 고른 이름",
 			updateName: true,
 			guestToken,
@@ -2001,7 +2177,12 @@ describe("actual user activity and server presence", () => {
 		joined(false, snapshot({ roomId: nextId }));
 		expect(mocks.readGuestToken.mock.calls).toEqual([[roomId], [nextId]]);
 		expect(sent("join")).toEqual([
-			{ type: "join", name: "민수", guestToken: nextToken },
+			{
+				type: "join",
+				chatProtocol: "delta-v1",
+				name: "민수",
+				guestToken: nextToken,
+			},
 		]);
 		act(() => vi.advanceTimersByTime(15000));
 		expect(sent("activity")).toEqual([]);
