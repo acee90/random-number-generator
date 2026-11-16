@@ -1202,6 +1202,61 @@ describe("LunchRoomServer", () => {
 		expect(sender.sent).toHaveLength(before);
 	});
 
+	it.each([
+		undefined,
+		"delta-v1",
+	] as const)("rolls back a failed chat save without evicting history or consuming its retry (%s)", async (chatProtocol) => {
+		const { server, context } = await room();
+		const sender = await connect(server, context, "작성자");
+		const other = await connect(server, context, "다른사람");
+		if (chatProtocol) sender.setState({ ...sender.state, chatProtocol });
+		for (let index = 0; index < 100; index++) {
+			vi.advanceTimersByTime(750);
+			await send(server, sender, {
+				type: "chat",
+				id: `retained-${index}`,
+				text: `메시지${index}`,
+			});
+		}
+		const before = structuredClone(latestSnapshot(other).snapshot.messages);
+		const socketBefore = structuredClone(sender.state);
+		const otherSent = other.sent.length;
+		vi.advanceTimersByTime(750);
+		vi.spyOn(context.storage, "put").mockRejectedValueOnce(
+			new Error("unavailable"),
+		);
+		const command = {
+			type: "chat",
+			id: "retry-after-save",
+			text: "다시 보낼 메시지",
+		};
+		await expect(send(server, sender, command)).resolves.toBeUndefined();
+		expect(messages(sender).at(-1)).toMatchObject({
+			type: "error",
+			code: "SAVE_FAILED",
+			requestId: command.id,
+		});
+		expect(sender.state).toEqual(socketBefore);
+		expect(other.sent).toHaveLength(otherSent);
+		expect(storedSnapshot(context).messages).toEqual(before);
+		await send(server, sender, {
+			type: "chat",
+			id: "retained-99",
+			text: "duplicate",
+		});
+		expect(latestSnapshot(sender).snapshot.messages).toEqual(before);
+		await send(server, sender, command);
+		await send(server, sender, command);
+		const after = latestSnapshot(other).snapshot.messages;
+		expect(after).toHaveLength(100);
+		expect(after.slice(0, -1)).toEqual(before.slice(1));
+		expect(after.at(-1)).toMatchObject({ id: command.id, text: command.text });
+		expect(after.filter((entry) => entry.id === command.id)).toHaveLength(1);
+		expect(storedSnapshot(context).messages).toEqual(after);
+		await createServer(context).onStart();
+		expect(latestSnapshot(sender).snapshot.messages).toEqual(after);
+	});
+
 	it("returns opt-in timings only to the sender after storage and never persists telemetry", async () => {
 		const { server, context } = await room();
 		const sender = await connect(server, context, "측정");

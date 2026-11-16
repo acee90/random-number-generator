@@ -1021,6 +1021,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			);
 			return;
 		}
+		const before = structuredClone(this.room);
 		connection.setState({ ...state, lastChatAt: now, lastActiveAt: now });
 		this.room.snapshot.messages = [
 			...this.room.snapshot.messages,
@@ -1033,7 +1034,19 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			},
 		].slice(-lunchRoomLimits.maxMessages);
 		const saveStarted = performance.now();
-		await this.save();
+		try {
+			await this.save();
+		} catch {
+			this.room = before;
+			connection.setState(state);
+			this.sendError(
+				connection,
+				"SAVE_FAILED",
+				"메시지를 저장하지 못했습니다. 다시 시도해 주세요.",
+				message.id,
+			);
+			return;
+		}
 		const alarmStarted = performance.now();
 		await this.scheduleAlarm();
 		const syncStarted = performance.now();
