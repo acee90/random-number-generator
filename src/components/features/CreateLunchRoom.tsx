@@ -45,9 +45,15 @@ export default function CreateLunchRoom({
 	const [error, setError] = useState("");
 	const creating = useRef(false);
 	const requestRef = useRef<AbortController | null>(null);
+	const requestTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+		undefined,
+	);
 	useEffect(() => {
 		setName(clampLunchRoomNickname(readLunchRoomName() ?? "") || "방장");
-		return () => requestRef.current?.abort();
+		return () => {
+			clearTimeout(requestTimeoutRef.current);
+			requestRef.current?.abort();
+		};
 	}, []);
 
 	async function create(event: React.FormEvent<HTMLFormElement>) {
@@ -65,6 +71,17 @@ export default function CreateLunchRoom({
 		setError("");
 		const controller = new AbortController();
 		requestRef.current = controller;
+		const timeout = setTimeout(() => {
+			if (requestRef.current !== controller || controller.signal.aborted)
+				return;
+			controller.abort();
+			creating.current = false;
+			setPending(false);
+			setError(
+				"방 생성 응답이 늦어지고 있습니다. 연결을 확인한 뒤 다시 시도해 주세요.",
+			);
+		}, 15000);
+		requestTimeoutRef.current = timeout;
 		try {
 			const finishHttp = beginRoomTiming("create_http");
 			let response: Response;
@@ -89,6 +106,7 @@ export default function CreateLunchRoom({
 			} finally {
 				finishDecode();
 			}
+			clearTimeout(timeout);
 			if (controller.signal.aborted) return;
 			const value =
 				body && typeof body === "object"
@@ -129,8 +147,11 @@ export default function CreateLunchRoom({
 					: "연결을 확인한 뒤 다시 시도해 주세요.",
 			);
 		} finally {
-			creating.current = false;
-			if (!controller.signal.aborted) setPending(false);
+			clearTimeout(timeout);
+			if (requestRef.current === controller) {
+				creating.current = false;
+				if (!controller.signal.aborted) setPending(false);
+			}
 		}
 	}
 
