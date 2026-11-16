@@ -76,3 +76,66 @@ npm run check:latency -- --origin https://jeommechu.dev --samples 5
 - 별도 코드 리뷰에서 발견한 미확인 항목 누적에 따른 전송 한도 문제를 수정하고 회귀 검사했다. 미확인 표시를 닫아도 늦은 서버 승인은 계속 수신한다.
 
 이 절은 `codex/room-latency`의 배포 전 기록이다. 당시 운영 업로드·배포·main 병합·배포 후 비교는 미실시였으며, CLI 재인증 쓰기 권한이 자동 승인 검토에서 거절돼 운영 쓰기를 진행하지 않았다. 이후 사용자가 미리보기 검증·main 병합·운영 배포와 재측정을 명시 승인했다. 최신 실제 배포 상태와 측정 결과는 [#47](https://github.com/acee90/random-number-generator/issues/47)에서 확인한다. Cloudflare 지원 문의는 별도로 전송하지 않았다.
+
+## 서울 Worker·동북아 DO 미리보기 비교 — 2026-11-16
+
+관련 이슈 [#47](https://github.com/acee90/random-number-generator/issues/47), 실험 PR [#49](https://github.com/acee90/random-number-generator/pull/49).
+**미리보기 구현·비교 완료, 운영 채택 보류. 개선 조건을 충족하지 않아 main 병합·지역 설정 운영 배포는 하지 않았다.**
+원격 main은 `f6ea1fc54ddd7bdac1b2be212e1796eefe34ba96`을 유지한다.
+
+### 비교 조건과 검증
+
+- 기본: `codex/asia-placement-baseline`, `dde6c4f4f62df19a6c7fcb9cb5d4a5aab736d472`, `previews.placement.mode=off`, DO 힌트 없음.
+- 아시아: `codex/asia-placement-seoul`, `92ad493d11759bb74182282a6156ea157955da80`, `previews.placement.region=aws:ap-northeast-2`, `previews.vars.LUNCH_ROOM_LOCATION_HINT=apac-ne`.
+- 두 조건의 앱·진단 코드는 같고 위 지역 설정만 다르다. 두 Preview 모두 tracing 100%, query redaction, 동일한 미리보기 전용 KV를 사용한다. DO namespace는 Preview별 격리이고 운영 secret·사용자 방을 사용하지 않았다. 추첨은 하지 않았다.
+- 생성·닉네임·WebSocket 최초 접근에 일관된 힌트를 전달한다. 환경 변수 미설정/다른 값은 기존 배치를 유지한다. 힌트는 새 객체 최초 접근에만 유효하며 기존 방의 이동·상태 복제는 하지 않는다.
+- 위치 진단 응답은 `LUNCH_ROOM_DIAGNOSTICS=enabled`일 때만 제한된 값의 `x-room-worker-placement`, `x-room-request-colo`, `x-room-location-hint`를 반환한다. 101 Upgrade는 변형하지 않는다.
+- 전체 자동 테스트 1,148개/40파일, 타입 검사, 변경 파일 Biome, 앱 빌드 통과. 독립 리뷰의 추가 P1/P2 발견 없음. 두 Cloudflare Preview 빌드도 성공했다.
+
+2026-11-16 00:03:53~00:12:00 KST(11월15일 15:03:53~15:12:00 UTC), 같은 한국 AS4766 망에서 기본→아시아→아시아→기본→기본→아시아 순서로 각각 새 방 3개를 측정했다.
+매 실행 `--samples 10 --idle-ms 20000`, 총 6회 종료 코드 0·실패 이벤트 0이다. 정상 종료의 finally에서 모든 소켓 정리를 수행했으며 별도 `socketsClosed` 관측 이벤트는 없다.
+`post-create`와 20초 `after-idle`은 측정 단계명이며 콜드스타트·hibernation을 증명하지 않는다.
+
+### 실제 위치와 관측 한계
+
+전역 **관찰 가능성 → 추적**에서 실제 root/callee span을 확인했다. Preview별 Traces 화면은 비활성 표시였지만 개별 Settings에는 활성·100%였고 전역 화면에는 정상 수집됐다. 해당 비활성 표시를 수집 실패로 간주하지 않았으며 production의 tracing 설정은 변경하지 않았다.
+
+| 조건 | Worker root 속성 | DO callee root 속성 |
+| --- | --- | --- |
+| 기본 | `cloudflare.colo=LAX`, `faas.invoked_region=WNAM` | `SJC`, `WNAM` |
+| 서울 힌트 | `cloudflare.colo=LAX`, `faas.invoked_region=APAC` | `ICN`, `APAC` |
+
+- 기본 닉네임 trace `02e41e749917e73965ba9b625c3d3dac`의 Worker wall 23ms, DO wall 1ms. DO는 `LunchRoomServer` callee root로 구분했다.
+- 아시아 trace `9d1009c0e8f5238c362f766c0e96bf9c`의 Worker wall 44ms, DO wall 36ms. 별도 신규 방 trace `f2b55f6771d83be8da87cd955adef698`도 DO `ICN/APAC`를 확인했다.
+- **DO의 서울 실행은 확인했다. Worker는 APAC 신호가 있으나 LAX colo와 상충해 정확한 도시는 미확정이다.** 공식 tracing 속성 정의는 이 불일치의 우선순위를 설명하지 않는다. Worker→DO 약8ms는 아시아 실행과 부합하지만, Worker=ICN 또는 특정 Cloudflare telemetry 버그로 확정하지 않는다.
+- 두 조건 HTTP 각69응답과 WS 각6 handshake의 CF-Ray는 모두 LAX였다. `cf-placement`는 양쪽 모두 관찰되지 않아 정확한 Worker 위치 검증 수단으로 사용하지 못했다.
+- 추가 읽기 전용 transport 비교에서 DNS를 제외한 TCP 연결 시간은 기본 Preview 약138~179ms, 아시아 Preview 약141~145ms, 운영 약138~144ms, 대조 `speed.cloudflare.com` 약6~7ms였다. 한국 접속의 긴 연결 경로는 지역 힌트로 해소되지 않았다. 이 수치만으로 최초 물리 ingress 위치나 피어링 정책을 확정하지 않는다.
+
+### 지연 비교와 운영 판단
+
+각 값은 **중앙값 / p95**, 단위 ms. p95는 회차별 p95의 평균이 아니라 원본 표본 전체에서 다시 계산했다.
+
+| 지표 | 조건별 n | 기본 | 서울·동북아 |
+| --- | --- | --- | --- |
+| DO 없는 기본 HTTP | 30 | 391.7 / 1642.6 | 547.4 / 2277.4 |
+| 닉네임 HTTP | 30 | 406.3 / 1798.3 | 568.8 / 1469.4 |
+| 20초 유휴 후 닉네임 | 3 | 1038.7 / 2857.0 | 3189.9 / 4501.6 |
+| WebSocket open | 6 | 1147.0 / 3672.4 | 1329.4 / 3658.3 |
+| open 이후 join ACK | 6 | 354.2 / 962.3 | 490.7 / 506.4 |
+| ping | 30 | 348.5 / 1575.6 | 462.8 / 1193.3 |
+| 본인 채팅 서버 ACK | 30 | 353.9 / 1392.6 | 504.8 / 3316.4 |
+| 상대 채팅 수신 | 30 | 350.5 / 2373.3 | 523.1 / 2109.3 |
+
+닉네임 내부 `room` 중앙값은 22→8ms로 줄었지만 전체 HTTP와 채팅 중앙값은 악화했다. 유휴 후 아시아 닉네임 3.14~4.50초 표본에서도 `room`은 42~45ms였다. 기본 배치에도 닉네임 최대6.49초·ping 최대8.36초 변동이 있으므로 모든 outlier를 새 지역 설정의 효과로 돌리지 않는다.
+한국 한 망·조건별 방3개의 소량 비교이며 다른 통신사나 전체 사용자 SLA로 일반화하지 않는다. 닉네임 HTTP에는 입력 debounce350ms가 없고 채팅 ACK는 본인 화면의 즉시 표시와 별도다.
+
+**주요 중앙값과 본인 ACK p95가 악화해 운영 배포 조건을 충족하지 않았다.** PR은 실험 결과를 담은 draft로 유지하며 운영 재측정을 배포 후 결과라고 기록하지 않는다.
+긴 사용자 접속 경로와 Worker 위치 계측 불일치는 미해결이며, 새 DO의 한국 처리와 사용자 체감 지연 개선은 구분한다. Cloudflare/ISP 문의는 전송하지 않았다.
+
+공식 근거: [Placement](https://developers.cloudflare.com/workers/configuration/placement/), [Preview 설정](https://developers.cloudflare.com/workers/previews/configuration/), [Preview 관측](https://developers.cloudflare.com/workers/previews/test-and-debug/), [DO 위치](https://developers.cloudflare.com/durable-objects/reference/data-location/), [Trace 속성](https://developers.cloudflare.com/workers/observability/traces/spans-and-attributes/).
+
+## DO 힌트만 적용하는 출시 범위 — 2026-11-16
+
+위 비교는 서울 Worker와 동북아 DO를 함께 적용한 당시 실험 기록이다. 이후 사용자가 DO 지역 힌트의 main 반영·운영 배포를 명시 요청했다. 이번 출시 범위는 `vars.LUNCH_ROOM_LOCATION_HINT=apac-ne`와 일관된 최초 접근 힌트이며, Worker의 서울 리전 설정은 포함하지 않는다. 같은 브랜치의 Preview도 Worker 기본 배치 + 동북아 신규 DO로 바꿔 회귀를 확인한다.
+
+기존 namespace와 `lunch-rooms-v1` migration은 유지하며 새 namespace를 만들거나 기존 방 데이터를 옮기지 않는다. 힌트는 신규 DO에만 적용된다. 앞선 조합의 지연 수치를 이번 DO-only 조건의 개선 증거로 사용하지 않는다. 실제 main 병합·운영 배포·새 방 검증 결과는 [#47](https://github.com/acee90/random-number-generator/issues/47)에서 구분해 관리한다.

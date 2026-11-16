@@ -106,6 +106,7 @@ describe("lunch room HTTP creation", () => {
 		expect(party.getServerByName).toHaveBeenCalledExactlyOnceWith(
 			binding,
 			created.roomId,
+			undefined,
 		);
 		const expectedHash = createHash("sha256")
 			.update(created.hostToken)
@@ -401,7 +402,10 @@ describe("lunch room nickname availability HTTP", () => {
 		expect(await response.json()).toEqual({ name: "새이름", available: false });
 		expect(party.getServerByName).not.toHaveBeenCalled();
 		expect(party.idFromName).toHaveBeenCalledExactlyOnceWith(roomId);
-		expect(party.get).toHaveBeenCalledExactlyOnceWith("named-room-id");
+		expect(party.get).toHaveBeenCalledExactlyOnceWith(
+			"named-room-id",
+			undefined,
+		);
 		expect(party.roomFetch).toHaveBeenCalledOnce();
 		const internal = party.roomFetch.mock.calls[0][0] as Request;
 		expect(internal.url).toBe(
@@ -615,6 +619,59 @@ describe("lunch room WebSocket routing", () => {
 	it("returns404 when PartyServer does not recognize an otherwise valid room route", async () => {
 		party.routePartykitRequest.mockResolvedValueOnce(null);
 		expect((await responseFor(websocketRequest())).status).toBe(404);
+	});
+});
+
+describe("lunch room location experiment", () => {
+	it.each([
+		{ setting: undefined, options: undefined },
+		{ setting: "apac-ne", options: { locationHint: "apac-ne" } },
+		{ setting: "wnam", options: undefined },
+	])("keeps every first-access route consistent for setting $setting", async ({
+		setting,
+		options,
+	}) => {
+		// Exercise absent/invalid runtime configuration as well as the generated
+		// production Env's literal "apac-ne" binding.
+		const configuredEnv = {
+			...env,
+			LUNCH_ROOM_LOCATION_HINT: setting,
+		} as unknown as Env;
+		const creation = await handleLunchRoomRequest(
+			createRequest(),
+			configuredEnv,
+		);
+		expect(creation?.status).toBe(201);
+		const created = (await creation?.json()) as { roomId: string };
+		expect(party.getServerByName).toHaveBeenCalledExactlyOnceWith(
+			binding,
+			created.roomId,
+			options,
+		);
+
+		const nicknameRequest = new Request(
+			`${endpoint}/${roomId}/nickname-availability`,
+			{
+				method: "POST",
+				headers: { Origin: origin, "Content-Type": "application/json" },
+				body: JSON.stringify({ name: "새이름" }),
+			},
+		);
+		expect(
+			(await handleLunchRoomRequest(nicknameRequest, configuredEnv))?.status,
+		).toBe(200);
+		expect(party.get).toHaveBeenCalledExactlyOnceWith("named-room-id", options);
+		expect(party.roomFetch).toHaveBeenCalledOnce();
+
+		const upgrade = websocketRequest();
+		expect((await handleLunchRoomRequest(upgrade, configuredEnv))?.status).toBe(
+			200,
+		);
+		expect(party.routePartykitRequest).toHaveBeenCalledExactlyOnceWith(
+			upgrade,
+			configuredEnv,
+			{ cors: false, ...options },
+		);
 	});
 });
 

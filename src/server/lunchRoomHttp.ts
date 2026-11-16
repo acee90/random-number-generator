@@ -15,9 +15,20 @@ const json = (value: unknown, status: number, headers?: HeadersInit) =>
 		headers: { "Cache-Control": "no-store", ...headers },
 	});
 
+type LunchRoomEnvironment = Env & { LUNCH_ROOM_LOCATION_HINT?: string };
+
+function roomLocationOptions(
+	env: LunchRoomEnvironment,
+): { locationHint: "apac-ne" } | undefined {
+	// Hints only affect the first get for a new object; existing rooms stay put.
+	return env.LUNCH_ROOM_LOCATION_HINT === "apac-ne"
+		? { locationHint: "apac-ne" }
+		: undefined;
+}
+
 export async function handleLunchRoomRequest(
 	request: Request,
-	env: Env,
+	env: LunchRoomEnvironment,
 ): Promise<Response | null> {
 	const url = new URL(request.url);
 	const availabilityPath = url.pathname.match(
@@ -50,7 +61,10 @@ export async function handleLunchRoomRequest(
 			);
 		}
 		try {
-			const room = env.LunchRooms.get(env.LunchRooms.idFromName(roomId));
+			const room = env.LunchRooms.get(
+				env.LunchRooms.idFromName(roomId),
+				roomLocationOptions(env),
+			);
 			const roomStartedAt = performance.now();
 			// PartyServer.fetch initializes onStart before onRequest. Unlike
 			// getServerByName + RPC this needs only one Worker-to-room round trip.
@@ -134,7 +148,11 @@ export async function handleLunchRoomRequest(
 				byte.toString(16).padStart(2, "0"),
 			).join("");
 			const createdAt = Date.now();
-			const room = await getServerByName(env.LunchRooms, roomId);
+			const room = await getServerByName(
+				env.LunchRooms,
+				roomId,
+				roomLocationOptions(env),
+			);
 			await room.initialize({
 				roomId,
 				title: input.title,
@@ -174,8 +192,10 @@ export async function handleLunchRoomRequest(
 		if (request.headers.get("Origin") !== url.origin)
 			return new Response("Forbidden", { status: 403 });
 		return (
-			(await routePartykitRequest(request, env, { cors: false })) ??
-			new Response("Not Found", { status: 404 })
+			(await routePartykitRequest(request, env, {
+				cors: false,
+				...roomLocationOptions(env),
+			})) ?? new Response("Not Found", { status: 404 })
 		);
 	}
 	return null;
