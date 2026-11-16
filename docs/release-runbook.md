@@ -37,6 +37,8 @@ npm run check:release:room -- --origin https://jeommechu.dev
 
 방 검사는 HTTP·WebSocket·입장 승인 시간의 표본 수와 중앙값·p95·최솟값·최댓값을 출력한다. 적은 수의 단일 방 관측이며 부하 시험이나 일반적인 응답 시간 보장이 아니다. 키 등록 전 두 추첨의 출처는 `csprng`, 등록 후 별도 방의 두 추첨은 `quantum`이었다.
 
+닉네임·채팅 지연만 비교할 때는 `npm run check:latency -- --origin https://jeommechu.dev --samples 5`를 사용한다. 새 시험 방 하나에서 추첨 없이 HTTP·WebSocket·채팅 ACK와 `Server-Timing`을 측정한다. 한국 접속의 LAX 경로 조사·계측 항목·운영 전후 비교 방법은 [지연 조사 기록](room-latency-investigation.md), 진행 상태는 [#47](https://github.com/acee90/random-number-generator/issues/47)에서 관리한다.
+
 UI 입장 진단은 새 페이지를 `https://jeommechu.dev/?debugRoom=1` 또는 검증용 방 주소의 `?debugRoom=1`로 열고 콘솔의 `[room timing]`을 읽는다. 초기 로드 시에만 켜지고 같은 SPA 화면 이동 동안 유지된다. 일반 페이지는 계측하지 않는다. 출력은 단계명·소요 시간·화면 표시 상태뿐이며 이름·방 ID·URL·요청 내용·키를 담지 않는다.
 
 | 단계 | 측정 구간 |
@@ -48,6 +50,7 @@ UI 입장 진단은 새 페이지를 `https://jeommechu.dev/?debugRoom=1` 또는
 | `socket_open` | 연결 시도부터 WebSocket 열림까지 |
 | `join_ack` | 입장 요청부터 본인 승인 snapshot 수신까지 |
 | `room_commit` | 첫 승인 수신 이후 React의 연결 화면 커밋까지. 실제 페인트는 아님 |
+| `chat_ack` | 채팅 전송부터 동일 메시지의 서버 확정 snapshot 수신까지. 본인 화면의 즉시 표시 시간과 구분 |
 
 구간이 겹칠 수 있으므로 단순 합산하지 않는다. HTTP와 소켓 시간은 네트워크·서버 대기를 포함하며 서버 CPU 시간과 같지 않다. 생성 화면의 기존 '방 만드는 중' 표시는 HTTP 외에도 응답 해석과 화면 이동을 포함하므로 표시만 보고 닉네임 API가 느리다고 판단하지 않는다. 이번 검증에서 수십 초 대기가 다시 발생하지 않았다면 원인 해결로 확정하지 않고, 이후 발생 시 이 단계들을 비교한다.
 
@@ -74,6 +77,22 @@ $names | Select-Object name, type
 각 명령의 종료 코드가 0인지 확인한다. 여러 버전으로 트래픽이 분산되어 있다면 최대 비율의 한 건만 보지 말고 `$active.versions` 전체를 확인한다. 원본 버전 JSON에는 일반 변수 값이 포함될 수 있으므로 전체 응답을 로그·GitHub·이 문서에 붙이지 않는다.
 
 ## 배포와 최초 마이그레이션
+
+### Durable Object를 포함한 격리 미리보기
+
+DO 클래스를 구현하는 Worker는 일반 Version URL을 제공하지 않는다. 브랜치의 `versions upload` 성공만으로 실행 가능한 미리보기가 생겼다고 판단하지 않는다. [공식 Version URL 제약](https://developers.cloudflare.com/workers/versions-and-deployments/version-urls/#limitations)에 따라 Worker Previews를 사용한다.
+
+Git 빌드의 비운영 명령은 `npx wrangler preview`, 운영 명령은 기존 `npx wrangler deploy`다. `wrangler.jsonc`의 `previews`는 같은 Worker의 `LunchRoomServer`를 참조해 미리보기별 DO namespace를 자동 분리하고, `SEED_POOL`은 전용 KV `jeommechu-room-latency-preview`에 연결한다. 이 KV를 사용하는 미리보기끼리는 공유하지만 운영 KV와는 분리된다. 운영 secret은 상속하지 않으며 미리보기 추첨은 공개 난수 대체 경로를 사용한다.
+
+신규 방의 동북아 DO 힌트는 `vars.LUNCH_ROOM_LOCATION_HINT=apac-ne`로 설정한다. 생성·닉네임·WebSocket의 최초 접근 경로가 같은 힌트를 사용한다. 운영 Worker의 `placement`는 기본값을 유지하며, DO-only 출시 검증용 Preview도 `previews.placement.mode=off`다. 힌트는 새 객체의 최초 접근에만 유효하고 기존 방·namespace·저장 상태를 이동시키지 않는다. 서울 고정이나 LAX 접속 경로 해소를 보장하는 설정도 아니다. 확정 출시 범위와 실제 배포·검증 상태는 [#47](https://github.com/acee90/random-number-generator/issues/47)에 기록한다.
+
+Cloudflare DO 목록의 `jeommechu_LunchRoomServer`는 운영 namespace다. `jeommechu_codex-asia-placement-baseline_LunchRoomServer`와 `jeommechu_codex-asia-placement-seoul_LunchRoomServer`는 비교용 Preview의 별도 namespace 명칭이다. 이 목록의 항목 수는 개별 방 수나 상시 서버 대수가 아니다. 방 데이터의 TTL 만료와 namespace 목록 삭제는 별개이며, 테스트 정리를 이유로 운영 namespace를 삭제하지 않는다.
+
+설정 변경 후 타입은 `npx wrangler types --env-file .env.example`로 갱신한다. 빈 예시 환경 파일을 사용해 기존 secret 이름의 타입을 보존하며 실제 운영 secret 값을 읽거나 배포하지 않는다.
+
+빌드 로그에서 실제 Preview URL·커밋을 확인하고 새 시험 방에서 닉네임·채팅·권한·재접속을 검증한 뒤 main을 병합한다. 운영 트래픽은 main 배포가 완료될 때까지 기존 버전을 유지한다. 진행·실제 URL·배포 전후 측정은 [#47](https://github.com/acee90/random-number-generator/issues/47)에서 관리한다.
+
+### 최초 DO 마이그레이션과 운영 배포
 
 로컬에서 `npm test`, `npx tsc --noEmit`, `npm run build`를 통과시킨다. 생성된 `dist/server/wrangler.json`의 Worker 이름이 `jeommechu`이며 DO 바인딩과 마이그레이션이 원본 설정과 일치하는지 확인한다.
 

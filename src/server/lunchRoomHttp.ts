@@ -4,6 +4,10 @@ import {
 	lunchRoomLimits,
 	validateCreateRoomInput,
 } from "@/lib/lunchRoom";
+import {
+	nicknameCheckPath,
+	readBoundedRoomJson,
+} from "@/lib/lunchRoomRequest.server";
 
 const json = (value: unknown, status: number, headers?: HeadersInit) =>
 	Response.json(value, {
@@ -11,48 +15,27 @@ const json = (value: unknown, status: number, headers?: HeadersInit) =>
 		headers: { "Cache-Control": "no-store", ...headers },
 	});
 
-async function boundedJson(request: Request): Promise<unknown> {
-	if (
-		Number(request.headers.get("Content-Length")) >
-		lunchRoomLimits.maxMessageBytes
-	)
-		throw new RangeError("Request too large");
-	const reader = request.body?.getReader();
-	if (!reader) throw new SyntaxError("Empty body");
-	const chunks: Uint8Array[] = [];
-	let length = 0;
-	try {
-		for (;;) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			length += value.byteLength;
-			if (length > lunchRoomLimits.maxMessageBytes) {
-				await reader.cancel();
-				throw new RangeError("Request too large");
-			}
-			chunks.push(value);
-		}
-	} finally {
-		reader.releaseLock();
-	}
-	const bytes = new Uint8Array(length);
-	let offset = 0;
-	for (const chunk of chunks) {
-		bytes.set(chunk, offset);
-		offset += chunk.byteLength;
-	}
-	return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+type LunchRoomEnvironment = Env & { LUNCH_ROOM_LOCATION_HINT?: string };
+
+function roomLocationOptions(
+	env: LunchRoomEnvironment,
+): { locationHint: "apac-ne" } | undefined {
+	// Hints only affect the first get for a new object; existing rooms stay put.
+	return env.LUNCH_ROOM_LOCATION_HINT === "apac-ne"
+		? { locationHint: "apac-ne" }
+		: undefined;
 }
 
 export async function handleLunchRoomRequest(
 	request: Request,
-	env: Env,
+	env: LunchRoomEnvironment,
 ): Promise<Response | null> {
 	const url = new URL(request.url);
 	const availabilityPath = url.pathname.match(
 		/^\/api\/lunch\/rooms\/([^/]+)\/nickname-availability$/,
 	);
 	if (availabilityPath) {
+		const startedAt = performance.now();
 		const roomId = availabilityPath[1];
 		if (!isLunchRoomId(roomId))
 			return json(
@@ -70,7 +53,7 @@ export async function handleLunchRoomRequest(
 			return json({ error: "JSON 형식이 필요합니다." }, 415);
 		let body: unknown;
 		try {
-			body = await boundedJson(request);
+			body = await readBoundedRoomJson(request);
 		} catch (error) {
 			return json(
 				{ code: "INVALID_REQUEST", error: "입력 내용을 확인해 주세요." },
@@ -78,16 +61,43 @@ export async function handleLunchRoomRequest(
 			);
 		}
 		try {
-			const room = await getServerByName(env.LunchRooms, roomId);
-			const result = await room.checkNicknameAvailability(body);
-			return result.status === 200
-				? json(
-						{ name: result.body.name, available: result.body.available },
-						200,
-					)
+			const room = env.LunchRooms.get(
+				env.LunchRooms.idFromName(roomId),
+				roomLocationOptions(env),
+			);
+			const roomStartedAt = performance.now();
+			// PartyServer.fetch initializes onStart before onRequest. Unlike
+			// getServerByName + RPC this needs only one Worker-to-room round trip.
+			const response = await room.fetch(
+				new Request(`https://lunch-room.internal${nicknameCheckPath}`, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						"x-partykit-room": roomId,
+					},
+					body: JSON.stringify(body),
+				}),
+			);
+			const result = (await response.json()) as {
+				name?: string;
+				available?: boolean;
+				code?: string;
+				error?: string;
+			};
+			const timings = [
+				`room;dur=${(performance.now() - roomStartedAt).toFixed(1)}`,
+				`worker;dur=${(performance.now() - startedAt).toFixed(1)}`,
+			];
+			const nicknameTiming = response.headers.get("Server-Timing");
+			if (nicknameTiming && /^nickname;dur=\d+(?:\.\d+)?$/.test(nicknameTiming))
+				timings.unshift(nicknameTiming);
+			const headers = { "Server-Timing": timings.join(", ") };
+			return response.status === 200
+				? json({ name: result.name, available: result.available }, 200, headers)
 				: json(
-						{ code: result.body.code, error: result.body.error },
-						result.status,
+						{ code: result.code, error: result.error },
+						response.status,
+						headers,
 					);
 		} catch {
 			return json(
@@ -111,7 +121,7 @@ export async function handleLunchRoomRequest(
 			return json({ error: "JSON 형식이 필요합니다." }, 415);
 		let body: unknown;
 		try {
-			body = await boundedJson(request);
+			body = await readBoundedRoomJson(request);
 		} catch (error) {
 			return json(
 				{ error: "방 설정을 확인해 주세요." },
@@ -138,7 +148,11 @@ export async function handleLunchRoomRequest(
 				byte.toString(16).padStart(2, "0"),
 			).join("");
 			const createdAt = Date.now();
-			const room = await getServerByName(env.LunchRooms, roomId);
+			const room = await getServerByName(
+				env.LunchRooms,
+				roomId,
+				roomLocationOptions(env),
+			);
 			await room.initialize({
 				roomId,
 				title: input.title,
@@ -178,8 +192,10 @@ export async function handleLunchRoomRequest(
 		if (request.headers.get("Origin") !== url.origin)
 			return new Response("Forbidden", { status: 403 });
 		return (
-			(await routePartykitRequest(request, env, { cors: false })) ??
-			new Response("Not Found", { status: 404 })
+			(await routePartykitRequest(request, env, {
+				cors: false,
+				...roomLocationOptions(env),
+			})) ?? new Response("Not Found", { status: 404 })
 		);
 	}
 	return null;

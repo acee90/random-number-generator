@@ -3,10 +3,12 @@ import {
 	useCallback,
 	useEffect,
 	useLayoutEffect,
+	useMemo,
 	useRef,
 	useState,
 } from "react";
 import {
+	type ChatMessage,
 	type ClientMessage,
 	clampLunchRoomNickname,
 	isLunchRoomId,
@@ -35,6 +37,17 @@ export type RoomConnection =
 	| "reconnecting"
 	| "closed";
 type RoomSelf = { id: string; isHost: boolean };
+export type LocalChatMessage = ChatMessage & {
+	roomId: string;
+	delivery: "sending" | "unconfirmed" | "failed";
+	reason?: string;
+};
+type LocalChatRequest = {
+	message: LocalChatMessage;
+	timer?: ReturnType<typeof setTimeout>;
+	finishAcknowledgement?: () => void;
+};
+const maxLocalChatMessages = 20;
 type RoomError = {
 	kind: "network" | "action" | "protocol" | "terminal" | "entry";
 	message: string;
@@ -103,6 +116,10 @@ export function useLunchRoom(
 		requireEntry ? "waiting" : "connecting",
 	);
 	const [nickname, setNickname] = useState("");
+	const [localChatMessages, setLocalChatMessages] = useState<
+		LocalChatMessage[]
+	>([]);
+	const localChatRequestsRef = useRef(new Map<string, LocalChatRequest>());
 	const [errorState, setErrorState] = useState<RoomError | null>(null);
 	const [startPending, setStartPending] = useState(false);
 	const [nextPending, setNextPending] = useState(false);
@@ -151,6 +168,45 @@ export function useLunchRoom(
 		setMutationPending(null);
 		pending.resolve(success);
 	}, []);
+	const syncLocalChatMessages = useCallback(() => {
+		setLocalChatMessages(
+			[...localChatRequestsRef.current.values()].map((entry) => entry.message),
+		);
+	}, []);
+	const clearLocalChatMessages = useCallback(() => {
+		for (const request of localChatRequestsRef.current.values())
+			clearTimeout(request.timer);
+		localChatRequestsRef.current.clear();
+		setLocalChatMessages([]);
+	}, []);
+	const markChatUnconfirmed = useCallback(
+		(reason: string) => {
+			let changed = false;
+			for (const request of localChatRequestsRef.current.values()) {
+				if (request.message.delivery !== "sending") continue;
+				clearTimeout(request.timer);
+				request.timer = undefined;
+				request.message = {
+					...request.message,
+					delivery: "unconfirmed",
+					reason,
+				};
+				changed = true;
+			}
+			if (changed) syncLocalChatMessages();
+		},
+		[syncLocalChatMessages],
+	);
+	const dismissLocalChat = useCallback(
+		(id: string) => {
+			const request = localChatRequestsRef.current.get(id);
+			if (!request || request.message.delivery === "sending") return;
+			clearTimeout(request.timer);
+			localChatRequestsRef.current.delete(id);
+			syncLocalChatMessages();
+		},
+		[syncLocalChatMessages],
+	);
 	const committedSelfId = self?.id;
 	useLayoutEffect(() => {
 		if (
@@ -183,6 +239,7 @@ export function useLunchRoom(
 			mutationRetriesRef.current.clear();
 			mutationRetryScopeRef.current = roomId;
 		}
+		clearLocalChatMessages();
 		let pingTimer: ReturnType<typeof setInterval> | undefined;
 		let joinTimer: ReturnType<typeof setTimeout> | undefined;
 		let activityTimer: ReturnType<typeof setTimeout> | undefined;
@@ -349,6 +406,7 @@ export function useLunchRoom(
 			clearTimeout(joinTimer);
 			clearActivity();
 			clearPending();
+			clearLocalChatMessages();
 			setConnection("closed");
 			setErrorState({ kind: "terminal", message });
 			socket.close(1000, "Room unavailable");
@@ -363,6 +421,7 @@ export function useLunchRoom(
 		}
 		function onOpen() {
 			if (!active || terminalRef.current) return;
+			markChatUnconfirmed("연결 후 전송 여부를 확인해 주세요.");
 			finishCommitRef.current = null;
 			finishConnectionTimings();
 			joinedRef.current = false;
@@ -418,6 +477,22 @@ export function useLunchRoom(
 			if (message.type === "error") {
 				if (terminalCodes.has(message.code)) {
 					stop(message.message);
+					return;
+				}
+				const chatRequest = message.requestId
+					? localChatRequestsRef.current.get(message.requestId)
+					: undefined;
+				if (chatRequest) {
+					clearTimeout(chatRequest.timer);
+					chatRequest.timer = undefined;
+					chatRequest.finishAcknowledgement = undefined;
+					chatRequest.message = {
+						...chatRequest.message,
+						delivery: "failed",
+						reason: message.message,
+					};
+					syncLocalChatMessages();
+					setErrorState({ kind: "action", message: message.message });
 					return;
 				}
 				if (
@@ -519,6 +594,17 @@ export function useLunchRoom(
 			}
 			snapshotRef.current = message.snapshot;
 			setSnapshot(message.snapshot);
+			let chatAcknowledged = false;
+			for (const entry of message.snapshot.messages) {
+				const request = localChatRequestsRef.current.get(entry.id);
+				if (!request || request.message.participantId !== entry.participantId)
+					continue;
+				clearTimeout(request.timer);
+				request.finishAcknowledgement?.();
+				localChatRequestsRef.current.delete(entry.id);
+				chatAcknowledged = true;
+			}
+			if (chatAcknowledged) syncLocalChatMessages();
 			if (message.self) {
 				selfRef.current = message.self;
 				setSelf(message.self);
@@ -600,6 +686,7 @@ export function useLunchRoom(
 			clearTimeout(joinTimer);
 			clearActivity();
 			clearPending();
+			markChatUnconfirmed("연결이 끊겨 전송 여부를 확인하지 못했습니다.");
 			if (terminalRef.current) return;
 			if (event.type === "close" || !finishSocketOpen) {
 				finishSocketOpen?.();
@@ -651,6 +738,7 @@ export function useLunchRoom(
 			clearTimeout(actionTimerRef.current);
 			clearTimeout(voteTimerRef.current);
 			settleMutation(false);
+			clearLocalChatMessages();
 			socket.removeEventListener("open", onOpen);
 			socket.removeEventListener("message", onMessage);
 			socket.removeEventListener("close", onOffline);
@@ -670,7 +758,16 @@ export function useLunchRoom(
 			hostTokenRef.current = undefined;
 			guestTokenRef.current = undefined;
 		};
-	}, [roomId, serverNow, entry, requireEntry, settleMutation]);
+	}, [
+		roomId,
+		serverNow,
+		entry,
+		requireEntry,
+		settleMutation,
+		clearLocalChatMessages,
+		markChatUnconfirmed,
+		syncLocalChatMessages,
+	]);
 
 	const expiresAt = snapshot?.expiresAt;
 	useEffect(() => {
@@ -681,6 +778,7 @@ export function useLunchRoom(
 				terminalRef.current = true;
 				joinedRef.current = false;
 				settleMutation(false);
+				clearLocalChatMessages();
 				setConnection("closed");
 				setErrorState({
 					kind: "terminal",
@@ -691,7 +789,13 @@ export function useLunchRoom(
 			Math.max(0, remaining),
 		);
 		return () => clearTimeout(timer);
-	}, [expiresAt, connection, clockOffset, settleMutation]);
+	}, [
+		expiresAt,
+		connection,
+		clockOffset,
+		settleMutation,
+		clearLocalChatMessages,
+	]);
 
 	const send = useCallback(
 		(message: ClientMessage) => {
@@ -781,7 +885,43 @@ export function useLunchRoom(
 			});
 			return false;
 		}
-		return send({ type: "chat", id: actionId(), text: value });
+		if (localChatRequestsRef.current.size >= maxLocalChatMessages) {
+			setErrorState({
+				kind: "action",
+				message: "미확인 메시지가 많습니다. 전송 상태를 확인해 주세요.",
+			});
+			return false;
+		}
+		const self = selfRef.current;
+		if (!self) return send({ type: "chat", id: actionId(), text: value });
+		const id = actionId();
+		const finishAcknowledgement = beginRoomTiming("chat_ack");
+		if (!send({ type: "chat", id, text: value })) return false;
+		const request: LocalChatRequest = {
+			message: {
+				id,
+				roomId,
+				participantId: self.id,
+				name: nicknameRef.current,
+				text: value,
+				timestamp: serverNow(),
+				delivery: "sending",
+			},
+			finishAcknowledgement,
+		};
+		request.timer = setTimeout(() => {
+			if (localChatRequestsRef.current.get(id) !== request) return;
+			request.timer = undefined;
+			request.message = {
+				...request.message,
+				delivery: "unconfirmed",
+				reason: "전송 확인이 늦어지고 있습니다. 연결 후 확인해 주세요.",
+			};
+			syncLocalChatMessages();
+		}, 15000);
+		localChatRequestsRef.current.set(id, request);
+		syncLocalChatMessages();
+		return true;
 	}
 	function markPending() {
 		clearTimeout(actionTimerRef.current);
@@ -1115,6 +1255,13 @@ export function useLunchRoom(
 		setConnection("reconnecting");
 		socketRef.current?.reconnect();
 	}
+	const scopedLocalChatMessages = useMemo(
+		() =>
+			currentScope
+				? localChatMessages.filter((message) => message.roomId === roomId)
+				: [],
+		[currentScope, localChatMessages, roomId],
+	);
 
 	return {
 		entryLoading:
@@ -1164,5 +1311,7 @@ export function useLunchRoom(
 		vote,
 		reconnect,
 		clearError,
+		localChatMessages: scopedLocalChatMessages,
+		dismissLocalChat,
 	};
 }

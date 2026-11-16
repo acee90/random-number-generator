@@ -20,6 +20,10 @@ import {
 	type ServerMessage,
 	validateCreateRoomInput,
 } from "@/lib/lunchRoom";
+import {
+	nicknameCheckPath,
+	readBoundedRoomJson,
+} from "@/lib/lunchRoomRequest.server";
 import { consumeFromPool } from "@/services/seedPool";
 
 export type RoomEnv = Cloudflare.Env;
@@ -96,6 +100,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 	private loaded = false;
 	private expired = false;
 	private mutationQueue: Promise<void> = Promise.resolve();
+	private scheduledAlarmAt: number | undefined;
 
 	private exclusive<T>(work: () => Promise<T>): Promise<T> {
 		const task = this.mutationQueue.then(work);
@@ -184,6 +189,8 @@ export class LunchRoomServer extends Server<RoomEnv> {
 
 	async onStart() {
 		await this.exclusive(async () => {
+			// A new/woken isolate must establish its own alarm cache.
+			this.scheduledAlarmAt = undefined;
 			await this.load();
 			if (!this.room) {
 				await this.ctx.storage.deleteAlarm();
@@ -347,8 +354,40 @@ export class LunchRoomServer extends Server<RoomEnv> {
 		});
 	}
 
-	onRequest(): Response {
-		return new Response("Not Found", { status: 404 });
+	async onRequest(request: Request): Promise<Response> {
+		if (
+			request.method !== "POST" ||
+			new URL(request.url).pathname !== nicknameCheckPath
+		)
+			return new Response("Not Found", { status: 404 });
+		const startedAt = performance.now();
+		const respond = (body: unknown, status: number) =>
+			Response.json(body, {
+				status,
+				headers: {
+					"Cache-Control": "no-store",
+					"Server-Timing": `nickname;dur=${(performance.now() - startedAt).toFixed(1)}`,
+				},
+			});
+		if (
+			request.headers.get("Content-Type")?.split(";")[0].trim() !==
+			"application/json"
+		)
+			return respond(
+				{ code: "INVALID_REQUEST", error: "JSON 형식이 필요합니다." },
+				415,
+			);
+		let body: unknown;
+		try {
+			body = await readBoundedRoomJson(request);
+		} catch (error) {
+			return respond(
+				{ code: "INVALID_REQUEST", error: "입력 내용을 확인해 주세요." },
+				error instanceof RangeError ? 413 : 400,
+			);
+		}
+		const result = await this.checkNicknameAvailability(body);
+		return respond(result.body, result.status);
 	}
 
 	async onConnect(connection: Connection<SocketState>) {
@@ -1564,6 +1603,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 		}
 		for (const connection of this.getConnections<SocketState>())
 			this.reject(connection, "ROOM_EXPIRED", "방이 만료됐습니다.", 4008);
+		this.scheduledAlarmAt = undefined;
 		await this.ctx.storage.deleteAll();
 		await this.ctx.storage.deleteAlarm();
 		this.room = null;
@@ -1630,9 +1670,14 @@ export class LunchRoomServer extends Server<RoomEnv> {
 					(connection.state?.connectedAt ?? Date.now()) + joinTimeoutMs,
 				);
 		}
+		const alarmAt = Math.max(Date.now() + 1, next);
+		if (this.scheduledAlarmAt === alarmAt) return;
 		try {
-			await this.ctx.storage.setAlarm(Math.max(Date.now() + 1, next));
+			await this.ctx.storage.setAlarm(alarmAt);
+			// Only successful writes may suppress an unchanged deadline.
+			this.scheduledAlarmAt = alarmAt;
 		} catch {
+			this.scheduledAlarmAt = undefined;
 			// A failed alarm must not hide an already committed command or stall entropy.
 			// Retry soon (never later than the intended alarm); commands still enforce TTL.
 			this.ctx.waitUntil(
@@ -1645,6 +1690,9 @@ export class LunchRoomServer extends Server<RoomEnv> {
 
 	async onAlarm() {
 		await this.exclusive(async () => {
+			// The delivered alarm has been consumed, even if its next deadline
+			// is unchanged. Retries and restarts must always be able to re-arm it.
+			this.scheduledAlarmAt = undefined;
 			await this.load();
 			if (!this.room) {
 				await this.ctx.storage.deleteAlarm();

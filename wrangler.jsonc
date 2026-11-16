@@ -11,6 +11,9 @@
 	"observability": {
 		"enabled": true
 	},
+	"vars": {
+		"LUNCH_ROOM_LOCATION_HINT": "apac-ne"
+	},
 	"kv_namespaces": [
 		{
 			"binding": "SEED_POOL",
@@ -22,7 +25,28 @@
 	},
 	"migrations": [
 		{ "tag": "lunch-rooms-v1", "new_sqlite_classes": ["LunchRoomServer"] }
-	]
+	],
+	"previews": {
+		"placement": { "mode": "off" },
+		"vars": {
+			"LUNCH_ROOM_DIAGNOSTICS": "enabled",
+			"LUNCH_ROOM_LOCATION_HINT": "apac-ne"
+		},
+		"observability": {
+			"enabled": true,
+			"redact_query_string": true,
+			"traces": { "enabled": true, "head_sampling_rate": 1 }
+		},
+		"durable_objects": {
+			"bindings": [{ "name": "LunchRooms", "class_name": "LunchRoomServer" }]
+		},
+		"kv_namespaces": [
+			{
+				"binding": "SEED_POOL",
+				"id": "df4e839454ec4811835202dddf5ca1e6"
+			}
+		]
+	}
 	/**
 	 * Smart Placement
 	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement

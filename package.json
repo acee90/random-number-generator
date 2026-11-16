@@ -9,6 +9,7 @@
 		"test": "vitest run",
 		"check:release:web": "node scripts/release-web-check.mjs",
 		"check:release:room": "node scripts/release-room-check.mjs",
+		"check:latency": "node scripts/diagnose-room-latency.mjs",
 		"deploy": "npm run build && wrangler deploy",
 		"preview": "npm run build && vite preview",
 		"cf-typegen": "wrangler types",

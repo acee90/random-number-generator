@@ -92,6 +92,95 @@ function updateRoom(view: ReturnType<typeof render>, next: Partial<RoomState>) {
 	view.rerender(<LunchRoomPage roomId={roomId} />);
 }
 
+describe("local chat delivery display", () => {
+	function localChat(delivery: "sending" | "failed" | "unconfirmed") {
+		return {
+			id: "local-chat",
+			roomId,
+			participantId: "guest-client",
+			name: "참가자",
+			text: "곧 보이는 메시지",
+			timestamp: baseTime,
+			delivery,
+		};
+	}
+
+	it("labels an immediate message as sending and shows one confirmed copy when the server acknowledges it", () => {
+		const local = localChat("sending");
+		room.localChatMessages = [local];
+		const view = render(<LunchRoomPage roomId={roomId} />);
+		expect(screen.getAllByText(local.text)).toHaveLength(1);
+		expect(screen.getByText("전송 중…")).toBeTruthy();
+		updateRoom(view, {
+			snapshot: snapshot({
+				messages: [
+					{
+						id: local.id,
+						participantId: local.participantId,
+						name: local.name,
+						text: local.text,
+						timestamp: baseTime + 1000,
+					},
+				],
+			}),
+		});
+		expect(screen.getAllByText(local.text)).toHaveLength(1);
+		expect(screen.queryByText("전송 중…")).toBeNull();
+	});
+
+	it("retains failed text for manual editing without replacing an existing draft", () => {
+		const failed = localChat("failed");
+		room.localChatMessages = [failed];
+		render(<LunchRoomPage roomId={roomId} />);
+		expect(screen.getByText("전송 실패")).toBeTruthy();
+		const input = screen.getByRole("textbox", { name: "메시지" });
+		fireEvent.change(input, { target: { value: "새로 작성 중" } });
+		const restore = screen.getByRole("button", { name: "다시 작성" });
+		expect(restore.matches(":disabled")).toBe(true);
+		fireEvent.click(restore);
+		expect((input as HTMLTextAreaElement).value).toBe("새로 작성 중");
+		expect(room.dismissLocalChat).not.toHaveBeenCalled();
+		fireEvent.change(input, { target: { value: "" } });
+		fireEvent.click(restore);
+		expect((input as HTMLTextAreaElement).value).toBe(failed.text);
+		expect(room.dismissLocalChat).toHaveBeenCalledExactlyOnceWith(failed.id);
+		expect(document.activeElement).toBe(input);
+	});
+
+	it("distinguishes an unconfirmed send from a rejection and offers no automatic resend", () => {
+		room.localChatMessages = [localChat("unconfirmed")];
+		render(<LunchRoomPage roomId={roomId} />);
+		expect(screen.getByText("전송 확인 안 됨")).toBeTruthy();
+		expect(
+			screen.getByText("같은 내용을 다시 보내기 전에 확인해 주세요."),
+		).toBeTruthy();
+		expect(screen.queryByRole("button", { name: "다시 작성" })).toBeNull();
+		expect(room.sendChat).not.toHaveBeenCalled();
+		fireEvent.click(screen.getByRole("button", { name: "표시 닫기" }));
+		expect(room.dismissLocalChat).toHaveBeenCalledExactlyOnceWith("local-chat");
+		expect(room.sendChat).not.toHaveBeenCalled();
+	});
+
+	it("keeps old unconfirmed text and its dismiss action accessible when the server history fills up", () => {
+		room.localChatMessages = [
+			{ ...localChat("unconfirmed"), timestamp: baseTime - 100000 },
+		];
+		room.snapshot = snapshot({
+			messages: Array.from({ length: 100 }, (_, index) => ({
+				id: `confirmed-${index}`,
+				participantId: "host-client",
+				name: "방장",
+				text: `서버 메시지 ${index}`,
+				timestamp: baseTime + index,
+			})),
+		});
+		render(<LunchRoomPage roomId={roomId} />);
+		expect(screen.getByText("곧 보이는 메시지")).toBeTruthy();
+		fireEvent.click(screen.getByRole("button", { name: "표시 닫기" }));
+		expect(room.dismissLocalChat).toHaveBeenCalledExactlyOnceWith("local-chat");
+	});
+});
+
 describe("current result feedback and frozen history", () => {
 	it("exposes guest voting only after reveal and preserves the acknowledged selection", async () => {
 		const current = { ...draw(baseTime - 7000), votes: [] };
@@ -319,6 +408,8 @@ beforeEach(() => {
 		vote: vi.fn(() => true),
 		reconnect: vi.fn(),
 		clearError: vi.fn(),
+		localChatMessages: [],
+		dismissLocalChat: vi.fn(),
 	};
 	vi.mocked(useLunchRoom).mockReset().mockReturnValue(room);
 });

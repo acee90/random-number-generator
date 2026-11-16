@@ -559,7 +559,9 @@ describe("LunchRoomServer", () => {
 		await expect(server.initialize(input)).rejects.toThrow(
 			"already initialized",
 		);
-		expect(server.onRequest().status).toBe(404);
+		expect(
+			(await server.onRequest(new Request("https://room.internal/"))).status,
+		).toBe(404);
 		const socket = await connect(server, context, "손님");
 		expect(latestSnapshot(socket).snapshot.candidates).toEqual(candidates);
 		expect(socket.sent.join(" ")).not.toContain(input.hostTokenHash);
@@ -2294,6 +2296,165 @@ function withoutPresence(snapshot: RoomSnapshot): RoomSnapshot {
 	delete copy.members;
 	return copy;
 }
+describe("LunchRoomServer internal nickname HTTP", () => {
+	const request = (body: unknown, init: RequestInit = {}) =>
+		new Request(
+			"https://lunch-room.internal/_internal/lunch-room/nickname-availability",
+			{
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(body),
+				...init,
+			},
+		);
+
+	it("reuses proven-identity checks and exposes only the result without joining or saving", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const before = structuredClone(context.storage.values);
+		const stateBefore = structuredClone(host.state);
+		const alarmBefore = context.storage.alarm;
+		const sentBefore = host.sent.length;
+		const response = await server.onRequest(
+			request({ name: " 방장 ", hostToken }),
+		);
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual({ name: "방장", available: true });
+		expect(response.headers.get("Cache-Control")).toBe("no-store");
+		expect(response.headers.get("Server-Timing")).toMatch(
+			/^nickname;dur=[\d.]+$/,
+		);
+		expect(context.storage.values).toEqual(before);
+		expect(context.storage.alarm).toBe(alarmBefore);
+		expect(context.sockets.size).toBe(1);
+		expect(host.state).toEqual(stateBefore);
+		expect(host.sent.length).toBe(sentBefore);
+		const rejected = await server.onRequest(
+			request({ name: "방장", hostToken: "b".repeat(64) }),
+		);
+		expect(rejected.status).toBe(403);
+		expect(await rejected.json()).toEqual({
+			code: "HOST_AUTH_FAILED",
+			error: "방장 인증을 확인해 주세요.",
+		});
+	});
+
+	it("loads persisted identities after a restart and retains authoritative join collision checks", async () => {
+		const { server, context } = await room();
+		const guestToken = "g".repeat(64);
+		await connect(server, context, "동료", undefined, undefined, guestToken);
+		const restored = createServer(context);
+		// Server.fetch performs this hook before entering onRequest.
+		await restored.onStart();
+		const response = await restored.onRequest(
+			request({ name: "동료", guestToken }),
+		);
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual({ name: "동료", available: true });
+		const checked = await restored.onRequest(request({ name: "새참가자" }));
+		expect(await checked.json()).toEqual({ name: "새참가자", available: true });
+		await connect(restored, context, "새참가자");
+		const collision = await connect(restored, context, "새참가자");
+		expect(hasError(collision, "NICKNAME_TAKEN")).toBe(true);
+	});
+
+	it("bounds and validates internal requests and rejects unrelated HTTP paths", async () => {
+		const { server } = await room();
+		for (const input of [
+			new Request(
+				"https://lunch-room.internal/_internal/lunch-room/nickname-availability",
+			),
+			new Request("https://lunch-room.internal/initialize", { method: "POST" }),
+		])
+			expect((await server.onRequest(input)).status).toBe(404);
+		expect(
+			(
+				await server.onRequest(
+					request({}, { headers: { "Content-Type": "text/plain" } }),
+				)
+			).status,
+		).toBe(415);
+		for (const body of ["{", "", new Uint8Array([0xff])])
+			expect((await server.onRequest(request({}, { body }))).status).toBe(400);
+		expect(
+			(
+				await server.onRequest(
+					request({ name: "새이름", extra: "한".repeat(1400) }),
+				)
+			).status,
+		).toBe(413);
+	});
+
+	it("returns the missing and expired room status through HTTP", async () => {
+		const missing = await createServer(new HarnessContext()).onRequest(
+			request({ name: "이름" }),
+		);
+		expect(missing.status).toBe(404);
+		const { server, context } = await room();
+		vi.setSystemTime(latestExpiry(context));
+		const expired = await server.onRequest(request({ name: "이름" }));
+		expect(expired.status).toBe(410);
+		expect(await expired.json()).toMatchObject({ code: "ROOM_EXPIRED" });
+	});
+});
+
+describe("LunchRoomServer alarm write coalescing", () => {
+	it("keeps chat durable while skipping an unchanged alarm and writes a new activity deadline", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const setAlarm = vi.spyOn(context.storage, "setAlarm");
+		const put = vi.spyOn(context.storage, "put");
+		await send(server, host, {
+			type: "chat",
+			id: "first-chat",
+			text: "첫 메시지",
+		});
+		expect(put).toHaveBeenCalledOnce();
+		expect(setAlarm).not.toHaveBeenCalled();
+		vi.advanceTimersByTime(1000);
+		await send(server, host, {
+			type: "chat",
+			id: "next-chat",
+			text: "두 번째",
+		});
+		expect(put).toHaveBeenCalledTimes(2);
+		expect(setAlarm).toHaveBeenCalledExactlyOnceWith(
+			Date.now() + lunchRoomLimits.awayAfterMs,
+		);
+	});
+
+	it("retries failed alarm writes rather than caching their deadline", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		vi.advanceTimersByTime(1000);
+		const setAlarm = vi
+			.spyOn(context.storage, "setAlarm")
+			.mockRejectedValueOnce(new Error("temporary alarm failure"));
+		await expect(
+			send(server, host, { type: "activity" }),
+		).resolves.toBeUndefined();
+		await context.drain();
+		expect(setAlarm).toHaveBeenCalledTimes(2);
+		expect(context.storage.alarm).toBe(Date.now() + 1000);
+		await send(server, host, { type: "activity" });
+		expect(setAlarm).toHaveBeenCalledTimes(3);
+		expect(context.storage.alarm).toBe(
+			Date.now() + lunchRoomLimits.awayAfterMs,
+		);
+	});
+
+	it("re-arms consumed alarms and reconstructs the cache after a restart", async () => {
+		const { server, context } = await room();
+		await connect(server, context, "방장", hostToken);
+		const deadline = context.storage.alarm;
+		const setAlarm = vi.spyOn(context.storage, "setAlarm");
+		await server.onAlarm();
+		expect(setAlarm).toHaveBeenCalledExactlyOnceWith(deadline);
+		await createServer(context).onStart();
+		expect(setAlarm).toHaveBeenCalledTimes(2);
+		expect(context.storage.alarm).toBe(deadline);
+	});
+});
 
 function storedSnapshot(context: HarnessContext) {
 	return (
@@ -3794,6 +3955,8 @@ describe("LunchRoomServer game lifecycle", () => {
 		const { server, context } = await room();
 		const host = await connect(server, context, "방장", hostToken);
 		const guest = await connect(server, context, "손님");
+		// Force a changed deadline; unchanged alarms are intentionally coalesced.
+		vi.advanceTimersByTime(lunchRoomLimits.awayAfterMs + 1);
 		const setAlarm = context.storage.setAlarm.bind(context.storage);
 		let failed = false;
 		vi.spyOn(context.storage, "setAlarm").mockImplementation(
