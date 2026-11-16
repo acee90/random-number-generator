@@ -364,3 +364,15 @@
 		inset-block-end: auto;
 	}
 }
+
+@media (max-width: 900px) {
+	.lunch-room.room-live .room-lifecycle-panel .room-wheel-stage {
+		--room-wheel-height: clamp(250px, 75cqi, 400px);
+		min-block-size: 250px;
+	}
+	.lunch-room.room-live
+		.room-lifecycle-panel
+		.room-wheel-stage:has(> .room-result-overlay) {
+		min-block-size: 0;
+	}
+}

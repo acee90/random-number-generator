@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
 	getWheelRotation,
-	type LunchCategory,
 	type LunchPlace,
 	lunchCategories,
 	lunchSource,
@@ -40,7 +39,7 @@ export default function LunchPicker({
 } = {}) {
 	const id = useId();
 	const [selectedCategories, setSelectedCategories] =
-		useState<readonly LunchCategory[]>(lunchCategories);
+		useState<readonly string[]>(lunchCategories);
 	const [activePanel, setActivePanel] = useState<ActivePanel>("wheel");
 	const [showResult, setShowResult] = useState(false);
 	const [history, setHistory] = useState<LunchHistoryRecord[]>([]);

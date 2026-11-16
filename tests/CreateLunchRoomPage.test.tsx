@@ -10,7 +10,6 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import CreateLunchRoomPage from "../src/components/features/CreateLunchRoomPage";
-import { sampleLunchPlaces } from "../src/lib/lunch";
 
 const mocks = vi.hoisted(() => ({
 	navigate: vi.fn(),
@@ -102,7 +101,7 @@ describe("Jeommechu room setup page", () => {
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
-	it("sends every source ID and stores normalized identity and credentials before SPA navigation", async () => {
+	it("creates an empty room and stores normalized identity and credentials before SPA navigation", async () => {
 		fetchMock.mockResolvedValueOnce(response({ roomId, hostToken }));
 		render(<CreateLunchRoomPage />);
 		fireEvent.change(screen.getByLabelText("방 이름"), {
@@ -129,10 +128,9 @@ describe("Jeommechu room setup page", () => {
 		expect(body).toEqual({
 			title: "개발팀 점심",
 			hostName: "에릭",
-			candidateIds: sampleLunchPlaces.map((place) => place.id),
+			candidateIds: [],
 		});
-		expect(body.candidateIds).toHaveLength(sampleLunchPlaces.length);
-		expect(new Set(body.candidateIds).size).toBe(sampleLunchPlaces.length);
+		expect(body.candidateIds).toHaveLength(0);
 		expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith({
 			to: "/lunch-room/$roomId",
 			params: { roomId },
@@ -152,14 +150,10 @@ describe("Jeommechu room setup page", () => {
 		expect(main.queryByRole("checkbox")).toBeNull();
 		expect(main.queryByRole("radio")).toBeNull();
 		expect(main.queryByRole("combobox")).toBeNull();
+		expect(screen.getByText(/방을 만든 뒤 후보를 준비합니다/)).toBeTruthy();
 		expect(
-			screen.getByText(
-				new RegExp(
-					`회사 주변 음식점 ${sampleLunchPlaces.length}곳으로 시작합니다.`,
-				),
-			),
+			screen.getByText(/방을 만든 뒤 새로 작성하거나 기본·저장 목록/),
 		).toBeTruthy();
-		expect(screen.getByText(/제공받은 엑셀 목록을 사용합니다/)).toBeTruthy();
 	});
 
 	it("blocks creation for blank or whitespace-only room names and nicknames", () => {

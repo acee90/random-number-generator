@@ -45,7 +45,7 @@ export function createRoomCandidateSelection(
 export function getRoomCandidateIds(
 	selection: RoomCandidateSelection,
 ): string[] {
-	const categories = new Set(selection.categories);
+	const categories = new Set<string>(selection.categories);
 	const excludedIds = new Set(selection.excludedIds);
 	return sampleLunchPlaces
 		.filter(

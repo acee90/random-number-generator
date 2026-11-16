@@ -9,7 +9,7 @@ import {
 import "./room-page-preview.css";
 
 type RoomPagePreviewArgs = {
-	initialPhase: "idle" | "result";
+	initialPhase: "idle" | "editing" | "collecting" | "reviewing" | "result";
 	isHost: boolean;
 	candidateCount: number;
 	voteDelayMs?: number;
@@ -63,7 +63,7 @@ const meta = {
 	component: RoomPagePreview,
 	parameters: { layout: "fullscreen" },
 	args: {
-		initialPhase: "idle",
+		initialPhase: "editing",
 		isHost: true,
 		candidateCount: 107,
 		voteDelayMs: 140,
@@ -72,13 +72,13 @@ const meta = {
 		initialPhase: {
 			name: "처음 화면",
 			control: "radio",
-			options: ["idle", "result"],
+			options: ["idle", "editing", "collecting", "reviewing", "result"],
 		},
 		isHost: { name: "방장으로 보기" },
 		candidateCount: {
 			name: "후보 수",
 			control: "select",
-			options: [6, 12, 30, 107],
+			options: [0, 1, 6, 12, 30, 107],
 		},
 		voteDelayMs: { table: { disable: true } },
 		entryLoading: { table: { disable: true } },
@@ -94,7 +94,34 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const HostIdle: Story = { name: "방장 · 추첨 전" };
+export const NewRoom: Story = {
+	name: "새 방 · 후보 만들기",
+	args: { initialPhase: "editing", candidateCount: 0 },
+};
+export const HostEditing: Story = {
+	name: "방장 · 후보 편집",
+	args: { initialPhase: "editing", candidateCount: 12 },
+};
+export const GuestEditing: Story = {
+	name: "참가자 · 방장 편집 대기",
+	args: { initialPhase: "editing", isHost: false, candidateCount: 12 },
+};
+export const HostIdle: Story = {
+	name: "방장 · 추첨 전",
+	args: { initialPhase: "idle" },
+};
+export const HostCollecting: Story = {
+	name: "방장 · 후보 접수 중",
+	args: { initialPhase: "collecting", candidateCount: 12 },
+};
+export const GuestCollecting: Story = {
+	name: "참가자 · 후보 추천",
+	args: { initialPhase: "collecting", isHost: false, candidateCount: 12 },
+};
+export const HostReviewing: Story = {
+	name: "방장 · 접수 종료와 목록 확인",
+	args: { initialPhase: "reviewing", candidateCount: 12 },
+};
 export const EntryLoading: Story = {
 	name: "방 생성 후 입장 준비",
 	args: { entryLoading: true },
@@ -113,7 +140,7 @@ export const SlowVote: Story = {
 };
 export const GuestIdle: Story = {
 	name: "참가자 · 추첨 대기",
-	args: { isHost: false },
+	args: { isHost: false, initialPhase: "idle" },
 };
 export const MobileHost: Story = {
 	name: "모바일 · 방장",

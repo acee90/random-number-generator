@@ -15,6 +15,8 @@ import {
 	normalizeLunchRoomNickname,
 	parseClientMessage,
 	parseServerMessage,
+	type RoomCandidate,
+	type RoomGameFilter,
 	type RoomSnapshot,
 } from "@/lib/lunchRoom";
 import {
@@ -37,6 +39,32 @@ type RoomError = {
 	kind: "network" | "action" | "protocol" | "terminal" | "entry";
 	message: string;
 };
+export type RoomMutation =
+	| "intake"
+	| "candidate"
+	| "edit"
+	| "options"
+	| "filter"
+	| "reset";
+type PendingMutation = {
+	id: string;
+	signature: string;
+	resolve: (success: boolean) => void;
+	timer: ReturnType<typeof setTimeout>;
+};
+type MutationMessage = Extract<
+	ClientMessage,
+	{
+		type:
+			| "intake"
+			| "recommend"
+			| "remove-candidate"
+			| "room-edit"
+			| "options"
+			| "game-filter"
+			| "reset-exclusions";
+	}
+>;
 
 const terminalCodes = new Set([
 	"ROOM_NOT_FOUND",
@@ -79,6 +107,9 @@ export function useLunchRoom(
 	const [startPending, setStartPending] = useState(false);
 	const [nextPending, setNextPending] = useState(false);
 	const [candidatesPending, setCandidatesPending] = useState(false);
+	const [mutationPending, setMutationPending] = useState<RoomMutation | null>(
+		null,
+	);
 	const [votePendingDrawId, setVotePendingDrawId] = useState<string | null>(
 		null,
 	);
@@ -98,6 +129,9 @@ export function useLunchRoom(
 	const startRequestRef = useRef<string | null>(null);
 	const nextRequestRef = useRef<{ id: string; drawId: string } | null>(null);
 	const candidatesRequestRef = useRef<number | null>(null);
+	const mutationRequestRef = useRef<PendingMutation | null>(null);
+	const mutationRetriesRef = useRef(new Map<string, string>());
+	const mutationRetryScopeRef = useRef(roomId);
 	const voteRequestRef = useRef<{ id: string; drawId: string } | null>(null);
 	const voteTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
 		undefined,
@@ -107,6 +141,16 @@ export function useLunchRoom(
 	);
 	const serverNow = useCallback(() => Date.now() + offsetRef.current, []);
 	const clearError = useCallback(() => setErrorState(null), []);
+	const settleMutation = useCallback((success: boolean, definitive = false) => {
+		const pending = mutationRequestRef.current;
+		if (!pending) return;
+		mutationRequestRef.current = null;
+		if (success || definitive)
+			mutationRetriesRef.current.delete(pending.signature);
+		clearTimeout(pending.timer);
+		setMutationPending(null);
+		pending.resolve(success);
+	}, []);
 	const committedSelfId = self?.id;
 	useLayoutEffect(() => {
 		if (
@@ -135,6 +179,10 @@ export function useLunchRoom(
 
 	useEffect(() => {
 		let active = true;
+		if (mutationRetryScopeRef.current !== roomId) {
+			mutationRetriesRef.current.clear();
+			mutationRetryScopeRef.current = roomId;
+		}
 		let pingTimer: ReturnType<typeof setInterval> | undefined;
 		let joinTimer: ReturnType<typeof setTimeout> | undefined;
 		let activityTimer: ReturnType<typeof setTimeout> | undefined;
@@ -157,6 +205,7 @@ export function useLunchRoom(
 		nextRequestRef.current = null;
 		setNextPending(false);
 		setCandidatesPending(false);
+		settleMutation(false);
 		setVotePendingDrawId(null);
 		voteRequestRef.current = null;
 		clearTimeout(voteTimerRef.current);
@@ -283,6 +332,7 @@ export function useLunchRoom(
 			nextRequestRef.current = null;
 			setNextPending(false);
 			setCandidatesPending(false);
+			settleMutation(false);
 			clearVotePending();
 		}
 		function clearVotePending() {
@@ -390,15 +440,21 @@ export function useLunchRoom(
 					socket.close(1000, "Choose another nickname");
 					return;
 				}
-				// A chat or another action's error is not a vote acknowledgement.
+				if (
+					mutationRequestRef.current &&
+					message.requestId === mutationRequestRef.current.id
+				)
+					settleMutation(false, true);
+				// A chat or another action's error is not an acknowledgement.
 				if (
 					voteRequestRef.current &&
 					message.requestId === voteRequestRef.current.id
 				) {
 					clearVotePending();
 				} else if (
-					!nextRequestRef.current ||
-					message.requestId === nextRequestRef.current.id
+					message.requestId === undefined ||
+					message.requestId === startRequestRef.current ||
+					message.requestId === nextRequestRef.current?.id
 				) {
 					clearTimeout(actionTimerRef.current);
 					startRequestRef.current = null;
@@ -409,6 +465,25 @@ export function useLunchRoom(
 					setCandidatesPending(false);
 				}
 				setErrorState({ kind: "action", message: message.message });
+				return;
+			}
+			if (message.type === "ack") {
+				if (message.requestId === mutationRequestRef.current?.id)
+					settleMutation(true);
+				if (message.requestId === startRequestRef.current) {
+					startRequestRef.current = null;
+					setStartPending(false);
+				}
+				if (message.requestId === nextRequestRef.current?.id) {
+					nextRequestRef.current = null;
+					setNextPending(false);
+				}
+				if (
+					!startRequestRef.current &&
+					!nextRequestRef.current &&
+					candidatesRequestRef.current === null
+				)
+					clearTimeout(actionTimerRef.current);
 				return;
 			}
 			if (message.type === "pong") {
@@ -575,6 +650,7 @@ export function useLunchRoom(
 			clearActivity();
 			clearTimeout(actionTimerRef.current);
 			clearTimeout(voteTimerRef.current);
+			settleMutation(false);
 			socket.removeEventListener("open", onOpen);
 			socket.removeEventListener("message", onMessage);
 			socket.removeEventListener("close", onOffline);
@@ -594,7 +670,7 @@ export function useLunchRoom(
 			hostTokenRef.current = undefined;
 			guestTokenRef.current = undefined;
 		};
-	}, [roomId, serverNow, entry, requireEntry]);
+	}, [roomId, serverNow, entry, requireEntry, settleMutation]);
 
 	const expiresAt = snapshot?.expiresAt;
 	useEffect(() => {
@@ -604,6 +680,7 @@ export function useLunchRoom(
 			() => {
 				terminalRef.current = true;
 				joinedRef.current = false;
+				settleMutation(false);
 				setConnection("closed");
 				setErrorState({
 					kind: "terminal",
@@ -614,7 +691,7 @@ export function useLunchRoom(
 			Math.max(0, remaining),
 		);
 		return () => clearTimeout(timer);
-	}, [expiresAt, connection, clockOffset]);
+	}, [expiresAt, connection, clockOffset, settleMutation]);
 
 	const send = useCallback(
 		(message: ClientMessage) => {
@@ -722,21 +799,228 @@ export function useLunchRoom(
 			});
 		}, 15000);
 	}
-	function startDraw() {
+	function hasPendingAction() {
+		return Boolean(
+			startRequestRef.current ||
+				nextRequestRef.current ||
+				candidatesRequestRef.current !== null ||
+				mutationRequestRef.current,
+		);
+	}
+	function requestMutation(
+		kind: RoomMutation,
+		command: MutationMessage,
+	): Promise<boolean> {
+		if (hasPendingAction()) return Promise.resolve(false);
+		const { id: _requestId, ...payload } = command;
+		const signature = JSON.stringify(payload);
+		const message = {
+			...command,
+			id: mutationRetriesRef.current.get(signature) ?? command.id,
+		};
+		return new Promise((resolve) => {
+			const timer = setTimeout(() => {
+				if (mutationRequestRef.current?.id !== message.id) return;
+				settleMutation(false);
+				setErrorState({
+					kind: "action",
+					message:
+						"요청 확인이 지연되고 있습니다. 방 상태를 확인한 뒤 다시 시도해 주세요. 입력 내용은 유지됩니다.",
+				});
+			}, 15000);
+			mutationRetriesRef.current.set(signature, message.id);
+			while (mutationRetriesRef.current.size > 20) {
+				const oldest = mutationRetriesRef.current.keys().next().value;
+				if (oldest === undefined) break;
+				mutationRetriesRef.current.delete(oldest);
+			}
+			mutationRequestRef.current = {
+				id: message.id,
+				signature,
+				resolve,
+				timer,
+			};
+			setMutationPending(kind);
+			if (!send(message)) settleMutation(false);
+		});
+	}
+	function intake(
+		action: "edit" | "open" | "close" | "finalize",
+		expectedRevision?: number,
+	) {
+		const current = snapshotRef.current;
+		const allowedStatuses =
+			action === "edit"
+				? ["waiting"]
+				: action === "open"
+					? ["waiting", "reviewing", "editing"]
+					: action === "close"
+						? ["collecting"]
+						: ["collecting", "reviewing", "editing"];
+		if (
+			!selfRef.current?.isHost ||
+			!current ||
+			!allowedStatuses.includes(current.status)
+		)
+			return Promise.resolve(false);
+		return requestMutation("intake", {
+			type: "intake",
+			id: actionId(),
+			action,
+			expectedRevision:
+				expectedRevision ?? current.revision ?? current.listVersion,
+		});
+	}
+	function enterEditing(expectedRevision?: number) {
+		return intake("edit", expectedRevision);
+	}
+	function openIntake(expectedRevision?: number) {
+		return intake("open", expectedRevision);
+	}
+	function closeIntake(expectedRevision?: number) {
+		return intake("close", expectedRevision);
+	}
+	function finalizeIntake(expectedRevision?: number) {
+		return intake("finalize", expectedRevision);
+	}
+	function addCandidate(name: string, category?: string) {
+		const current = snapshotRef.current;
+		if (!current || current.status !== "collecting" || !current.intakeId)
+			return Promise.resolve(false);
+		return requestMutation("candidate", {
+			type: "recommend",
+			id: actionId(),
+			name: name.trim(),
+			...(category === undefined
+				? {}
+				: { category: category.trim() || "미분류" }),
+			intakeId: current.intakeId,
+		});
+	}
+	function removeCandidate(candidateId: string) {
+		const current = snapshotRef.current;
+		const self = selfRef.current;
+		const candidate = current?.candidates.find(
+			(item) => item.id === candidateId,
+		);
+		if (
+			!current ||
+			!self ||
+			current.status !== "collecting" ||
+			!current.intakeId ||
+			!candidate ||
+			(!self.isHost && candidate.ownerId !== self.id)
+		)
+			return Promise.resolve(false);
+		return requestMutation("candidate", {
+			type: "remove-candidate",
+			id: actionId(),
+			candidateId,
+			intakeId: current.intakeId,
+		});
+	}
+	function canChangeOptions() {
+		const current = snapshotRef.current;
+		return Boolean(
+			selfRef.current?.isHost &&
+				current &&
+				current.status !== "fetching" &&
+				current.status !== "drawing" &&
+				current.status !== "closed",
+		);
+	}
+	function canEditRoom() {
+		const current = snapshotRef.current;
+		return (
+			canChangeOptions() &&
+			Boolean(
+				current &&
+					["editing", "collecting", "reviewing"].includes(current.status),
+			)
+		);
+	}
+	function editRoom({
+		baseVersion,
+		title,
+		candidates,
+	}: {
+		baseVersion: number;
+		title?: string;
+		candidates?: RoomCandidate[];
+	}) {
+		if (!(candidates === undefined ? canChangeOptions() : canEditRoom()))
+			return Promise.resolve(false);
+		return requestMutation("edit", {
+			type: "room-edit",
+			id: actionId(),
+			baseListVersion: baseVersion,
+			...(title === undefined ? {} : { title: title.trim() }),
+			...(candidates === undefined ? {} : { candidates }),
+		});
+	}
+	function updateRoomOptions(excludeDrawn: boolean, expectedRevision?: number) {
+		const current = snapshotRef.current;
+		if (!current || !canChangeOptions()) return Promise.resolve(false);
+		return requestMutation("options", {
+			type: "options",
+			id: actionId(),
+			excludeDrawn,
+			expectedRevision:
+				expectedRevision ?? current.revision ?? current.listVersion,
+		});
+	}
+	function updateGameFilter(filter: RoomGameFilter, expectedRevision?: number) {
+		const current = snapshotRef.current;
+		if (!current || !canEditRoom()) return Promise.resolve(false);
+		return requestMutation("filter", {
+			type: "game-filter",
+			id: actionId(),
+			filter: {
+				categories: filter.categories === null ? null : [...filter.categories],
+				excludedIds: [...filter.excludedIds],
+			},
+			expectedRevision:
+				expectedRevision ?? current.revision ?? current.listVersion,
+		});
+	}
+	function resetExclusions(expectedRevision?: number) {
+		const current = snapshotRef.current;
+		if (!current || !canChangeOptions()) return Promise.resolve(false);
+		return requestMutation("reset", {
+			type: "reset-exclusions",
+			id: actionId(),
+			expectedRevision:
+				expectedRevision ?? current.revision ?? current.listVersion,
+		});
+	}
+	function startDraw({
+		confirmReset,
+		expectedRevision,
+	}: {
+		confirmReset?: boolean;
+		expectedRevision?: number;
+	} = {}) {
 		const current = snapshotRef.current;
 		if (
 			!selfRef.current?.isHost ||
 			!current ||
-			startRequestRef.current ||
-			nextRequestRef.current ||
-			candidatesRequestRef.current !== null ||
-			current.status === "fetching" ||
-			(current.draw &&
-				serverNow() < current.draw.startedAt + current.draw.durationMs)
+			hasPendingAction() ||
+			current.status !== "waiting" ||
+			current.draw !== null
 		)
 			return false;
 		const requestId = actionId();
-		if (!send({ type: "start", id: requestId })) return false;
+		if (
+			!send({
+				type: "start",
+				id: requestId,
+				...(expectedRevision !== undefined || current.revision !== undefined
+					? { expectedRevision: expectedRevision ?? current.revision }
+					: {}),
+				...(confirmReset === undefined ? {} : { confirmReset }),
+			})
+		)
+			return false;
 		startRequestRef.current = requestId;
 		setStartPending(true);
 		markPending();
@@ -750,6 +1034,7 @@ export function useLunchRoom(
 			startRequestRef.current ||
 			nextRequestRef.current ||
 			candidatesRequestRef.current !== null ||
+			mutationRequestRef.current ||
 			current.status === "fetching" ||
 			(current.draw &&
 				serverNow() < current.draw.startedAt + current.draw.durationMs)
@@ -769,11 +1054,14 @@ export function useLunchRoom(
 			!current ||
 			!draw ||
 			draw.id !== drawId ||
-			(current.status !== "waiting" && current.status !== "drawing") ||
+			(current.status !== "waiting" &&
+				current.status !== "drawing" &&
+				current.status !== "result") ||
 			serverNow() < draw.startedAt + draw.durationMs ||
 			startRequestRef.current ||
 			nextRequestRef.current ||
-			candidatesRequestRef.current !== null
+			candidatesRequestRef.current !== null ||
+			mutationRequestRef.current
 		)
 			return false;
 		const id = actionId();
@@ -794,7 +1082,9 @@ export function useLunchRoom(
 			!draw ||
 			draw.id !== drawId ||
 			!isRoomDrawVoter(draw, self.id) ||
-			(current.status !== "waiting" && current.status !== "drawing") ||
+			(current.status !== "waiting" &&
+				current.status !== "drawing" &&
+				current.status !== "result") ||
 			serverNow() < draw.startedAt + draw.durationMs ||
 			current.history.some((entry) => entry.id === drawId) ||
 			draw.votes?.some((entry) => entry.participantId === self.id) ||
@@ -852,6 +1142,7 @@ export function useLunchRoom(
 		startPending,
 		nextPending,
 		candidatesPending,
+		mutationPending,
 		votePendingDrawId,
 		clockOffset,
 		serverNow,
@@ -860,6 +1151,16 @@ export function useLunchRoom(
 		startDraw,
 		nextRound,
 		updateCandidates,
+		enterEditing,
+		openIntake,
+		closeIntake,
+		finalizeIntake,
+		addCandidate,
+		removeCandidate,
+		editRoom,
+		updateRoomOptions,
+		updateGameFilter,
+		resetExclusions,
 		vote,
 		reconnect,
 		clearError,

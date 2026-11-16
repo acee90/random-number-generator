@@ -355,6 +355,622 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
+describe("room lifecycle commands", () => {
+	const collecting = () =>
+		snapshot({ status: "collecting", intakeId: "intake-1", revision: 7 });
+	function broadcast(current: RoomSnapshot) {
+		receive({ type: "snapshot", snapshot: current, serverTime: Date.now() });
+	}
+	function acknowledge(type: string) {
+		receive({ type: "ack", requestId: sent(type).at(-1).id });
+	}
+	it("sends an optional recommendation category and reuses its exact request after an unconfirmed ACK", async () => {
+		mocks.readHost.mockReturnValue(undefined);
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(false, collecting());
+		let first!: Promise<boolean>;
+		act(() => {
+			first = result.current.addCandidate("  카레  ", "  팀 추천  ");
+		});
+		const original = sent("recommend")[0];
+		expect(original).toMatchObject({
+			name: "카레",
+			category: "팀 추천",
+			intakeId: "intake-1",
+		});
+		act(() => vi.advanceTimersByTime(15000));
+		expect(await first).toBe(false);
+		broadcast({ ...collecting(), listVersion: 2, revision: 8 });
+		let retry!: Promise<boolean>;
+		act(() => {
+			retry = result.current.addCandidate("카레", "팀 추천");
+		});
+		expect(sent("recommend")[1]).toEqual(original);
+		await act(async () => {
+			acknowledge("recommend");
+			expect(await retry).toBe(true);
+		});
+	});
+	it("normalizes a blank optional recommendation category to unclassified", async () => {
+		mocks.readHost.mockReturnValue(undefined);
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(false, collecting());
+		let request!: Promise<boolean>;
+		act(() => {
+			request = result.current.addCandidate("새 후보", "  ");
+		});
+		expect(sent("recommend")[0]).toMatchObject({ category: "미분류" });
+		await act(async () => {
+			acknowledge("recommend");
+			expect(await request).toBe(true);
+		});
+	});
+	it.each([
+		"editing",
+		"collecting",
+		"reviewing",
+	] as const)("applies game filters independently in %s only after a matching ACK", async (status) => {
+		const current = snapshot({
+			status,
+			revision: 7,
+			listVersion: 3,
+			draw: null,
+			intakeId: status === "editing" ? null : "intake-1",
+			excludedIds: [sampleLunchPlaces[0].id],
+		});
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(true, current);
+		const before = structuredClone(result.current.snapshot);
+		const filter = {
+			categories: [sampleLunchPlaces[0].category],
+			excludedIds: [sampleLunchPlaces[1].id],
+		};
+		let request!: Promise<boolean>;
+		act(() => {
+			request = result.current.updateGameFilter(filter, 6);
+		});
+		expect(sent("game-filter")[0]).toMatchObject({
+			expectedRevision: 6,
+			filter,
+		});
+		filter.categories.push("바뀐 호출자 배열");
+		filter.excludedIds.length = 0;
+		expect(sent("game-filter")[0].filter).toEqual({
+			categories: [sampleLunchPlaces[0].category],
+			excludedIds: [sampleLunchPlaces[1].id],
+		});
+		expect(result.current.mutationPending).toBe("filter");
+		const completion = vi.fn();
+		void request.then(completion);
+		receive({ type: "ack", requestId: "unrelated" });
+		expect(completion).not.toHaveBeenCalled();
+		await act(async () => {
+			expect(
+				await result.current.updateGameFilter({
+					categories: null,
+					excludedIds: [],
+				}),
+			).toBe(false);
+		});
+		await act(async () => {
+			acknowledge("game-filter");
+			expect(await request).toBe(true);
+		});
+		expect(result.current.mutationPending).toBeNull();
+		expect(result.current.snapshot).toEqual(before);
+		expect(sent("room-edit")).toHaveLength(0);
+		expect(sent("intake")).toHaveLength(0);
+	});
+	it("reuses a game-filter request ID with its confirmed revision after an ACK timeout", async () => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(true, snapshot({ status: "editing", revision: 7 }));
+		const filter = { categories: null, excludedIds: [] };
+		let first!: Promise<boolean>;
+		act(() => {
+			first = result.current.updateGameFilter(filter, 7);
+		});
+		const original = sent("game-filter")[0];
+		act(() => vi.advanceTimersByTime(15000));
+		expect(await first).toBe(false);
+		broadcast(snapshot({ status: "editing", revision: 8, gameFilter: filter }));
+		let retry!: Promise<boolean>;
+		act(() => {
+			retry = result.current.updateGameFilter(filter, 7);
+		});
+		expect(sent("game-filter")[1]).toEqual(original);
+		await act(async () => {
+			acknowledge("game-filter");
+			expect(await retry).toBe(true);
+		});
+	});
+	it.each([
+		"waiting",
+		"result",
+		"fetching",
+		"drawing",
+		"closed",
+	] as const)("blocks game-filter changes during %s", async (status) => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(
+			true,
+			snapshot({
+				status,
+				draw:
+					status === "drawing" || status === "result" ? feedbackDraw() : null,
+			}),
+		);
+		await act(async () => {
+			expect(
+				await result.current.updateGameFilter({
+					categories: null,
+					excludedIds: [],
+				}),
+			).toBe(false);
+		});
+		expect(sent("game-filter")).toHaveLength(0);
+	});
+	it("uses the latest snapshot revision for a filter immediately after the candidate ACK even through an older callback", async () => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(true, snapshot({ status: "editing", revision: 7 }));
+		const updateFilter = result.current.updateGameFilter;
+		const candidates = sampleLunchPlaces
+			.slice(0, 2)
+			.map((candidate) => ({ ...candidate, category: "새 분류" }));
+		let edit!: Promise<boolean>;
+		let applyFilter!: Promise<boolean>;
+		act(() => {
+			edit = result.current.editRoom({ baseVersion: 1, candidates });
+		});
+		await act(async () => {
+			broadcast(
+				snapshot({
+					status: "editing",
+					revision: 8,
+					listVersion: 2,
+					candidates,
+				}),
+			);
+			acknowledge("room-edit");
+			expect(await edit).toBe(true);
+			applyFilter = updateFilter({ categories: ["새 분류"], excludedIds: [] });
+		});
+		expect(sent("game-filter")[0]).toMatchObject({
+			expectedRevision: 8,
+			filter: { categories: ["새 분류"], excludedIds: [] },
+		});
+		await act(async () => {
+			acknowledge("game-filter");
+			expect(await applyFilter).toBe(true);
+		});
+	});
+	it("keeps game-filter changes host-only", async () => {
+		mocks.readHost.mockReturnValue(undefined);
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(false, snapshot({ status: "editing" }));
+		await act(async () => {
+			expect(
+				await result.current.updateGameFilter({
+					categories: null,
+					excludedIds: [],
+				}),
+			).toBe(false);
+		});
+		expect(sent("game-filter")).toHaveLength(0);
+	});
+	it("unlocks a rejected legacy candidate action and shows the upgrade instruction", () => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined();
+		act(() => {
+			expect(
+				result.current.updateCandidates(
+					sampleLunchPlaces.slice(0, 2).map((candidate) => candidate.id),
+				),
+			).toBe(true);
+		});
+		expect(result.current.candidatesPending).toBe(true);
+		receive({
+			type: "error",
+			code: "CLIENT_UPGRADE_REQUIRED",
+			message: "새 화면으로 다시 연결해 후보를 편집해 주세요.",
+		});
+		expect(result.current.candidatesPending).toBe(false);
+		expect(result.current.error).toContain("새 화면으로 다시 연결");
+	});
+	it("preserves a submitted recommendation until its own ACK despite unrelated activity", async () => {
+		mocks.readHost.mockReturnValue(undefined);
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(false, collecting());
+		let request!: Promise<boolean>;
+		act(() => {
+			request = result.current.addCandidate("  우동  ");
+		});
+		const completion = vi.fn();
+		void request.then(completion);
+		expect(sent("recommend")).toEqual([
+			{
+				type: "recommend",
+				id: expect.any(String),
+				name: "우동",
+				intakeId: "intake-1",
+			},
+		]);
+		expect(result.current.mutationPending).toBe("candidate");
+		broadcast({ ...collecting(), listVersion: 2, revision: 8 });
+		receive({ type: "ack", requestId: "another-request" });
+		receive({
+			type: "error",
+			code: "CHAT_RATE",
+			message: "잠시 후 보내 주세요.",
+			requestId: "unrelated-chat",
+		});
+		await act(async () => {
+			expect(await result.current.addCandidate("중복 전송")).toBe(false);
+		});
+		expect(completion).not.toHaveBeenCalled();
+		expect(result.current.mutationPending).toBe("candidate");
+		await act(async () => {
+			acknowledge("recommend");
+			expect(await request).toBe(true);
+		});
+		expect(result.current.mutationPending).toBeNull();
+		expect(sent("recommend")).toHaveLength(1);
+	});
+	it("rejects a late intake request and uses the new intake ID only on an explicit retry", async () => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(true, collecting());
+		let request!: Promise<boolean>;
+		act(() => {
+			request = result.current.addCandidate("우동");
+		});
+		const previousId = sent("recommend")[0].id;
+		broadcast({ ...collecting(), status: "reviewing", revision: 8 });
+		await act(async () => {
+			receive({
+				type: "error",
+				code: "INTAKE_CLOSED",
+				message: "추천 접수가 종료되었습니다. 입력은 보관됩니다.",
+				requestId: previousId,
+			});
+			expect(await request).toBe(false);
+			expect(await result.current.addCandidate("우동")).toBe(false);
+		});
+		broadcast({ ...collecting(), intakeId: "intake-2", revision: 9 });
+		expect(sent("recommend")).toHaveLength(1);
+		act(() => {
+			request = result.current.addCandidate("우동");
+		});
+		expect(sent("recommend")[1]).toMatchObject({ intakeId: "intake-2" });
+		expect(sent("recommend")[1].id).not.toBe(previousId);
+		await act(async () => {
+			acknowledge("recommend");
+			expect(await request).toBe(true);
+		});
+	});
+	it("resolves an unconfirmed recommendation as failed on disconnect and never replays it", async () => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(true, collecting());
+		let request!: Promise<boolean>;
+		act(() => {
+			request = result.current.addCandidate("보관할 입력");
+		});
+		await act(async () => {
+			socket().readyState = 3;
+			socket().dispatchEvent(new Event("close"));
+			expect(await request).toBe(false);
+		});
+		expect(result.current.mutationPending).toBeNull();
+		joined(true, collecting());
+		expect(sent("recommend")).toHaveLength(1);
+	});
+	it("times out a command and ignores its delayed ACK while a new command is pending", async () => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(true, collecting());
+		let first!: Promise<boolean>;
+		act(() => {
+			first = result.current.addCandidate("우동");
+		});
+		const staleId = sent("recommend")[0].id;
+		await act(async () => {
+			vi.advanceTimersByTime(15000);
+			expect(await first).toBe(false);
+		});
+		expect(result.current.error).toContain("입력 내용은 유지");
+		let retry!: Promise<boolean>;
+		act(() => {
+			retry = result.current.addCandidate("새 후보");
+		});
+		expect(sent("recommend")[1].id).not.toBe(staleId);
+		receive({ type: "ack", requestId: staleId });
+		expect(result.current.mutationPending).toBe("candidate");
+		await act(async () => {
+			acknowledge("recommend");
+			expect(await retry).toBe(true);
+		});
+	});
+	it("reuses an uncertain request ID on an explicit identical retry after reconnecting", async () => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(true, collecting());
+		let original!: Promise<boolean>;
+		act(() => {
+			original = result.current.addCandidate("우동");
+		});
+		const originalId = sent("recommend")[0].id;
+		await act(async () => {
+			socket().readyState = 3;
+			socket().dispatchEvent(new Event("close"));
+			expect(await original).toBe(false);
+		});
+		joined(true, collecting());
+		expect(sent("recommend")).toHaveLength(1);
+		let retry!: Promise<boolean>;
+		act(() => {
+			retry = result.current.addCandidate("우동");
+		});
+		expect(sent("recommend")[1].id).toBe(originalId);
+		await act(async () => {
+			acknowledge("recommend");
+			expect(await retry).toBe(true);
+		});
+		let another!: Promise<boolean>;
+		act(() => {
+			another = result.current.addCandidate("우동");
+		});
+		expect(sent("recommend")[2].id).not.toBe(originalId);
+		await act(async () => {
+			acknowledge("recommend");
+			expect(await another).toBe(true);
+		});
+	});
+	it("sends title-only edits in editing without a stale candidate list", async () => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(true, snapshot({ status: "editing", listVersion: 4, revision: 8 }));
+		let request!: Promise<boolean>;
+		act(() => {
+			request = result.current.editRoom({
+				baseVersion: 1,
+				title: "새 방 제목",
+			});
+		});
+		expect(sent("room-edit")).toEqual([
+			{
+				type: "room-edit",
+				id: expect.any(String),
+				baseListVersion: 1,
+				title: "새 방 제목",
+			},
+		]);
+		await act(async () => {
+			acknowledge("room-edit");
+			expect(await request).toBe(true);
+		});
+		expect(result.current.snapshot?.draw).toBeNull();
+		expect(result.current.snapshot?.status).toBe("editing");
+		expect(sent("next")).toHaveLength(0);
+		expect(result.current.startDraw()).toBe(false);
+	});
+	it("requires an explicit editing stage for candidate edits while keeping result options available", async () => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(true, snapshot({ revision: 3 }));
+		await act(async () => {
+			expect(
+				await result.current.editRoom({
+					baseVersion: 1,
+					candidates: [...sampleLunchPlaces.slice(0, 2)],
+				}),
+			).toBe(false);
+		});
+		let enter!: Promise<boolean>;
+		act(() => {
+			enter = result.current.enterEditing(3);
+		});
+		expect(sent("intake")[0]).toMatchObject({
+			action: "edit",
+			expectedRevision: 3,
+		});
+		broadcast(snapshot({ status: "editing", revision: 4, intakeId: null }));
+		await act(async () => {
+			acknowledge("intake");
+			expect(await enter).toBe(true);
+			expect(await result.current.enterEditing()).toBe(false);
+		});
+		let finish!: Promise<boolean>;
+		act(() => {
+			finish = result.current.finalizeIntake();
+		});
+		expect(sent("intake")[1]).toMatchObject({
+			action: "finalize",
+			expectedRevision: 4,
+		});
+		await act(async () => {
+			acknowledge("intake");
+			expect(await finish).toBe(true);
+		});
+		broadcast(
+			snapshot({ status: "result", draw: feedbackDraw(), revision: 5 }),
+		);
+		await act(async () => {
+			expect(await result.current.enterEditing()).toBe(false);
+			expect(
+				await result.current.editRoom({
+					baseVersion: 1,
+					candidates: [...sampleLunchPlaces.slice(0, 2)],
+				}),
+			).toBe(false);
+		});
+		let option!: Promise<boolean>;
+		act(() => {
+			option = result.current.updateRoomOptions(true);
+		});
+		await act(async () => {
+			acknowledge("options");
+			expect(await option).toBe(true);
+		});
+		expect(sent("room-edit")).toHaveLength(0);
+		expect(result.current.snapshot?.status).toBe("result");
+		expect(result.current.snapshot?.draw?.id).toBe("feedback-draw");
+	});
+	it.each([
+		"waiting",
+		"result",
+	] as const)("allows independent title settings in %s without sending candidates or changing the phase", async (status) => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		const current = snapshot({
+			status,
+			listVersion: 4,
+			revision: 8,
+			draw: status === "result" ? feedbackDraw() : null,
+			excludedIds: [sampleLunchPlaces[0].id],
+		});
+		joined(true, current);
+		const before = structuredClone(result.current.snapshot);
+		let request!: Promise<boolean>;
+		act(() => {
+			request = result.current.editRoom({
+				baseVersion: 1,
+				title: "별도 방 설정",
+			});
+		});
+		expect(sent("room-edit")).toEqual([
+			{
+				type: "room-edit",
+				id: expect.any(String),
+				baseListVersion: 1,
+				title: "별도 방 설정",
+			},
+		]);
+		await act(async () => {
+			acknowledge("room-edit");
+			expect(await request).toBe(true);
+		});
+		expect(result.current.snapshot).toEqual(before);
+		await act(async () => {
+			expect(
+				await result.current.editRoom({ baseVersion: 4, candidates: [] }),
+			).toBe(false);
+		});
+		expect(sent("room-edit")).toHaveLength(1);
+		expect(sent("intake")).toHaveLength(0);
+		expect(sent("next")).toHaveLength(0);
+	});
+	it.each([
+		"fetching",
+		"drawing",
+		"closed",
+	] as const)("blocks room-title settings during %s", async (status) => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(
+			true,
+			snapshot({ status, draw: status === "drawing" ? feedbackDraw() : null }),
+		);
+		await act(async () => {
+			expect(
+				await result.current.editRoom({ baseVersion: 1, title: "차단해야 함" }),
+			).toBe(false);
+		});
+		expect(sent("room-edit")).toHaveLength(0);
+	});
+	it("limits guest candidate removal to their own candidate during intake", async () => {
+		mocks.readHost.mockReturnValue(undefined);
+		const current = collecting();
+		current.candidates[0] = {
+			...current.candidates[0],
+			ownerId: "guest-client",
+		};
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(false, current);
+		await act(async () => {
+			expect(await result.current.enterEditing()).toBe(false);
+			expect(await result.current.openIntake()).toBe(false);
+			expect(await result.current.updateRoomOptions(true)).toBe(false);
+			expect(
+				await result.current.editRoom({ baseVersion: 1, title: "안 됨" }),
+			).toBe(false);
+			expect(
+				await result.current.removeCandidate(current.candidates[1].id),
+			).toBe(false);
+		});
+		let request!: Promise<boolean>;
+		act(() => {
+			request = result.current.removeCandidate(current.candidates[0].id);
+		});
+		expect(sent("remove-candidate")[0]).toMatchObject({
+			candidateId: current.candidates[0].id,
+			intakeId: "intake-1",
+		});
+		await act(async () => {
+			acknowledge("remove-candidate");
+			expect(await request).toBe(true);
+		});
+		broadcast({ ...current, status: "reviewing" });
+		await act(async () => {
+			expect(
+				await result.current.removeCandidate(current.candidates[0].id),
+			).toBe(false);
+		});
+	});
+	it("keeps confirmation revisions fixed for reset and start requests", async () => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(
+			true,
+			snapshot({ revision: 9, excludedIds: [sampleLunchPlaces[0].id] }),
+		);
+		let reset!: Promise<boolean>;
+		act(() => {
+			reset = result.current.resetExclusions(7);
+		});
+		expect(sent("reset-exclusions")[0]).toMatchObject({ expectedRevision: 7 });
+		await act(async () => {
+			receive({
+				type: "error",
+				code: "REVISION_CONFLICT",
+				message: "조건이 변경되었습니다.",
+				requestId: sent("reset-exclusions")[0].id,
+			});
+			expect(await reset).toBe(false);
+		});
+		act(() =>
+			expect(
+				result.current.startDraw({ confirmReset: true, expectedRevision: 7 }),
+			).toBe(true),
+		);
+		expect(sent("start")[0]).toMatchObject({
+			expectedRevision: 7,
+			confirmReset: true,
+		});
+	});
+	it("waits for a matching intake ACK and finalizes without starting a draw", async () => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(true, snapshot({ revision: 3 }));
+		let open!: Promise<boolean>;
+		act(() => {
+			open = result.current.openIntake();
+		});
+		expect(sent("intake")[0]).toMatchObject({
+			action: "open",
+			expectedRevision: 3,
+		});
+		broadcast(collecting());
+		expect(result.current.mutationPending).toBe("intake");
+		await act(async () => {
+			acknowledge("intake");
+			expect(await open).toBe(true);
+		});
+		let finalize!: Promise<boolean>;
+		act(() => {
+			finalize = result.current.finalizeIntake(7);
+		});
+		expect(sent("intake")[1]).toMatchObject({
+			action: "finalize",
+			expectedRevision: 7,
+		});
+		await act(async () => {
+			acknowledge("intake");
+			expect(await finalize).toBe(true);
+		});
+		expect(sent("start")).toHaveLength(0);
+	});
+});
+
 describe("explicit lunch room admission", () => {
 	it("renders the same initial loading state on the server and first client commit without consuming admission during render", () => {
 		mocks.consumeEntry.mockReturnValueOnce("새방장");

@@ -1,11 +1,5 @@
 import type { RandomSource } from "@/services/randomCore";
-import {
-	getWheelRotation,
-	type LunchCategory,
-	type LunchPlace,
-	lunchCategories,
-	sampleLunchPlaces,
-} from "./lunch";
+import { getWheelRotation, type LunchPlace, sampleLunchPlaces } from "./lunch";
 
 export const lunchRoomLimits = {
 	ttlMs: 24 * 60 * 60 * 1000,
@@ -16,9 +10,11 @@ export const lunchRoomLimits = {
 	awayAfterMs: 5 * 60 * 1000,
 	maxMessages: 100,
 	maxHistory: 20,
-	maxCandidates: sampleLunchPlaces.length,
+	maxCandidates: 200,
+	maxCategoryLength: 24,
 	maxMessageBytes: 4096,
-	maxServerMessageBytes: 2 * 1024 * 1024,
+	maxEditMessageBytes: 256 * 1024,
+	maxServerMessageBytes: 8 * 1024 * 1024,
 } as const;
 
 export interface RoomParticipant {
@@ -58,6 +54,17 @@ export interface RoomDrawVote {
 	reactionMs: number;
 }
 
+export interface RoomCandidate extends LunchPlace {
+	included?: boolean;
+	ownerId?: string;
+	ownerName?: string;
+}
+
+export interface RoomGameFilter {
+	categories: string[] | null;
+	excludedIds: string[];
+}
+
 export interface RoomDraw {
 	id: string;
 	candidates: LunchPlace[];
@@ -73,6 +80,9 @@ export interface RoomDraw {
 	requestedAt?: number;
 	probabilities?: number[];
 	votes?: RoomDrawVote[];
+	excludeDrawn?: boolean;
+	excludedIdsBefore?: string[];
+	gameFilter?: RoomGameFilter;
 }
 
 export interface RoomSnapshot {
@@ -81,13 +91,51 @@ export interface RoomSnapshot {
 	createdAt: number;
 	expiresAt: number;
 	listVersion: number;
-	candidates: LunchPlace[];
+	candidates: RoomCandidate[];
 	participants: RoomParticipant[];
 	members?: RoomMember[];
 	messages: ChatMessage[];
 	draw: RoomDraw | null;
 	history: RoomDraw[];
-	status: "waiting" | "fetching" | "drawing" | "closed";
+	status:
+		| "waiting"
+		| "editing"
+		| "collecting"
+		| "reviewing"
+		| "fetching"
+		| "drawing"
+		| "result"
+		| "closed";
+	/** Optional only for snapshots written before the lifecycle migration. */
+	revision?: number;
+	intakeId?: string | null;
+	excludeDrawn?: boolean;
+	excludedIds?: string[];
+	gameFilter?: RoomGameFilter;
+}
+
+export function getRoomPhase(snapshot: RoomSnapshot): RoomSnapshot["status"] {
+	return snapshot.status === "waiting" && snapshot.draw
+		? "result"
+		: snapshot.status;
+}
+
+export function getEligibleRoomCandidates(
+	snapshot: RoomSnapshot,
+): RoomCandidate[] {
+	const excluded = new Set(
+		snapshot.excludeDrawn ? (snapshot.excludedIds ?? []) : [],
+	);
+	return snapshot.candidates.filter(
+		(candidate) =>
+			candidate.included !== false &&
+			(snapshot.gameFilter
+				? !snapshot.gameFilter.excludedIds.includes(candidate.id) &&
+					(snapshot.gameFilter.categories === null ||
+						snapshot.gameFilter.categories.includes(candidate.category))
+				: true) &&
+			!excluded.has(candidate.id),
+	);
 }
 
 export function isRoomDrawVoter(
@@ -119,13 +167,58 @@ export type ClientMessage =
 	  }
 	| { type: "activity" }
 	| { type: "chat"; id: string; text: string }
-	| { type: "start"; id: string }
+	| {
+			type: "start";
+			id: string;
+			expectedRevision?: number;
+			confirmReset?: boolean;
+	  }
 	| { type: "next"; id: string; drawId: string }
 	| { type: "vote"; id: string; drawId: string; vote: "up" | "down" }
 	| { type: "candidates"; ids: string[] }
+	| {
+			type: "intake";
+			id: string;
+			action: "edit" | "open" | "close" | "finalize";
+			expectedRevision: number;
+	  }
+	| {
+			type: "recommend";
+			id: string;
+			name: string;
+			category?: string;
+			intakeId: string;
+	  }
+	| {
+			type: "remove-candidate";
+			id: string;
+			candidateId: string;
+			intakeId: string;
+	  }
+	| {
+			type: "room-edit";
+			id: string;
+			baseListVersion: number;
+			title?: string;
+			candidates?: RoomCandidate[];
+	  }
+	| {
+			type: "options";
+			id: string;
+			expectedRevision: number;
+			excludeDrawn: boolean;
+	  }
+	| { type: "reset-exclusions"; id: string; expectedRevision: number }
+	| {
+			type: "game-filter";
+			id: string;
+			expectedRevision: number;
+			filter: RoomGameFilter;
+	  }
 	| { type: "ping"; clientTime: number };
 
 export type ServerMessage =
+	| { type: "ack"; requestId: string }
 	| {
 			type: "snapshot";
 			snapshot: RoomSnapshot;
@@ -227,10 +320,10 @@ function parseJson(raw: unknown, maxBytes: number): unknown {
 	}
 }
 
-function candidateIds(value: unknown): string[] | null {
+function candidateIds(value: unknown, minimum = 2): string[] | null {
 	if (
 		!Array.isArray(value) ||
-		value.length < 2 ||
+		value.length < minimum ||
 		value.length > lunchRoomLimits.maxCandidates ||
 		!Array.from(value).every(
 			(id) => typeof id === "string" && placeIds.has(id),
@@ -241,8 +334,11 @@ function candidateIds(value: unknown): string[] | null {
 	return [...value];
 }
 
-export function resolveCandidateIds(value: unknown): LunchPlace[] | null {
-	const ids = candidateIds(value);
+export function resolveCandidateIds(
+	value: unknown,
+	minimum = 2,
+): LunchPlace[] | null {
+	const ids = candidateIds(value, minimum);
 	if (!ids) return null;
 	const places: LunchPlace[] = [];
 	for (const id of ids) {
@@ -260,9 +356,8 @@ export function validateCreateRoomInput(
 	const title = text(value.title, 60);
 	const hostName = normalizeLunchRoomNickname(value.hostName);
 	const ids = candidateIds(
-		value.candidateIds === undefined
-			? sampleLunchPlaces.map((place) => place.id)
-			: value.candidateIds,
+		value.candidateIds === undefined ? [] : value.candidateIds,
+		0,
 	);
 	return title && hostName && ids
 		? { title, hostName, candidateIds: ids }
@@ -270,8 +365,15 @@ export function validateCreateRoomInput(
 }
 
 export function parseClientMessage(raw: unknown): ClientMessage | null {
-	const value = parseJson(raw, lunchRoomLimits.maxMessageBytes);
+	const value = parseJson(raw, lunchRoomLimits.maxEditMessageBytes);
 	if (!isRecord(value)) return null;
+	if (
+		value.type !== "room-edit" &&
+		value.type !== "game-filter" &&
+		typeof raw === "string" &&
+		new TextEncoder().encode(raw).byteLength > lunchRoomLimits.maxMessageBytes
+	)
+		return null;
 	switch (value.type) {
 		case "join": {
 			const name = normalizeLunchRoomNickname(value.name);
@@ -310,7 +412,22 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
 				: null;
 		}
 		case "start":
-			return isId(value.id) ? { type: "start", id: value.id } : null;
+			return isId(value.id) &&
+				(value.expectedRevision === undefined ||
+					isVersion(value.expectedRevision)) &&
+				(value.confirmReset === undefined ||
+					typeof value.confirmReset === "boolean")
+				? {
+						type: "start",
+						id: value.id,
+						...(value.expectedRevision === undefined
+							? {}
+							: { expectedRevision: value.expectedRevision as number }),
+						...(value.confirmReset === undefined
+							? {}
+							: { confirmReset: value.confirmReset as boolean }),
+					}
+				: null;
 		case "next":
 			return isId(value.id) && isId(value.drawId)
 				? { type: "next", id: value.id, drawId: value.drawId }
@@ -325,6 +442,97 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
 			const ids = candidateIds(value.ids);
 			return ids ? { type: "candidates", ids } : null;
 		}
+		case "intake":
+			return isId(value.id) &&
+				isVersion(value.expectedRevision) &&
+				["edit", "open", "close", "finalize"].includes(value.action as string)
+				? {
+						type: "intake",
+						id: value.id,
+						action: value.action as "edit" | "open" | "close" | "finalize",
+						expectedRevision: value.expectedRevision as number,
+					}
+				: null;
+		case "recommend": {
+			const name = text(value.name, 80);
+			const category =
+				value.category === undefined
+					? undefined
+					: normalizeRoomCategory(value.category);
+			return isId(value.id) &&
+				isId(value.intakeId) &&
+				name &&
+				!/[\p{Cc}\p{Cf}\p{Cs}]/u.test(name) &&
+				category !== null
+				? {
+						type: "recommend",
+						id: value.id,
+						name,
+						intakeId: value.intakeId,
+						...(category === undefined ? {} : { category }),
+					}
+				: null;
+		}
+		case "remove-candidate":
+			return isId(value.id) && isId(value.intakeId) && isId(value.candidateId)
+				? {
+						type: "remove-candidate",
+						id: value.id,
+						candidateId: value.candidateId,
+						intakeId: value.intakeId,
+					}
+				: null;
+		case "room-edit": {
+			const title =
+				value.title === undefined ? undefined : text(value.title, 60);
+			const candidates =
+				value.candidates === undefined
+					? undefined
+					: parsePlaces(value.candidates);
+			return isId(value.id) &&
+				isVersion(value.baseListVersion) &&
+				title !== null &&
+				candidates !== null &&
+				(title !== undefined || candidates !== undefined)
+				? {
+						type: "room-edit",
+						id: value.id,
+						baseListVersion: value.baseListVersion as number,
+						...(title === undefined ? {} : { title }),
+						...(candidates === undefined ? {} : { candidates }),
+					}
+				: null;
+		}
+		case "options":
+			return isId(value.id) &&
+				isVersion(value.expectedRevision) &&
+				typeof value.excludeDrawn === "boolean"
+				? {
+						type: "options",
+						id: value.id,
+						expectedRevision: value.expectedRevision as number,
+						excludeDrawn: value.excludeDrawn,
+					}
+				: null;
+		case "game-filter": {
+			const filter = parseRoomGameFilter(value.filter);
+			return isId(value.id) && isVersion(value.expectedRevision) && filter
+				? {
+						type: "game-filter",
+						id: value.id,
+						expectedRevision: value.expectedRevision,
+						filter,
+					}
+				: null;
+		}
+		case "reset-exclusions":
+			return isId(value.id) && isVersion(value.expectedRevision)
+				? {
+						type: "reset-exclusions",
+						id: value.id,
+						expectedRevision: value.expectedRevision as number,
+					}
+				: null;
 		case "ping":
 			return isTime(value.clientTime)
 				? { type: "ping", clientTime: value.clientTime }
@@ -334,25 +542,62 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
 	}
 }
 
-function parsePlaces(value: unknown): LunchPlace[] | null {
+export function normalizeRoomCategory(value: unknown): string | null {
+	if (typeof value !== "string" || /[\p{Cc}\p{Cf}\p{Cs}]/u.test(value))
+		return null;
+	const category = value.normalize("NFC").trim();
+	return category.length <= lunchRoomLimits.maxCategoryLength
+		? category || "미분류"
+		: null;
+}
+
+export function parseRoomGameFilter(value: unknown): RoomGameFilter | null {
+	if (!isRecord(value)) return null;
+	const excludedIds = parseCandidateIdList(value.excludedIds);
+	if (!excludedIds) return null;
+	if (value.categories === null) return { categories: null, excludedIds };
+	if (
+		!Array.isArray(value.categories) ||
+		value.categories.length > lunchRoomLimits.maxCandidates
+	)
+		return null;
+	const categories = Array.from(value.categories, normalizeRoomCategory);
+	if (
+		categories.some((category) => category === null) ||
+		new Set(categories).size !== categories.length
+	)
+		return null;
+	return { categories: categories as string[], excludedIds };
+}
+
+function parsePlaces(value: unknown, minimum = 0): RoomCandidate[] | null {
 	if (
 		!Array.isArray(value) ||
-		value.length < 2 ||
+		value.length < minimum ||
 		value.length > lunchRoomLimits.maxCandidates
 	)
 		return null;
-	const places: LunchPlace[] = [];
+	const places: RoomCandidate[] = [];
 	const seen = new Set<string>();
 	for (const item of value) {
 		if (!isRecord(item) || typeof item.id !== "string") return null;
-		const name = text(item.name, 200);
+		const name = text(item.name, 80);
+		const category = normalizeRoomCategory(
+			item.category === undefined ? "" : item.category,
+		);
 		const menu = item.menu === undefined ? undefined : text(item.menu, 200);
 		if (
-			!placeIds.has(item.id) ||
+			!isId(item.id) ||
 			seen.has(item.id) ||
 			!name ||
+			/[\p{Cc}\p{Cf}\p{Cs}]/u.test(name) ||
 			menu === null ||
-			!lunchCategories.some((category) => category === item.category) ||
+			(menu !== undefined && /[\p{Cc}\p{Cf}\p{Cs}]/u.test(menu)) ||
+			(item.included !== undefined && typeof item.included !== "boolean") ||
+			(item.ownerId !== undefined && !isId(item.ownerId)) ||
+			(item.ownerName !== undefined &&
+				!normalizeLunchRoomNickname(item.ownerName)) ||
+			category === null ||
 			(item.distanceMeters !== undefined &&
 				(typeof item.distanceMeters !== "number" ||
 					!Number.isSafeInteger(item.distanceMeters) ||
@@ -363,7 +608,16 @@ function parsePlaces(value: unknown): LunchPlace[] | null {
 		places.push({
 			id: item.id,
 			name,
-			category: item.category as LunchCategory,
+			category,
+			...(item.included === undefined
+				? {}
+				: { included: item.included as boolean }),
+			...(item.ownerId === undefined
+				? {}
+				: { ownerId: item.ownerId as string }),
+			...(item.ownerName === undefined
+				? {}
+				: { ownerName: normalizeLunchRoomNickname(item.ownerName) as string }),
 			...(menu === undefined ? {} : { menu }),
 			...(item.distanceMeters === undefined
 				? {}
@@ -390,7 +644,7 @@ function parseDraw(value: unknown): RoomDraw | null {
 		!sources.some((source) => source === value.source)
 	)
 		return null;
-	const candidates = parsePlaces(value.candidates);
+	const candidates = parsePlaces(value.candidates, 1);
 	if (
 		!candidates ||
 		typeof value.winnerIndex !== "number" ||
@@ -415,6 +669,21 @@ function parseDraw(value: unknown): RoomDraw | null {
 			: parseDrawVotes(value.votes, value.startedAt + value.durationMs);
 	if (participants === null || probabilities === null || votes === null)
 		return null;
+	const excludedIdsBefore =
+		value.excludedIdsBefore === undefined
+			? undefined
+			: parseCandidateIdList(value.excludedIdsBefore);
+	const gameFilter =
+		value.gameFilter === undefined
+			? undefined
+			: parseRoomGameFilter(value.gameFilter);
+	if (
+		(value.excludeDrawn !== undefined &&
+			typeof value.excludeDrawn !== "boolean") ||
+		excludedIdsBefore === null ||
+		gameFilter === null
+	)
+		return null;
 	return {
 		id: value.id,
 		candidates,
@@ -432,7 +701,21 @@ function parseDraw(value: unknown): RoomDraw | null {
 			: { requestedAt: value.requestedAt as number }),
 		...(probabilities === undefined ? {} : { probabilities }),
 		...(votes === undefined ? {} : { votes }),
+		...(value.excludeDrawn === undefined
+			? {}
+			: { excludeDrawn: value.excludeDrawn as boolean }),
+		...(excludedIdsBefore === undefined ? {} : { excludedIdsBefore }),
+		...(gameFilter === undefined ? {} : { gameFilter }),
 	};
+}
+
+function parseCandidateIdList(value: unknown): string[] | null {
+	return Array.isArray(value) &&
+		value.length <= lunchRoomLimits.maxCandidates &&
+		Array.from(value).every(isId) &&
+		new Set(value).size === value.length
+		? [...value]
+		: null;
 }
 
 function parseDrawVotes(
@@ -589,9 +872,16 @@ export function parseRoomSnapshot(value: unknown): RoomSnapshot | null {
 		value.expiresAt <= value.createdAt ||
 		value.expiresAt - value.createdAt > lunchRoomLimits.ttlMs ||
 		!isVersion(value.listVersion) ||
-		!["waiting", "fetching", "drawing", "closed"].includes(
-			value.status as string,
-		)
+		![
+			"waiting",
+			"editing",
+			"collecting",
+			"reviewing",
+			"fetching",
+			"drawing",
+			"result",
+			"closed",
+		].includes(value.status as string)
 	)
 		return null;
 	const title = text(value.title, 60);
@@ -610,6 +900,14 @@ export function parseRoomSnapshot(value: unknown): RoomSnapshot | null {
 		parseDraw,
 	);
 	const draw = value.draw === null ? null : parseDraw(value.draw);
+	const excludedIds =
+		value.excludedIds === undefined
+			? []
+			: parseCandidateIdList(value.excludedIds);
+	const gameFilter =
+		value.gameFilter === undefined
+			? undefined
+			: parseRoomGameFilter(value.gameFilter);
 	if (
 		!title ||
 		!candidates ||
@@ -617,8 +915,30 @@ export function parseRoomSnapshot(value: unknown): RoomSnapshot | null {
 		members === null ||
 		!messages ||
 		!history ||
+		!excludedIds ||
+		gameFilter === null ||
+		(gameFilter &&
+			candidates &&
+			gameFilter.excludedIds.some(
+				(id) => !candidates.some((candidate) => candidate.id === id),
+			)) ||
+		(value.revision !== undefined && !isVersion(value.revision)) ||
+		(value.excludeDrawn !== undefined &&
+			typeof value.excludeDrawn !== "boolean") ||
+		(value.intakeId !== undefined &&
+			value.intakeId !== null &&
+			!isId(value.intakeId)) ||
 		(value.draw !== null && !draw) ||
-		(value.status === "drawing" && !draw) ||
+		(["drawing", "result"].includes(value.status as string) && !draw) ||
+		(["editing", "collecting", "reviewing", "fetching"].includes(
+			value.status as string,
+		) &&
+			draw !== null) ||
+		(["collecting", "reviewing"].includes(value.status as string) &&
+			!isId(value.intakeId)) ||
+		(value.status === "editing" &&
+			value.intakeId !== undefined &&
+			value.intakeId !== null) ||
 		(draw !== null && draw.listVersion > value.listVersion) ||
 		history.some((entry) => entry.listVersion > (value.listVersion as number))
 	)
@@ -635,7 +955,18 @@ export function parseRoomSnapshot(value: unknown): RoomSnapshot | null {
 		messages,
 		draw,
 		history,
-		status: value.status as RoomSnapshot["status"],
+		status:
+			value.status === "waiting" && draw
+				? "result"
+				: (value.status as RoomSnapshot["status"]),
+		revision:
+			value.revision === undefined
+				? value.listVersion
+				: (value.revision as number),
+		intakeId: (value.intakeId as string | null | undefined) ?? null,
+		excludeDrawn: (value.excludeDrawn as boolean | undefined) ?? false,
+		excludedIds,
+		...(gameFilter === undefined ? {} : { gameFilter }),
 	};
 }
 
@@ -643,6 +974,10 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
 	const value = parseJson(raw, lunchRoomLimits.maxServerMessageBytes);
 	if (!isRecord(value)) return null;
 	switch (value.type) {
+		case "ack":
+			return isId(value.requestId)
+				? { type: "ack", requestId: value.requestId }
+				: null;
 		case "snapshot": {
 			const snapshot = parseRoomSnapshot(value.snapshot);
 			if (!snapshot || !isTime(value.serverTime)) return null;

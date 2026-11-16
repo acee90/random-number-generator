@@ -3,12 +3,15 @@ import { sampleLunchPlaces } from "../src/lib/lunch";
 import {
 	type ChatMessage,
 	clampLunchRoomNickname,
+	getEligibleRoomCandidates,
+	getRoomPhase,
 	isLunchRoomId,
 	lunchRoomLimits,
 	normalizeLunchRoomNickname,
 	parseClientMessage,
 	parseRoomSnapshot,
 	parseServerMessage,
+	type RoomCandidate,
 	type RoomDraw,
 	type RoomDrawVote,
 	type RoomMember,
@@ -55,6 +58,10 @@ function makeRoom(overrides: Partial<RoomSnapshot> = {}): RoomSnapshot {
 		createdAt: now,
 		expiresAt: now + lunchRoomLimits.ttlMs,
 		listVersion: 1,
+		revision: overrides.listVersion ?? 1,
+		intakeId: null,
+		excludeDrawn: false,
+		excludedIds: [],
 		candidates: sampleLunchPlaces.slice(0, 3).map((place) => ({ ...place })),
 		participants: [
 			{ id: "host-1", name: "방장", isHost: true },
@@ -63,7 +70,7 @@ function makeRoom(overrides: Partial<RoomSnapshot> = {}): RoomSnapshot {
 		messages: [makeChat()],
 		draw: null,
 		history: [],
-		status: "waiting",
+		status: overrides.draw ? "result" : "waiting",
 		...overrides,
 	};
 }
@@ -241,7 +248,9 @@ describe("lunch room creation and seed candidate selection", () => {
 	it("accepts all107 source restaurants for room creation, selection and a complete draw snapshot", () => {
 		const candidateIds = sampleLunchPlaces.map((place) => place.id);
 		expect(candidateIds).toHaveLength(107);
-		expect(lunchRoomLimits.maxCandidates).toBe(candidateIds.length);
+		expect(lunchRoomLimits.maxCandidates).toBeGreaterThanOrEqual(
+			candidateIds.length,
+		);
 		const createInput = validateCreateRoomInput({
 			title: "전체 식당",
 			hostName: "방장",
@@ -270,7 +279,7 @@ describe("lunch room creation and seed candidate selection", () => {
 		});
 	});
 
-	it("rejects unknown IDs and arrays larger than the current catalog on every candidate input boundary", () => {
+	it("keeps catalog selection strict while allowing stable custom IDs in room snapshots", () => {
 		const all = sampleLunchPlaces.map((place) => place.id);
 		for (const candidateIds of [
 			[...all.slice(1), "unknown-restaurant"],
@@ -292,24 +301,21 @@ describe("lunch room creation and seed candidate selection", () => {
 				makeRoom({ candidates: [...candidates, candidates[0]] }),
 			),
 		).toBeNull();
-		expect(
-			parseRoomSnapshot(
-				makeRoom({
-					candidates: [
-						{ ...candidates[0], id: "unknown-restaurant" },
-						...candidates.slice(1),
-					],
-				}),
-			),
-		).toBeNull();
+		const custom = makeRoom({
+			candidates: [
+				{ ...candidates[0], id: "custom-restaurant" },
+				...candidates.slice(1),
+			],
+		});
+		expect(parseRoomSnapshot(custom)?.candidates).toEqual(custom.candidates);
 	});
-	it("defaults to all source restaurants and trims bounded room and host names", () => {
+	it("starts empty and trims bounded room and host names", () => {
 		expect(
 			validateCreateRoomInput({ title: "  점심 방  ", hostName: " 방장 " }),
 		).toEqual({
 			title: "점심 방",
 			hostName: "방장",
-			candidateIds: sampleLunchPlaces.map((place) => place.id),
+			candidateIds: [],
 		});
 	});
 
@@ -348,11 +354,11 @@ describe("lunch room creation and seed candidate selection", () => {
 				candidateIds: value,
 			}),
 		).toEqual(
-			value === undefined
+			value === undefined || (Array.isArray(value) && value.length <= 1)
 				? {
 						title: "점심",
 						hostName: "방장",
-						candidateIds: sampleLunchPlaces.map((place) => place.id),
+						candidateIds: value ?? [],
 					}
 				: null,
 		);
@@ -723,15 +729,17 @@ describe("validated room snapshots and immutable round geometry", () => {
 		["expiresAt", now + lunchRoomLimits.ttlMs + 1],
 		["listVersion", 0],
 		["listVersion", Number.POSITIVE_INFINITY],
-		["candidates", []],
 		["candidates", [sampleLunchPlaces[0], sampleLunchPlaces[0]]],
 		[
 			"candidates",
-			[{ ...sampleLunchPlaces[0], id: "unknown" }, sampleLunchPlaces[1]],
+			[{ ...sampleLunchPlaces[0], id: "../unsafe" }, sampleLunchPlaces[1]],
 		],
 		[
 			"candidates",
-			[{ ...sampleLunchPlaces[0], category: "unknown" }, sampleLunchPlaces[1]],
+			[
+				{ ...sampleLunchPlaces[0], category: "a".repeat(25) },
+				sampleLunchPlaces[1],
+			],
 		],
 		[
 			"candidates",
@@ -1205,5 +1213,512 @@ describe("lunch room server wire parsing", () => {
 			padding: "x".repeat(lunchRoomLimits.maxServerMessageBytes),
 		});
 		expect(parseServerMessage(raw)).toBeNull();
+	});
+});
+
+describe("room lifecycle and candidate protocol", () => {
+	const custom: RoomCandidate = {
+		id: "custom-noodles",
+		name: "우동",
+		category: "확인 불가",
+		included: true,
+		ownerId: "guest-1",
+		ownerName: "참가자",
+	};
+
+	it("parses identified intake, recommendation, edit, option and reset commands without client role fields", () => {
+		for (const command of [
+			{
+				type: "intake",
+				id: "edit-stage-1",
+				action: "edit",
+				expectedRevision: 1,
+			},
+			{ type: "intake", id: "open-1", action: "open", expectedRevision: 1 },
+			{ type: "intake", id: "close-1", action: "close", expectedRevision: 2 },
+			{
+				type: "intake",
+				id: "finalize-1",
+				action: "finalize",
+				expectedRevision: 3,
+			},
+			{
+				type: "recommend",
+				id: "recommend-1",
+				name: "우동",
+				intakeId: "intake-1",
+			},
+			{
+				type: "remove-candidate",
+				id: "remove-1",
+				candidateId: "custom-noodles",
+				intakeId: "intake-1",
+			},
+			{
+				type: "room-edit",
+				id: "edit-title-1",
+				baseListVersion: 1,
+				title: "다음 점심",
+			},
+			{
+				type: "room-edit",
+				id: "edit-candidates-1",
+				baseListVersion: 1,
+				candidates: [],
+			},
+			{
+				type: "options",
+				id: "option-1",
+				expectedRevision: 3,
+				excludeDrawn: true,
+			},
+			{ type: "reset-exclusions", id: "reset-1", expectedRevision: 4 },
+			{ type: "start", id: "start-1", expectedRevision: 5, confirmReset: true },
+		]) {
+			expect(
+				client({
+					...command,
+					isHost: true,
+					participantId: "forged",
+					winnerIndex: 1,
+				}),
+			).toEqual(command);
+		}
+		expect(
+			client({
+				type: "recommend",
+				id: "recommend-trim",
+				name: " 우동 ",
+				intakeId: "intake-1",
+			}),
+		).toEqual({
+			type: "recommend",
+			id: "recommend-trim",
+			name: "우동",
+			intakeId: "intake-1",
+		});
+	});
+
+	it.each([
+		{ type: "intake", id: "open-1", action: "reopen", expectedRevision: 1 },
+		{ type: "intake", id: "open-1", action: "open" },
+		{ type: "intake", id: "open-1", action: "open", expectedRevision: 0 },
+		{ type: "recommend", id: "recommend-1", name: "우동" },
+		{ type: "recommend", id: "recommend-1", name: " ", intakeId: "intake-1" },
+		{
+			type: "recommend",
+			id: "recommend-1",
+			name: "한".repeat(81),
+			intakeId: "intake-1",
+		},
+		{
+			type: "recommend",
+			id: "recommend-1",
+			name: "우동",
+			intakeId: "../intake",
+		},
+		{
+			type: "remove-candidate",
+			id: "remove-1",
+			candidateId: "../candidate",
+			intakeId: "intake-1",
+		},
+		{ type: "room-edit", id: "edit-1", baseListVersion: 1 },
+		{ type: "room-edit", id: "edit-1", baseListVersion: 0, title: "제목" },
+		{
+			type: "room-edit",
+			id: "edit-1",
+			baseListVersion: 1,
+			candidates: [custom, custom],
+		},
+		{
+			type: "options",
+			id: "option-1",
+			expectedRevision: 1,
+			excludeDrawn: "true",
+		},
+		{ type: "reset-exclusions", id: "reset-1" },
+		{ type: "start", id: "start-1", expectedRevision: -1 },
+		{ type: "start", id: "start-1", confirmReset: "yes" },
+	])("rejects malformed or unversioned lifecycle commands %j", (command) => {
+		expect(client(command)).toBeNull();
+	});
+
+	it("accepts full candidate edits beyond the ordinary frame limit without relaxing chat limits", () => {
+		const candidates = Array.from(
+			{ length: lunchRoomLimits.maxCandidates },
+			(_, index) => ({
+				id: `custom-${index}`,
+				name: "한".repeat(80),
+				category: "확인 불가",
+				included: true,
+			}),
+		);
+		const edit = {
+			type: "room-edit",
+			id: "edit-full",
+			baseListVersion: 1,
+			candidates,
+		};
+		const raw = JSON.stringify(edit);
+		expect(new TextEncoder().encode(raw).byteLength).toBeGreaterThan(
+			lunchRoomLimits.maxMessageBytes,
+		);
+		expect(parseClientMessage(raw)).toEqual(edit);
+		expect(
+			client({
+				type: "chat",
+				id: "oversized-chat",
+				text: "점심",
+				padding: "x".repeat(lunchRoomLimits.maxMessageBytes),
+			}),
+		).toBeNull();
+		expect(
+			parseClientMessage(
+				JSON.stringify({ ...edit, padding: "x".repeat(512 * 1024) }),
+			),
+		).toBeNull();
+	});
+
+	it("keeps candidate identity, ownership and manual inclusion across parsing and filters automatic exclusions separately", () => {
+		const snapshot = makeRoom({
+			status: "collecting",
+			revision: 8,
+			intakeId: "intake-2",
+			excludeDrawn: true,
+			excludedIds: ["custom-noodles"],
+			candidates: [
+				custom,
+				{ ...sampleLunchPlaces[0], included: false },
+				sampleLunchPlaces[1],
+			],
+		});
+		const parsed = parseRoomSnapshot(snapshot);
+		expect(parsed).toEqual(snapshot);
+		expect(parsed?.candidates[0]).not.toBe(custom);
+		expect(
+			getEligibleRoomCandidates(snapshot).map((candidate) => candidate.id),
+		).toEqual([sampleLunchPlaces[1].id]);
+		expect(
+			getEligibleRoomCandidates({ ...snapshot, excludeDrawn: false }).map(
+				(candidate) => candidate.id,
+			),
+		).toEqual([custom.id, sampleLunchPlaces[1].id]);
+	});
+
+	it("accepts zero candidates while preparing and a canonical single-candidate draw", () => {
+		expect(parseRoomSnapshot(makeRoom({ candidates: [] }))?.candidates).toEqual(
+			[],
+		);
+		const single = makeDraw({
+			candidates: [custom],
+			winnerIndex: 0,
+			toRotation: 1620,
+			probabilities: [1],
+		});
+		expect(
+			parseRoomSnapshot(
+				makeRoom({ candidates: [custom], status: "drawing", draw: single }),
+			)?.draw,
+		).toEqual(single);
+		for (const phase of [
+			"waiting",
+			"editing",
+			"collecting",
+			"reviewing",
+			"fetching",
+			"result",
+			"closed",
+		] as const) {
+			const snapshot = makeRoom({
+				status: phase,
+				...(["collecting", "reviewing"].includes(phase)
+					? { intakeId: "intake-1" }
+					: {}),
+				...(phase === "result" ? { draw: single } : {}),
+			});
+			expect(parseRoomSnapshot(snapshot)).not.toBeNull();
+		}
+	});
+
+	it("parses editing as a shared stage with no intake session or draw", () => {
+		const editing = makeRoom({ status: "editing", intakeId: null });
+		expect(parseRoomSnapshot(editing)?.status).toBe("editing");
+		expect(parseRoomSnapshot(editing)?.intakeId).toBeNull();
+		expect(getRoomPhase(editing)).toBe("editing");
+		expect(parseRoomSnapshot({ ...editing, draw: makeDraw() })).toBeNull();
+		expect(parseRoomSnapshot({ ...editing, status: "collecting" })).toBeNull();
+	});
+
+	it("recognizes an old waiting snapshot with a current result without assigning new historical metadata", () => {
+		const old = makeRoom({ status: "waiting", draw: makeDraw() });
+		delete old.revision;
+		delete old.intakeId;
+		delete old.excludeDrawn;
+		delete old.excludedIds;
+		expect(getRoomPhase(old)).toBe("result");
+		expect(getRoomPhase(makeRoom())).toBe("waiting");
+		expect(parseRoomSnapshot(old)?.draw).toEqual(old.draw);
+		expect(parseRoomSnapshot(old)?.draw).not.toHaveProperty("excludeDrawn");
+	});
+
+	it.each([
+		{ revision: 0 },
+		{ excludeDrawn: "true" },
+		{ excludedIds: [custom.id, custom.id] },
+		{ excludedIds: ["../unsafe"] },
+		{ intakeId: "../intake" },
+		{ candidates: [{ ...custom, ownerId: "../owner" }] },
+		{ candidates: [{ ...custom, included: "true" }] },
+		{ candidates: [{ ...custom, name: "\uD800" }] },
+		{ candidates: [{ ...custom, name: "우동\u0000" }] },
+		{ candidates: [{ ...custom, menu: "메뉴\u0000" }] },
+		{ candidates: [{ ...custom, menu: "\uD800" }] },
+	])("rejects malformed lifecycle state %j", (override) => {
+		expect(parseRoomSnapshot({ ...makeRoom(), ...override })).toBeNull();
+	});
+
+	it("parses success acknowledgements using an opaque request ID", () => {
+		expect(server({ type: "ack", requestId: "edit-1", role: "host" })).toEqual({
+			type: "ack",
+			requestId: "edit-1",
+		});
+		for (const requestId of [undefined, "../request", "", 1]) {
+			expect(server({ type: "ack", requestId })).toBeNull();
+		}
+	});
+});
+
+describe("candidate setup and independent game filters", () => {
+	it("accepts empty creation and one explicitly selected source without silently seeding", () => {
+		for (const candidateIds of [undefined, [], [ids[0]]]) {
+			expect(
+				validateCreateRoomInput({
+					title: "빈 방",
+					hostName: "방장",
+					candidateIds,
+				}),
+			).toEqual({
+				title: "빈 방",
+				hostName: "방장",
+				candidateIds: candidateIds ?? [],
+			});
+		}
+		expect(resolveCandidateIds([], 0)).toEqual([]);
+		expect(resolveCandidateIds([ids[0]], 0)).toEqual([sampleLunchPlaces[0]]);
+		expect(
+			parseRoomSnapshot(makeRoom({ status: "editing", candidates: [] }))
+				?.candidates,
+		).toEqual([]);
+	});
+
+	it("normalizes optional custom classifications in edits, recommendations and round snapshots", () => {
+		for (const [value, expected] of [
+			["  우리 팀 메뉴  ", "우리 팀 메뉴"],
+			["", "미분류"],
+			[undefined, "미분류"],
+		] as const) {
+			const item = {
+				id: "custom-1",
+				name: "커스텀",
+				...(value === undefined ? {} : { category: value }),
+			};
+			expect(
+				client({
+					type: "room-edit",
+					id: "edit-custom",
+					baseListVersion: 1,
+					candidates: [item],
+				}),
+			).toMatchObject({ candidates: [{ category: expected }] });
+			expect(
+				client({
+					type: "recommend",
+					id: "recommend-custom",
+					intakeId: "intake-1",
+					name: "커스텀",
+					...(value === undefined ? {} : { category: value }),
+				}),
+			).toMatchObject(
+				value === undefined ? { name: "커스텀" } : { category: expected },
+			);
+			const draw = makeDraw({
+				candidates: [{ ...sampleLunchPlaces[0], category: expected }],
+				winnerIndex: 0,
+				toRotation: 1620,
+			});
+			expect(
+				parseRoomSnapshot(
+					makeRoom({ draw, history: [{ ...draw, id: "old-draw" }] }),
+				)?.history[0].candidates[0].category,
+			).toBe(expected);
+		}
+		for (const category of [
+			null,
+			1,
+			"a".repeat(25),
+			"제어\u0000",
+			"숨김\u200b",
+			"\ud800",
+		]) {
+			expect(
+				client({
+					type: "room-edit",
+					id: "bad-category",
+					baseListVersion: 1,
+					candidates: [{ id: "custom-1", name: "커스텀", category }],
+				}),
+			).toBeNull();
+			expect(
+				client({
+					type: "recommend",
+					id: "bad-category",
+					intakeId: "intake-1",
+					name: "커스텀",
+					category,
+				}),
+			).toBeNull();
+		}
+	});
+
+	it("validates identified filters and handles the full legal classification payload", () => {
+		const filter = {
+			categories: [" 우리 팀 메뉴 ", ""],
+			excludedIds: [ids[0]],
+		};
+		expect(
+			client({
+				type: "game-filter",
+				id: "filter-1",
+				expectedRevision: 1,
+				filter,
+			}),
+		).toEqual({
+			type: "game-filter",
+			id: "filter-1",
+			expectedRevision: 1,
+			filter: { categories: ["우리 팀 메뉴", "미분류"], excludedIds: [ids[0]] },
+		});
+		for (const invalid of [
+			null,
+			{ categories: null },
+			{ categories: ["한식", " 한식 "], excludedIds: [] },
+			{ categories: ["x".repeat(25)], excludedIds: [] },
+			{ categories: null, excludedIds: ["../unsafe"] },
+			{ categories: null, excludedIds: [ids[0], ids[0]] },
+		])
+			expect(
+				client({
+					type: "game-filter",
+					id: "filter-bad",
+					expectedRevision: 1,
+					filter: invalid,
+				}),
+			).toBeNull();
+		const many = {
+			type: "game-filter",
+			id: "filter-many",
+			expectedRevision: 1,
+			filter: {
+				categories: Array.from(
+					{ length: 200 },
+					(_, index) => `${index}-${"한".repeat(20)}`,
+				),
+				excludedIds: [],
+			},
+		};
+		expect(
+			new TextEncoder().encode(JSON.stringify(many)).byteLength,
+		).toBeGreaterThan(lunchRoomLimits.maxMessageBytes);
+		expect(client(many)).not.toBeNull();
+	});
+
+	it("combines group, individual, legacy and drawn exclusions without mutating the list", () => {
+		const candidates: RoomCandidate[] = [
+			{ id: "a", name: "A", category: "한식" },
+			{ id: "b", name: "B", category: "한식" },
+			{ id: "c", name: "C", category: "한식", included: false },
+			{ id: "d", name: "D", category: "양식" },
+		];
+		const snapshot = makeRoom({
+			candidates,
+			gameFilter: { categories: ["한식"], excludedIds: ["b"] },
+			excludeDrawn: true,
+			excludedIds: ["a"],
+		});
+		const before = structuredClone(snapshot);
+		expect(getEligibleRoomCandidates(snapshot)).toEqual([]);
+		expect(
+			getEligibleRoomCandidates({ ...snapshot, excludeDrawn: false }).map(
+				(item) => item.id,
+			),
+		).toEqual(["a"]);
+		expect(
+			getEligibleRoomCandidates({
+				...snapshot,
+				gameFilter: { categories: null, excludedIds: [] },
+				excludeDrawn: false,
+			}).map((item) => item.id),
+		).toEqual(["a", "b", "d"]);
+		expect(snapshot).toEqual(before);
+		expect(parseRoomSnapshot(snapshot)?.gameFilter).toEqual(
+			snapshot.gameFilter,
+		);
+		expect(
+			parseRoomSnapshot({
+				...snapshot,
+				gameFilter: { categories: null, excludedIds: ["missing"] },
+			}),
+		).toBeNull();
+	});
+});
+
+describe("custom candidate snapshot capacity", () => {
+	it("fits the supported full custom list and twenty complete immutable rounds within the server frame limit", () => {
+		const candidates: RoomCandidate[] = Array.from(
+			{ length: lunchRoomLimits.maxCandidates },
+			(_, index) => ({
+				id: `candidate-${index}-${"x".repeat(60)}`,
+				name: "한".repeat(80),
+				category: "확인 불가",
+				menu: "식".repeat(200),
+				included: true,
+				ownerId: `owner-${index}-${"x".repeat(60)}`,
+				ownerName: "참".repeat(12),
+			}),
+		);
+		const participants = Array.from(
+			{ length: lunchRoomLimits.maxParticipants },
+			(_, index) => ({
+				id: `guest-${index}`,
+				name: "참가자",
+				isHost: index === 0,
+			}),
+		);
+		const draw = makeDraw({
+			candidates,
+			participants,
+			probabilities: candidates.map(() => 1 / candidates.length),
+			toRotation: 1800 - 180 / candidates.length,
+		});
+		const snapshot = makeRoom({
+			candidates,
+			participants,
+			draw,
+			history: Array.from(
+				{ length: lunchRoomLimits.maxHistory },
+				(_, index) => ({ ...draw, id: `history-${index}` }),
+			),
+			messages: Array.from(
+				{ length: lunchRoomLimits.maxMessages },
+				(_, index) =>
+					makeChat({ id: `chat-${index}`, text: "\u0000".repeat(500) }),
+			),
+		});
+		const raw = JSON.stringify({ type: "snapshot", snapshot, serverTime: now });
+		expect(new TextEncoder().encode(raw).byteLength).toBeLessThan(
+			lunchRoomLimits.maxServerMessageBytes,
+		);
+		expect(parseServerMessage(raw)).not.toBeNull();
 	});
 });

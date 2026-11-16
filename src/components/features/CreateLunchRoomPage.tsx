@@ -1,6 +1,5 @@
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import SiteHeader from "@/components/layout/SiteHeader";
-import { sampleLunchPlaces } from "@/lib/lunch";
 import { lunchRoomLimits } from "@/lib/lunchRoom";
 import CreateLunchRoom from "./CreateLunchRoom";
 import "./create-lunch-room-page.css";
@@ -21,15 +20,12 @@ export default function CreateLunchRoomPage() {
 					<h1>방 만들기</h1>
 					<p>방 이름과 닉네임을 정해 주세요.</p>
 				</header>
-				<CreateLunchRoom
-					inline
-					candidateIds={sampleLunchPlaces.map((place) => place.id)}
-				/>
+				<CreateLunchRoom inline />
 				<details className="create-room-help">
-					<summary>기본 후보 · 이용 안내</summary>
+					<summary>후보 준비 · 이용 안내</summary>
 					<div>
 						<p>
-							제공받은 엑셀 목록을 사용합니다. 위치 검색 기능은 준비 중입니다.
+							방을 만든 뒤 새로 작성하거나 기본·저장 목록을 불러올 수 있습니다.
 						</p>
 						<p>
 							최대 {lunchRoomLimits.maxParticipants}명 · 생성 후 24시간 유지

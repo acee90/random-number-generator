@@ -18,7 +18,7 @@ export interface LunchPlace {
 	id: string;
 	name: string;
 	menu?: string;
-	category: LunchCategory;
+	category: string;
 	distanceMeters?: number;
 }
 

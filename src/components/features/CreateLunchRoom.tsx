@@ -28,11 +28,11 @@ import { beginRoomTiming } from "@/lib/roomTimings";
 import "./create-lunch-room.css";
 
 export default function CreateLunchRoom({
-	candidateIds,
 	disabled = false,
 	inline = false,
 }: {
-	candidateIds: string[];
+	/** Kept for older callers; every new room prepares its candidates after entry. */
+	candidateIds?: string[];
 	disabled?: boolean;
 	inline?: boolean;
 }) {
@@ -60,10 +60,6 @@ export default function CreateLunchRoom({
 			);
 			return;
 		}
-		if (candidateIds.length < 2) {
-			setError("추첨 후보를 두 곳 이상 선택해 주세요.");
-			return;
-		}
 		creating.current = true;
 		setPending(true);
 		setError("");
@@ -79,7 +75,7 @@ export default function CreateLunchRoom({
 					body: JSON.stringify({
 						title: title.trim(),
 						hostName,
-						candidateIds,
+						candidateIds: [],
 					}),
 					signal: controller.signal,
 				});
@@ -168,8 +164,8 @@ export default function CreateLunchRoom({
 				{lunchRoomLimits.maxNicknameLength}
 			</p>
 			<p>
-				회사 주변 음식점 {candidateIds.length}곳으로 시작합니다. 후보는 방에서
-				바꿀 수 있습니다.
+				방을 만든 뒤 후보를 준비합니다. 새로 작성하거나 목록을 불러올 수
+				있습니다.
 			</p>
 			{error && (
 				<p role="alert" className="lunch-create-error">
@@ -185,8 +181,7 @@ export default function CreateLunchRoom({
 					pending ||
 					!title.trim() ||
 					!name.trim() ||
-					name.trim().length > lunchRoomLimits.maxNicknameLength ||
-					candidateIds.length < 2
+					name.trim().length > lunchRoomLimits.maxNicknameLength
 				}
 			>
 				{pending && <LoaderCircle size={18} aria-hidden="true" />}{" "}

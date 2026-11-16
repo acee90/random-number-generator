@@ -151,7 +151,7 @@ export default function RoomDrawDialog({
 	draw: RoomDraw;
 	columnRef: RefObject<HTMLDivElement | null>;
 	returnFocusRef: RefObject<HTMLButtonElement | null>;
-	fallbackFocusRef: RefObject<HTMLHeadingElement | null>;
+	fallbackFocusRef: RefObject<HTMLElement | null>;
 	chatInputRef: RefObject<HTMLTextAreaElement | null>;
 	onChatFocus?: () => void;
 	onClose: () => void;

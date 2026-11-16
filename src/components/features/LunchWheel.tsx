@@ -65,6 +65,8 @@ export function LunchWheel({
 	rotorRef,
 	controlled = false,
 	canDraw = true,
+	drawLabel,
+	drawText,
 }: {
 	candidates: readonly LunchPlace[];
 	candidateNumbers: readonly number[];
@@ -79,6 +81,8 @@ export function LunchWheel({
 	rotorRef?: RefObject<HTMLDivElement | null>;
 	controlled?: boolean;
 	canDraw?: boolean;
+	drawLabel?: string;
+	drawText?: string;
 }) {
 	const size = candidates.length;
 	const labels = candidates.map((place, index) => ({
@@ -136,7 +140,7 @@ export function LunchWheel({
 								? "방장이 추첨을 시작할 때까지 대기"
 								: phase === "done"
 									? "한 번 더 추첨하기"
-									: "점심 메뉴 추첨하기"
+									: (drawLabel ?? "점심 메뉴 추첨하기")
 				}
 				aria-describedby={errorId}
 			>
@@ -154,7 +158,7 @@ export function LunchWheel({
 								? "방장 대기"
 								: phase === "done"
 									? "한 번 더"
-									: "추첨하기"}
+									: (drawText ?? "추첨하기")}
 				</span>
 				<small aria-hidden="true">{size}곳</small>
 			</Button>

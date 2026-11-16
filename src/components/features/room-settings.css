@@ -1,0 +1,45 @@
+.room-settings-dialog {
+	inline-size: min(480px, calc(100vw - 24px));
+	max-inline-size: 480px;
+	max-block-size: calc(100dvh - 24px);
+	overflow-y: auto;
+}
+.room-settings-field {
+	display: grid;
+	gap: 8px;
+}
+.room-settings-note {
+	margin: 8px 0 0;
+	font-size: 12px;
+	line-height: 1.7;
+	color: var(--muted);
+}
+.room-settings-conflict {
+	padding: 10px;
+	border: 1px solid #d2bc6d;
+	background: #fff8dd;
+	font-size: 13px;
+	line-height: 1.6;
+}
+.room-settings-conflict p {
+	margin: 0 0 8px;
+}
+.room-settings-summary {
+	display: grid;
+	gap: 12px;
+	margin: 0;
+}
+.room-settings-summary > div {
+	display: flex;
+	justify-content: space-between;
+	gap: 16px;
+	font-size: 14px;
+	line-height: 1.6;
+}
+.room-settings-summary dt {
+	font-weight: 650;
+}
+.room-settings-summary dd {
+	margin: 0;
+	overflow-wrap: anywhere;
+}

@@ -81,7 +81,7 @@ describe("CreateLunchRoom", () => {
 		expect(mocks.saveHost).not.toHaveBeenCalled();
 		expect(mocks.navigate).not.toHaveBeenCalled();
 	});
-	it("submits the current selection and stores credentials before SPA navigation without placing the host token in the URL", async () => {
+	it("starts empty even for legacy callers with a selection and stores credentials before SPA navigation", async () => {
 		mocks.readName.mockReturnValue("이전 이름");
 		fetchMock.mockResolvedValueOnce(response({ roomId, hostToken }));
 		const view = render(
@@ -114,7 +114,7 @@ describe("CreateLunchRoom", () => {
 		expect(JSON.parse(String(options?.body))).toEqual({
 			title: "팀 점심",
 			hostName: "에릭",
-			candidateIds: currentIds,
+			candidateIds: [],
 		});
 		expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith({
 			to: "/lunch-room/$roomId",
@@ -230,13 +230,13 @@ describe("CreateLunchRoom", () => {
 		expect(mocks.navigate).not.toHaveBeenCalled();
 	});
 
-	it("blocks fewer than two candidates both in the button and submit handler", async () => {
-		render(
-			<CreateLunchRoom
-				candidateIds={candidateIds.slice(0, 1)}
-				disabled={false}
-			/>,
-		);
+	it.each([
+		undefined,
+		[],
+		candidateIds.slice(0, 1),
+	])("creates an empty room without any candidate preselection (%j)", async (ids) => {
+		fetchMock.mockResolvedValueOnce(response({ roomId, hostToken }));
+		render(<CreateLunchRoom candidateIds={ids} disabled={false} />);
 		openDialog();
 		expect(
 			(
@@ -244,11 +244,13 @@ describe("CreateLunchRoom", () => {
 					name: "방 만들고 입장하기",
 				}) as HTMLButtonElement
 			).disabled,
-		).toBe(true);
+		).toBe(false);
+		expect(screen.getByText(/방을 만든 뒤 후보를 준비합니다/)).toBeTruthy();
 		await submit();
-		expect(screen.getByRole("alert").textContent).toContain("두 곳 이상");
-		expect(fetchMock).not.toHaveBeenCalled();
-		expect(mocks.navigate).not.toHaveBeenCalled();
+		expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({
+			candidateIds: [],
+		});
+		expect(mocks.navigate).toHaveBeenCalledOnce();
 	});
 
 	it("does not open a modal while the parent disables room creation", () => {

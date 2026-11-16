@@ -45,6 +45,10 @@ describe("Jeommechu lunch home", () => {
 		expect(main.querySelector("form")).toBeNull();
 		expect(within(main).queryByRole("textbox")).toBeNull();
 		expect(screen.queryByRole("dialog")).toBeNull();
+		expect(
+			screen.getByText(/방을 만든 뒤 후보를 새로 작성하거나 목록을 불러옵니다/),
+		).toBeTruthy();
+		expect(screen.queryByText(/곳으로 시작합니다/)).toBeNull();
 		expect(mocks.readName).not.toHaveBeenCalled();
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
