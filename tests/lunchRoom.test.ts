@@ -1741,3 +1741,64 @@ describe("custom candidate snapshot capacity", () => {
 		expect(parseServerMessage(raw)).not.toBeNull();
 	});
 });
+
+describe("chat delta protocol", () => {
+	it("negotiates only the supported delta protocol", () => {
+		expect(
+			parseClientMessage(
+				JSON.stringify({
+					type: "join",
+					name: "방장",
+					chatProtocol: "delta-v1",
+				}),
+			),
+		).toMatchObject({ chatProtocol: "delta-v1" });
+		expect(
+			parseClientMessage(
+				JSON.stringify({ type: "join", name: "방장", chatProtocol: "future" }),
+			),
+		).not.toHaveProperty("chatProtocol");
+	});
+	it("validates message/room boundaries and ignores malformed optional sync telemetry", () => {
+		const value = {
+			type: "chat-ack",
+			roomId,
+			message: makeChat(),
+			serverTime: now,
+		};
+		expect(parseServerMessage(JSON.stringify(value))).toEqual(value);
+		for (const patch of [
+			{ roomId: "bad" },
+			{ message: { ...makeChat(), timestamp: -1 } },
+			{ message: { ...makeChat(), event: "joined" } },
+			{ serverTime: Infinity },
+		])
+			expect(
+				parseServerMessage(JSON.stringify({ ...value, ...patch })),
+			).toBeNull();
+		const chatTrace = {
+			diagnosticId: crypto.randomUUID(),
+			serverReceivedAt: now,
+			serverSendAt: now,
+			queueMs: 0,
+			prepareMs: 0,
+			saveMs: 0,
+			alarmMs: 0,
+			serverTotalMs: 5,
+			syncMs: 5,
+		};
+		expect(
+			parseServerMessage(JSON.stringify({ ...value, chatTrace })),
+		).toMatchObject({ chatTrace: { syncMs: 5 } });
+		expect(
+			parseServerMessage(
+				JSON.stringify({ ...value, chatTrace: { ...chatTrace, syncMs: -1 } }),
+			),
+		).not.toHaveProperty("chatTrace");
+		expect(
+			parseServerMessage(
+				JSON.stringify({ ...value, type: "chat-message", chatTrace }),
+			),
+		).not.toHaveProperty("chatTrace");
+	});
+});

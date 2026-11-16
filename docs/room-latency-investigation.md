@@ -154,7 +154,7 @@ npm run check:latency -- --origin https://jeommechu.dev --samples 5
 | `server.serverReceivedAt`, `server.serverSendAt` | DO onMessage 진입, 발신자 snapshot 직렬화·소켓 enqueue 직전의 절대시각(ms) |
 | `server.queueMs` | onMessage 이후 앱의 exclusive 큐 진입까지 |
 | `server.prepareMs` | 프로토콜 파싱 및 큐 진입 후 load·만료·권한·중복/속도 검사와 메시지 준비까지(큐 대기 제외) |
-| `server.saveMs`, `server.alarmMs` | durable 저장, 알람 갱신 대기 시간 |
+| `server.saveMs`, `server.alarmMs` | storage API Promise와 알람 갱신 대기 시간. 디스크 반영 완료 시간과 같다고 볼 수 없음 |
 | `server.serverTotalMs` | onMessage 진입부터 발신자 snapshot 직렬화 직전까지. 큐/사전처리/저장/알람 외 snapshot 준비 등도 포함 |
 | `outsideServerMs` | `rttMs - serverTotalMs`의 0 이상 값. 네트워크뿐 아니라 DO 핸들러 이전 대기·직렬화·Cloudflare 전달·브라우저 스케줄링을 포함 |
 | `maxEventLoopLagMs` | 해당 전송이 대기 중일 때 100ms 타이머의 최대 관측 지연. CPU 작업·브라우저 스케줄링·백그라운드 제한의 영향을 받으며 네트워크 시간은 아님 |
@@ -166,3 +166,50 @@ npm run check:latency -- --origin https://jeommechu.dev --samples 5
 `clockSynchronized=false`를 항상 기록한다. 클라이언트와 서버 시계 오차/경로 비대칭을 보정하지 않았으므로 절대시각을 빼서 상행/하행 지연을 확정하지 않는다. 기존 ping의 중간시각 추정도 일방향 시간을 보장하지 않는다. `server=null`이면 이전 서버/후속 snapshot 등으로 직접 계측이 연결되지 않은 상태다. 성공 ACK만 구간 로그를 내며 실패·연결 종료·15초 미확인·닫기·컴포넌트 해제 때 진단 타이머와 visibility listener를 정리한다. 늦은 ACK와 기존 채팅 상태 처리는 유지한다.
 
 판독 예: RTT가 2600ms이고 서버 처리 10ms면 약2590ms는 서버 핸들러 밖의 구간이다. 동시에 이벤트 루프 지연이 2000ms면 브라우저 정지가 기여했을 수 있다. 이벤트 루프 지연이 작더라도 패킷 손실/TCP 재전송으로 확정하지 않으며 전송 계층 증거가 추가로 필요하다. 현재 계측은 본인 ACK를 대상으로 하고 다른 참가자의 수신 지연은 별도다.
+
+## 전달 구간 후속 조사 — 2026-11-16 17:35~17:42 KST
+
+관련 이슈: [#47](https://github.com/acee90/random-number-generator/issues/47). 운영 버전 `37265ae7-77fe-4920-b0c5-6e09628267fb`에서 측정했다. 이번 조사는 운영 코드·설정을 변경하지 않았다.
+
+### 자체 테스트 소켓 비교
+
+사용자 컴퓨터의 같은 한국망에서 새 진단방에 TLS WebSocket 하나를 열어 control ping, 저장 없는 앱 ping, 진단 채팅을 각각 12회 번갈아 보냈다. 브라우저 UI를 거치지 않는 별도 클라이언트이고 TCP_NODELAY를 사용했다. 클라이언트 압축을 요청하지 않았으며 다른 사용자의 패킷이나 메시지 본문은 수집하지 않았다. 완료 후 테스트 소켓을 닫았다.
+
+| 종류 | 응답 본문 크기 | 최소 | 중앙값 | 최대 |
+| --- | --- | --- | --- | --- |
+| WebSocket control pong | 8 bytes | 323.21ms | 907.28ms | 1106.81ms |
+| 앱 pong (저장 없음) | 69 bytes | 419.27ms | 441.64ms | 1063.47ms |
+| 채팅 snapshot | 1347~3316 bytes | 434.19ms | 488.40ms | 3526.15ms |
+
+control ping은 런타임 자동 응답이므로 앱 ping과 동일한 핸들러를 측정하지 않는다. 고정 순서의 단일 소량 실험이며 종류 간 중앙값 차이를 앱 처리 비용으로 빼서 해석하지 않는다. 작은 ping에서도 지연이 발생하므로 전체 snapshot 크기나 메시지 저장만으로 기본 지연을 설명할 수 없다.
+
+macOS `TCP_CONNECTION_INFO`를 같은 테스트 소켓에서 읽었다. 표본 4·5의 control ping(990.73ms, 943.89ms) 동안 각각 송신 재전송 1패킷/36bytes가 증가했다. 채팅 표본 5(1401.87ms)와 11(3526.15ms)에서는 수신 순서가 뒤바뀐 바이트가 각각 641bytes, 267bytes 증가했다. 이는 전송 경로 문제의 근거지만 손실 구간이나 모든 느린 메시지의 원인을 확정하지 않는다. 송신 재전송 카운터는 서버 측 재전송을 직접 측정하지 않고, 수신 순서 변경은 패킷 손실과 동의어가 아니다.
+
+최대 지연 채팅은 `diagnosticId=4adf1c03-20ab-43ab-ab50-dc9a8e3a5bdb`로 Cloudflare trace와 연결했다. Trace `7ccbe87d8c90b8cffc747c1b692bb197`, span `a323e41b8f43805d`, 호출 `31cd9f46c7f62a8bdf2207c9c12cd0f4`의 DO 위치는 **KIX/Osaka**였다. 호출 wall time은 **8ms**, trace span은 9ms(17:36:24.023~24.032), storage_put/setAlarm 표시는 0ms였다. 따라서 이 표본에서 DO의 JS 호출 3.5초 정체나 LA DO 배치가 주원인이라는 설명은 맞지 않는다. trace는 브라우저까지의 전송 완료를 측정하지 않는다.
+
+### HTTP 접속 경로 대조
+
+같은 환경의 `/cdn-cgi/trace` 3회씩 비교에서 서비스는 LAX, TCP 연결 147.03~150.58ms였고 `speed.cloudflare.com`은 ICN, 9.35~15.41ms였다. 서비스의 IPv4/IPv6 추가 비교도 각각 3회 모두 LAX였다. IPv4 TCP 139.87~158.78ms, IPv6 137.55~224.54ms로, 이 환경에서는 IPv6 전환의 개선 근거가 없었다. HTTP 연결 시간은 이미 열린 WebSocket 프레임의 일방향 지연과 다르다. 다른 호스트의 ICN 처리는 서비스도 같은 경로를 선택할 수 있다는 보장이 아니다.
+
+### 계측 해석과 개선 후보
+
+- Workers의 `performance.now()`와 `Date.now()`는 운영에서 I/O 경계에 따라 진행하므로 앱의 0ms를 실제 처리 0ms로 해석하지 않는다. Cloudflare invocation wall time도 함께 확인한다.
+- SQLite DO의 `put()` Promise는 메모리 버퍼 단계에서 완료될 수 있고, output gate는 디스크 반영이 끝날 때까지 소켓 출력을 보류한다. 현재 `outsideServerMs`에는 이 대기가 포함될 수 있다. `await storage.sync()`를 진단 모드에서만 추가하면 보류 중인 디스크 반영을 별도로 관측할 수 있다. 이는 성능 개선이 아닌 추가 진단 후보이며 아직 구현·배포하지 않았다. `allowUnconfirmed`로 우회하면 확정 전에 메시지가 보일 수 있어 채팅의 저장 보장을 유지하는 개선으로 취급하지 않는다.
+- 신규 DO의 `get(id, { locationHint: "apac-ne" })`는 유지한다. 실제 KIX 배치를 확인했지만 클라이언트의 Cloudflare 접속 위치까지 고정하지는 않는다. Worker 서울 배치 조합은 앞선 A/B에서 악화했으므로 재적용 근거가 없다.
+- Argo는 WebSocket과 호환되지 않는다. 이미 열린 WebSocket 프레임은 WAF의 추가 검사를 받지 않으므로 WAF 해제도 이 지연에 대한 타당한 처방이 아니다. hibernation 해제로 개선된다는 근거도 없다.
+- 코드상 PartySocket의 연결된 소켓 전송은 즉시 native send이며 오프라인 큐는 비활성화되어 있다. 전체 snapshot 대신 새 메시지/작은 ACK만 전달하는 프로토콜은 전송량과 재전송 노출을 줄일 후보지만, 작은 ping의 1초 지연이나 접속 경로를 해결하지는 않는다. 재접속 동기화·중복 방지·확정 ACK를 유지하는 별도 검토가 필요하다.
+- 우선 검토할 다음 비교는 다른 통신사/모바일망의 같은 소량 실험이다. 가까운 처리 위치와 지연 개선이 함께 재현되는지 확인해야 앱 설정과 접속망 경로의 영향을 더 분리할 수 있다. Cloudflare/ISP 문의는 trace·시각·Ray ID·경로 정보를 정리한 뒤 사용자가 전송을 승인하는 경우 진행한다. 이번에는 문의하지 않았다.
+
+공식 근거: [Anycast 접속 위치와 ISP 경로](https://developers.cloudflare.com/support/troubleshooting/general-troubleshooting/geographic-traffic-routing/), [WebSocket과 Argo/WAF](https://developers.cloudflare.com/network/websockets/), [SQLite storage와 sync](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/), [Workers 타이머](https://developers.cloudflare.com/workers/runtime-apis/performance/), [WebSocket 자동 control pong](https://developers.cloudflare.com/durable-objects/best-practices/websockets/).
+
+## 작은 ACK와 채팅 delta 구현 — 2026-11-16
+
+관련 이슈: [#47](https://github.com/acee90/random-number-generator/issues/47). 사용자가 구현·운영 배포·재측정을 요청해 위 검토 후보를 구현 범위로 전환했다. 배포 후 실측 상태는 이슈에서 별도로 관리한다.
+
+신규 클라이언트는 join에서 `chatProtocol=delta-v1`을 협상한다. 채팅의 저장·알람 처리 후 발신 소켓에는 `chat-ack`, 나머지 신규 소켓에는 `chat-message`로 확정 메시지 한 건만 전달한다. 본문에는 방 ID·서버 시각·메시지가 들어가고 후보 목록·추첨 내역·기존 채팅 전체를 반복하지 않는다. 클라이언트는 메시지 ID로 중복을 제거하고 최근100건만 유지한다. 발신자 ID가 일치하는 대기 항목만 확정하며 다른 상태 변경의 ACK와 섞지 않는다. 채팅을 보낸 멤버의 활동 시각과 온라인 상태도 갱신한다.
+
+기존 클라이언트와 기존 연결 attachment는 협상 필드가 없으므로 전체 snapshot을 계속 받는다. 신규 클라이언트가 이전 서버에 연결돼도 snapshot을 처리할 수 있다. 최초 입장·재접속·방의 다른 상태 변경·중복 채팅 요청 복구는 전체 snapshot을 사용한다. 새 DO namespace/migration이나 저장 스키마 변경은 없다.
+
+유효한 진단 ID가 있는 채팅에만 `await ctx.storage.sync()`를 수행하고, 알람 API 이후부터 sync 반환까지를 `syncMs`로 기록한다. sync 실패 시 성공 ACK/메시지를 공개하지 않는다. 일반 채팅은 기존 output gate의 저장 확정 보장을 유지하며 `allowUnconfirmed`를 사용하지 않는다. 서버 타이머의 I/O 경계 제한과 실제 wire flush가 아니라는 주의는 여전히 적용된다. 브라우저 진단 로그에는 작은 ACK의 UTF-8 `responseBytes`도 추가했다.
+
+로컬 검증: 전체49파일1440테스트 통과(`--maxWorkers=4`), 타입 검사·Biome 검사·앱 빌드 완료. 최초 기본 병렬 실행에서 기존 장기 ledger 테스트가 5초 제한에 걸려 작업 수를 줄인 전체 실행으로 확인했다. 테스트는 협상/혼합 버전, 발신자·상대 delta, 중복/재접속, 디스크 sync 대기·실패 시 응답 방지, 송신자만 진단 수신, malformed telemetry, 다른 방/참가자 ACK, 이력 상한과 브라우저 trace 종료를 포함한다.

@@ -445,6 +445,7 @@ export function useLunchRoom(
 			socket.send(
 				JSON.stringify({
 					type: "join",
+					chatProtocol: "delta-v1",
 					name: nicknameRef.current,
 					...(explicitNameRef.current ? { updateName: true } : {}),
 					...(hostTokenRef.current ? { hostToken: hostTokenRef.current } : {}),
@@ -474,7 +475,9 @@ export function useLunchRoom(
 			const parsedAt = performance.now();
 			if (
 				!message ||
-				(message.type === "snapshot" && message.snapshot.roomId !== roomId)
+				(message.type === "snapshot" && message.snapshot.roomId !== roomId) ||
+				((message.type === "chat-ack" || message.type === "chat-message") &&
+					message.roomId !== roomId)
 			) {
 				setErrorState({
 					kind: "protocol",
@@ -592,6 +595,48 @@ export function useLunchRoom(
 				setClockOffset(best.offset);
 				return;
 			}
+			if (message.type === "chat-ack" || message.type === "chat-message") {
+				const current = snapshotRef.current;
+				if (!current || !joinedRef.current) return;
+				const entry = message.message;
+				const next = {
+					...current,
+					messages: current.messages.some((item) => item.id === entry.id)
+						? current.messages
+						: [...current.messages, entry].slice(-lunchRoomLimits.maxMessages),
+					members: current.members?.map((member) =>
+						member.id === entry.participantId
+							? {
+									...member,
+									status: "online" as const,
+									lastActiveAt: Math.max(member.lastActiveAt, entry.timestamp),
+									lastSeenAt: Math.max(member.lastSeenAt, entry.timestamp),
+								}
+							: member,
+					),
+				};
+				snapshotRef.current = next;
+				setSnapshot(next);
+				const request = localChatRequestsRef.current.get(entry.id);
+				if (request && request.message.participantId === entry.participantId) {
+					clearTimeout(request.timer);
+					request.finishAcknowledgement?.();
+					request.trace?.finish(message.chatTrace, {
+						at: receivedAt,
+						wallAt: receivedWallAt,
+						parsedAt,
+						eventTimeStamp: event.timeStamp,
+						bytes:
+							typeof event.data === "string"
+								? new TextEncoder().encode(event.data).byteLength
+								: undefined,
+					});
+					localChatRequestsRef.current.delete(entry.id);
+					syncLocalChatMessages();
+				}
+				return;
+			}
+			if (message.type !== "snapshot") return;
 			if (!measuredClockRef.current) {
 				offsetRef.current = message.serverTime - Date.now();
 				setClockOffset(offsetRef.current);
@@ -869,6 +914,7 @@ export function useLunchRoom(
 		if (
 			!send({
 				type: "join",
+				chatProtocol: "delta-v1",
 				name,
 				updateName: true,
 				...(hostTokenRef.current ? { hostToken: hostTokenRef.current } : {}),

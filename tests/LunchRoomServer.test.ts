@@ -35,6 +35,7 @@ interface TestSocketState {
 	lastChatAt?: number;
 	lastActiveAt?: number;
 	closing?: boolean;
+	chatProtocol?: "delta-v1";
 }
 
 class TestSocket {
@@ -57,6 +58,7 @@ class TestSocket {
 }
 
 class TestStorage {
+	async sync() {}
 	values = new Map<string, unknown>();
 	alarm: number | null = null;
 	deleteCount = 0;
@@ -1082,6 +1084,122 @@ describe("LunchRoomServer", () => {
 			clientTime: Date.now(),
 			serverTime: Date.now(),
 		});
+	});
+
+	it("sends small ACK/deltas to negotiated clients and snapshots to legacy sockets", async () => {
+		const { server, context } = await room();
+		const sender = await connect(server, context, "측정");
+		const peer = await connect(server, context, "동료");
+		const legacy = await connect(server, context, "이전버전");
+		// Negotiate through the actual join parser/state, not test-only state mutation.
+		const modern = await connect(server, context);
+		await send(server, modern, {
+			type: "join",
+			name: "신규",
+			chatProtocol: "delta-v1",
+		});
+		expect(modern.state?.chatProtocol).toBe("delta-v1");
+		sender.setState({ ...sender.state, chatProtocol: "delta-v1" });
+		peer.setState({ ...peer.state, chatProtocol: "delta-v1" });
+		const sync = vi.spyOn(context.storage, "sync");
+		await send(server, sender, {
+			type: "chat",
+			id: "delta-chat",
+			text: "작은 메시지",
+		});
+		expect(messages(sender).at(-1)).toMatchObject({
+			type: "chat-ack",
+			message: { id: "delta-chat" },
+		});
+		expect(messages(peer).at(-1)).toMatchObject({
+			type: "chat-message",
+			message: { id: "delta-chat" },
+		});
+		expect(messages(modern).at(-1)?.type).toBe("chat-message");
+		expect(latestSnapshot(legacy).snapshot.messages.at(-1)?.id).toBe(
+			"delta-chat",
+		);
+		expect(sender.sent.at(-1)).not.toContain('"snapshot"');
+		expect(sync).not.toHaveBeenCalled();
+		// A duplicate recovers a full authoritative snapshot without re-broadcast.
+		const peerCount = peer.sent.length;
+		await send(server, sender, {
+			type: "chat",
+			id: "delta-chat",
+			text: "duplicate",
+		});
+		expect(
+			latestSnapshot(sender).snapshot.messages.filter(
+				(x) => x.id === "delta-chat",
+			),
+		).toHaveLength(1);
+		expect(peer.sent).toHaveLength(peerCount);
+		const restored = createServer(context);
+		const reconnected = await connect(restored, context, "재접속");
+		expect(
+			latestSnapshot(reconnected).snapshot.messages.some(
+				(x) => x.id === "delta-chat",
+			),
+		).toBe(true);
+	});
+
+	it("waits for debug disk sync before ACK or peer delivery and includes flush timing only on the sender", async () => {
+		const { server, context } = await room();
+		const sender = await connect(server, context, "측정");
+		const peer = await connect(server, context, "동료");
+		sender.setState({ ...sender.state, chatProtocol: "delta-v1" });
+		peer.setState({ ...peer.state, chatProtocol: "delta-v1" });
+		vi.spyOn(console, "info").mockImplementation(() => {});
+		let release!: () => void;
+		const blocked = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		vi.spyOn(context.storage, "sync").mockImplementation(() => blocked);
+		const senderCount = sender.sent.length,
+			peerCount = peer.sent.length;
+		const diagnosticId = crypto.randomUUID();
+		const pending = send(server, sender, {
+			type: "chat",
+			id: "flush-chat",
+			text: "flush",
+			diagnosticId,
+		});
+		await vi.waitFor(() => expect(context.storage.sync).toHaveBeenCalledOnce());
+		expect(sender.sent).toHaveLength(senderCount);
+		expect(peer.sent).toHaveLength(peerCount);
+		await vi.advanceTimersByTimeAsync(120);
+		release();
+		await pending;
+		const ack = messages(sender).at(-1);
+		expect(ack).toMatchObject({
+			type: "chat-ack",
+			chatTrace: { diagnosticId, syncMs: expect.any(Number) },
+		});
+		if (ack?.type !== "chat-ack") throw new Error("Missing ACK");
+		expect(ack.chatTrace?.syncMs).toBeGreaterThanOrEqual(120);
+		expect(messages(peer).at(-1)).not.toHaveProperty("chatTrace");
+		expect(JSON.stringify([...context.storage.values])).not.toContain(
+			diagnosticId,
+		);
+	});
+
+	it("does not acknowledge or broadcast when debug disk sync fails", async () => {
+		const { server, context } = await room();
+		const sender = await connect(server, context, "측정");
+		sender.setState({ ...sender.state, chatProtocol: "delta-v1" });
+		const before = sender.sent.length;
+		vi.spyOn(context.storage, "sync").mockRejectedValue(
+			new Error("disk failure"),
+		);
+		await expect(
+			send(server, sender, {
+				type: "chat",
+				id: "failed-flush",
+				text: "flush",
+				diagnosticId: crypto.randomUUID(),
+			}),
+		).rejects.toThrow("disk failure");
+		expect(sender.sent).toHaveLength(before);
 	});
 
 	it("returns opt-in timings only to the sender after storage and never persists telemetry", async () => {
