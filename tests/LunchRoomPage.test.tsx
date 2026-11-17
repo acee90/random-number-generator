@@ -1144,7 +1144,10 @@ describe("synchronized lunch room UI", () => {
 		expect(toggle.getAttribute("aria-expanded")).toBe("true");
 		expect(body?.contains(log)).toBe(true);
 		expect(body?.contains(input)).toBe(true);
-		expect(body?.contains(profile)).toBe(true);
+		expect(profile.closest(".room-chat-header")).toBe(
+			toggle.closest(".room-chat-header"),
+		);
+		expect(body?.contains(profile)).toBe(false);
 		const draft = "이 메뉴 어때요?\n같이 먹어요.";
 		fireEvent.change(input, { target: { value: draft } });
 		fireEvent.click(screen.getByRole("button", { name: "참가자 2명" }));
@@ -1163,7 +1166,7 @@ describe("synchronized lunch room UI", () => {
 		expect(input.value).toBe(draft);
 		expect(screen.queryByRole("log", { name: "방 채팅 메시지" })).toBeNull();
 		expect(screen.queryByRole("textbox", { name: "메시지" })).toBeNull();
-		expect(screen.queryByRole("button", { name: /^내 프로필:/ })).toBeNull();
+		expect(screen.getByRole("button", { name: /^내 프로필:/ })).toBe(profile);
 		expect(screen.queryByRole("dialog", { name: "참가자" })).toBeNull();
 		expect(room.sendChat).not.toHaveBeenCalled();
 		fireEvent.click(toggle, { detail: 0 });
@@ -3606,7 +3609,7 @@ describe("synchronized lunch room UI", () => {
 				.compareDocumentPosition(
 					screen.getByRole("button", { name: /^내 프로필:/ }),
 				),
-		).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+		).toBe(Node.DOCUMENT_POSITION_PRECEDING);
 	});
 
 	it("replaces a closed room with a clear new-room action and removes prior room content", () => {
