@@ -41,6 +41,8 @@ export default function RoomSettingsDialog({
 	const [draftTitle, setDraftTitle] = useState("");
 	const [originalTitle, setOriginalTitle] = useState("");
 	const [saving, setSaving] = useState(false);
+	const [closing, setClosing] = useState(false);
+	const [confirmClose, setConfirmClose] = useState(false);
 	const [error, setError] = useState("");
 	const [discard, setDiscard] = useState<"close" | "reload" | null>(null);
 	const savingRef = useRef(false);
@@ -57,6 +59,7 @@ export default function RoomSettingsDialog({
 		!room.mutationPending &&
 		!room.candidatesPending &&
 		!saving &&
+		!closing &&
 		Boolean(snapshot) &&
 		!["fetching", "drawing", "closed"].includes(snapshot?.status ?? "closed");
 	const titleConflict = !saving && snapshot?.title !== originalTitle;
@@ -126,9 +129,33 @@ export default function RoomSettingsDialog({
 			setSaving(false);
 		}
 	}
+	async function closeRoom() {
+		if (!editable || savingRef.current) return;
+		savingRef.current = true;
+		setClosing(true);
+		setError("");
+		try {
+			if (await room.closeRoom()) {
+				setConfirmClose(false);
+				setOpen(false);
+			} else {
+				setError(
+					"방을 종료하지 못했습니다. 방 상태를 확인한 뒤 다시 시도해 주세요.",
+				);
+			}
+		} catch {
+			setError(
+				"방을 종료하지 못했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.",
+			);
+		} finally {
+			savingRef.current = false;
+			setClosing(false);
+		}
+	}
+
 	return (
 		<>
-			<Dialog open={open} onOpenChange={changeOpen}>
+			<Dialog open={open && !confirmClose} onOpenChange={changeOpen}>
 				<DialogTrigger asChild>
 					<Button
 						variant="outline"
@@ -142,6 +169,9 @@ export default function RoomSettingsDialog({
 				</DialogTrigger>
 				<DialogContent
 					className="room-settings-dialog"
+					onCloseAutoFocus={(event) => {
+						if (confirmClose) event.preventDefault();
+					}}
 					aria-labelledby={`${id}-settings-title`}
 					onOpenAutoFocus={(event) => {
 						if (!showEditor) {
@@ -156,7 +186,7 @@ export default function RoomSettingsDialog({
 						</DialogTitle>
 						<DialogDescription>
 							{showEditor
-								? "게임 진행과 별개로 방 이름을 변경합니다."
+								? "방 이름을 변경하거나 방을 종료합니다."
 								: "방장이 정한 방 이름입니다."}
 						</DialogDescription>
 					</DialogHeader>
@@ -219,10 +249,24 @@ export default function RoomSettingsDialog({
 							{error || room.error}
 						</p>
 					)}
+					{isHost && (
+						<div className="room-settings-end">
+							<Button
+								variant="destructive"
+								disabled={!editable}
+								onClick={() => {
+									setError("");
+									setConfirmClose(true);
+								}}
+							>
+								방 종료
+							</Button>
+						</div>
+					)}
 					<DialogFooter>
 						<Button
 							variant="outline"
-							disabled={saving}
+							disabled={saving || closing}
 							onClick={() => changeOpen(false)}
 						>
 							닫기
@@ -238,6 +282,44 @@ export default function RoomSettingsDialog({
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>
+			<AlertDialog
+				open={confirmClose}
+				onOpenChange={(next) => {
+					if (!savingRef.current) {
+						setConfirmClose(next);
+						setError("");
+					}
+				}}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>방을 종료할까요?</AlertDialogTitle>
+						<AlertDialogDescription>
+							모든 참가자의 이용이 종료되며 이 링크로 다시 입장할 수 없습니다.
+							저장하지 않은 변경은 사라집니다.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					{error && (
+						<p role="alert" className="room-error">
+							{error}
+						</p>
+					)}
+					<AlertDialogFooter>
+						<AlertDialogCancel disabled={closing}>취소</AlertDialogCancel>
+						<AlertDialogAction
+							data-variant="destructive"
+							className="ui-button-destructive"
+							disabled={!editable}
+							onClick={(event) => {
+								event.preventDefault();
+								void closeRoom();
+							}}
+						>
+							{closing ? "종료 중…" : "방 종료"}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 			<AlertDialog
 				open={discard !== null}
 				onOpenChange={(next) => {

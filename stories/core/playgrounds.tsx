@@ -3,7 +3,11 @@ import { type ComponentProps, useEffect, useId, useRef, useState } from "react";
 import { LunchWheel } from "@/components/features/LunchWheel";
 import RoomDrawResult from "@/components/features/RoomDrawResult";
 import { useRoomTimeline } from "@/hooks/useRoomTimeline";
-import { getWheelRotation, sampleLunchPlaces } from "@/lib/lunch";
+import {
+	getWheelRotation,
+	randomWheelLandingFraction,
+	sampleLunchPlaces,
+} from "@/lib/lunch";
 import type { RoomDraw } from "@/lib/lunchRoom";
 import {
 	appendPreviewVote,
@@ -161,13 +165,20 @@ export function WheelPlayground({
 				count: candidateCount,
 			});
 			const winnerIndex = sequence.current % value.candidates.length;
+			const landingFraction = randomWheelLandingFraction();
 			const startedAt = Date.now();
 			setDraw({
 				...value,
 				startedAt,
 				timestamp: startedAt,
 				winnerIndex,
-				toRotation: getWheelRotation(0, winnerIndex, value.candidates.length),
+				toRotation: getWheelRotation(
+					0,
+					winnerIndex,
+					value.candidates.length,
+					landingFraction,
+				),
+				landingFraction,
 			});
 			setFetching(false);
 		}, 350);

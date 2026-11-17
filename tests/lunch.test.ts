@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
 	getWheelRotation,
 	lunchCategories,
 	lunchSource,
+	randomWheelLandingFraction,
 	resolveLunchWinner,
 	sampleLunchPlaces,
 } from "../src/lib/lunch";
@@ -144,6 +145,52 @@ describe("lunch draw result mapping", () => {
 });
 
 describe("lunch wheel alignment", () => {
+	it("keeps varied stop positions inside the chosen slice for 1 to 200 candidates", () => {
+		for (let count = 1; count <= 200; count++) {
+			for (const winner of new Set([0, Math.floor(count / 2), count - 1])) {
+				for (const fraction of [0.1, 0.25, 0.5, 0.75, 0.9]) {
+					for (const previous of [0, 359.75, 7200.2]) {
+						const rotation = getWheelRotation(
+							previous,
+							winner,
+							count,
+							fraction,
+						);
+						expect(indexAtPointer(rotation, count)).toBe(winner);
+						const angle = ((-rotation % 360) + 360) % 360;
+						expect(angle / (360 / count) - winner).toBeCloseTo(fraction, 8);
+						expect(rotation - previous).toBeGreaterThanOrEqual(1440);
+					}
+				}
+			}
+		}
+	});
+
+	it.each([
+		0,
+		0.09,
+		0.91,
+		1,
+		-1,
+		Number.NaN,
+		Number.POSITIVE_INFINITY,
+	])("rejects an unsafe landing fraction %s", (fraction) => {
+		expect(() => getWheelRotation(0, 0, 2, fraction)).toThrow(RangeError);
+	});
+
+	it("maps cosmetic random endpoints into the safe inner part of a slice", () => {
+		const random = vi.spyOn(crypto, "getRandomValues");
+		try {
+			random.mockReturnValueOnce(new Uint32Array([0]));
+			expect(randomWheelLandingFraction()).toBe(0.1);
+			random.mockReturnValueOnce(new Uint32Array([0xffffffff]));
+			const end = randomWheelLandingFraction();
+			expect(end).toBeGreaterThan(0.89);
+			expect(end).toBeLessThan(0.9);
+		} finally {
+			random.mockRestore();
+		}
+	});
 	it.each(
 		Array.from({ length: sampleLunchPlaces.length }, (_, index) => index + 1),
 	)("places every winner under the pointer with %i candidate(s)", (count) => {

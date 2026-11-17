@@ -32,14 +32,99 @@ import {
 	readCandidateLibrary,
 } from "@/lib/candidateLibrary";
 import type { SavedCandidateList } from "@/lib/candidateListDraft";
+import {
+	type CandidateListUsage,
+	candidateListUsageKey,
+	defaultCandidateListSourceId,
+	readCandidateListUsage,
+	savedCandidateListSourceId,
+} from "@/lib/candidateListUsage";
 import { sampleLunchPlaces } from "@/lib/lunch";
 import type { RoomCandidate } from "@/lib/lunchRoom";
 import "./candidate-list-load-dialog.css";
 
 export type CandidateListSelection = {
+	sourceId: string;
 	name: string;
 	candidates: RoomCandidate[];
 };
+
+const listDateFormat = new Intl.DateTimeFormat("ko-KR", {
+	year: "numeric",
+	month: "2-digit",
+	day: "2-digit",
+	hour: "2-digit",
+	minute: "2-digit",
+	hourCycle: "h23",
+});
+
+function ListTimestamp({ value }: { value: number }) {
+	const date = new Date(value);
+	return Number.isNaN(date.getTime()) ? (
+		<>정보 없음</>
+	) : (
+		<time dateTime={date.toISOString()}>{listDateFormat.format(date)}</time>
+	);
+}
+
+function ListDetails({
+	name,
+	items,
+	sourceId,
+	usage,
+	savedAt,
+	description,
+}: {
+	name: string;
+	items: readonly Pick<RoomCandidate, "name" | "category">[];
+	sourceId: string;
+	usage: CandidateListUsage;
+	savedAt?: number;
+	description?: string;
+}) {
+	const categories = new Set(
+		items.map((item) => item.category.trim() || "미분류"),
+	);
+	const preview = items
+		.slice(0, 3)
+		.map((item) => item.name)
+		.join(" · ");
+	const loadedAt = usage.loadedAt[sourceId];
+	return (
+		<span>
+			<span className="candidate-load-title">
+				<strong>{name}</strong>
+				{usage.recentId === sourceId && (
+					<span className="candidate-load-recent">최근 불러온 목록</span>
+				)}
+			</span>
+			<small>
+				{description && `${description} · `}후보 {items.length}개 · 분류{" "}
+				{categories.size}개
+			</small>
+			{preview && (
+				<small className="candidate-load-preview">
+					{preview}
+					{items.length > 3 && ` 외 ${items.length - 3}개`}
+				</small>
+			)}
+			<span className="candidate-load-dates">
+				{savedAt !== undefined && (
+					<small>
+						저장 <ListTimestamp value={savedAt} />
+					</small>
+				)}
+				{loadedAt !== undefined ? (
+					<small>
+						최근 불러옴 <ListTimestamp value={loadedAt} />
+					</small>
+				) : (
+					<small>불러온 기록 없음</small>
+				)}
+			</span>
+		</span>
+	);
+}
 
 export default function CandidateListLoadDialog({
 	open,
@@ -56,6 +141,10 @@ export default function CandidateListLoadDialog({
 	returnFocusRef?: RefObject<HTMLButtonElement | null>;
 }) {
 	const [lists, setLists] = useState<SavedCandidateList[]>([]);
+	const [usage, setUsage] = useState<CandidateListUsage>({
+		recentId: null,
+		loadedAt: {},
+	});
 	const [error, setError] = useState("");
 	const [deleting, setDeleting] = useState<SavedCandidateList | null>(null);
 	const [deleteError, setDeleteError] = useState("");
@@ -63,23 +152,44 @@ export default function CandidateListLoadDialog({
 	const baseChoiceRef = useRef<HTMLButtonElement | null>(null);
 	const refresh = useCallback(() => {
 		const next = readCandidateLibrary();
-		setLists(next.lists);
+		const history = readCandidateListUsage();
+		setUsage(history);
+		setLists(
+			[...next.lists].sort(
+				(a, b) =>
+					Number(history.recentId === savedCandidateListSourceId(b.id)) -
+						Number(history.recentId === savedCandidateListSourceId(a.id)) ||
+					(history.loadedAt[savedCandidateListSourceId(b.id)] ?? 0) -
+						(history.loadedAt[savedCandidateListSourceId(a.id)] ?? 0) ||
+					b.updatedAt - a.updatedAt,
+			),
+		);
 		setError(next.error);
 	}, []);
 	useEffect(() => {
 		if (!open) return;
 		refresh();
 		function onStorage(event: StorageEvent) {
-			if (event.key === candidateLibraryKey || event.key === null) refresh();
+			if (
+				event.key === candidateLibraryKey ||
+				event.key === candidateListUsageKey ||
+				event.key === null
+			)
+				refresh();
 		}
 		window.addEventListener("storage", onStorage);
 		return () => window.removeEventListener("storage", onStorage);
 	}, [open, refresh]);
 
-	function select(name: string, candidates: readonly RoomCandidate[]) {
+	function select(
+		sourceId: string,
+		name: string,
+		candidates: readonly RoomCandidate[],
+	) {
 		if (disabled) return;
 		try {
 			const accepted = onSelect({
+				sourceId,
 				name,
 				candidates: candidates.map((candidate) => ({
 					...candidate,
@@ -120,21 +230,28 @@ export default function CandidateListLoadDialog({
 							variant="outline"
 							className="candidate-load-choice"
 							disabled={disabled}
-							onClick={() => select("기본 음식점 목록", sampleLunchPlaces)}
+							onClick={() =>
+								select(
+									defaultCandidateListSourceId,
+									"기본 음식점 목록",
+									sampleLunchPlaces,
+								)
+							}
 						>
 							<List size={20} aria-hidden="true" />
-							<span>
-								<strong>기본 음식점 목록</strong>
-								<small>
-									회사 주변 음식점 · 후보 {sampleLunchPlaces.length}개
-								</small>
-							</span>
+							<ListDetails
+								name="기본 음식점 목록"
+								description="회사 주변 음식점"
+								items={sampleLunchPlaces}
+								sourceId={defaultCandidateListSourceId}
+								usage={usage}
+							/>
 						</Button>
 					</section>
 					<section className="candidate-load-section" aria-label="저장한 목록">
 						<h3>저장한 목록</h3>
 						<p className="candidate-load-note">
-							이 브라우저에 저장한 목록입니다.
+							이 브라우저의 목록 · 최근 불러온 순
 						</p>
 						{error && (
 							<div className="candidate-load-error">
@@ -158,13 +275,22 @@ export default function CandidateListLoadDialog({
 											variant="outline"
 											className="candidate-load-choice"
 											disabled={disabled}
-											onClick={() => select(list.name, list.items)}
+											onClick={() =>
+												select(
+													savedCandidateListSourceId(list.id),
+													list.name,
+													list.items,
+												)
+											}
 										>
 											<FolderOpen size={20} aria-hidden="true" />
-											<span>
-												<strong>{list.name}</strong>
-												<small>후보 {list.items.length}개</small>
-											</span>
+											<ListDetails
+												name={list.name}
+												items={list.items}
+												sourceId={savedCandidateListSourceId(list.id)}
+												savedAt={list.updatedAt}
+												usage={usage}
+											/>
 										</Button>
 										<Button
 											variant="ghost"

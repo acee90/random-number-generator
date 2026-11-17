@@ -7,7 +7,11 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { getWheelRotation, sampleLunchPlaces } from "@/lib/lunch";
+import {
+	getWheelRotation,
+	randomWheelLandingFraction,
+	sampleLunchPlaces,
+} from "@/lib/lunch";
 import {
 	type ChatMessage,
 	getEligibleRoomCandidates,
@@ -404,6 +408,22 @@ export function RoomPageFixtureProvider({
 			);
 			return true;
 		},
+		async closeRoom() {
+			if (
+				!options.isHost ||
+				["fetching", "drawing", "closed"].includes(
+					current.current.snapshot.status,
+				)
+			)
+				return false;
+			commit((value) => ({
+				...value,
+				connection: "closed",
+				error: "방장이 방을 종료했습니다. 새 방을 만들어 주세요.",
+				snapshot: { ...value.snapshot, status: "closed" },
+			}));
+			return true;
+		},
 		enterEditing: (expectedRevision) => intake("edit", expectedRevision),
 		openIntake: (expectedRevision) => intake("open", expectedRevision),
 		closeIntake: (expectedRevision) => intake("close", expectedRevision),
@@ -570,6 +590,7 @@ export function RoomPageFixtureProvider({
 				const state = current.current;
 				const candidates = eligible;
 				const winnerIndex = ++sequence.current % candidates.length;
+				const landingFraction = randomWheelLandingFraction();
 				const draw: RoomDraw = {
 					id: `page-draw-${sequence.current}`,
 					candidates,
@@ -580,7 +601,13 @@ export function RoomPageFixtureProvider({
 					startedAt: Date.now(),
 					durationMs: lunchRoomLimits.drawDurationMs,
 					fromRotation: 0,
-					toRotation: getWheelRotation(0, winnerIndex, candidates.length),
+					toRotation: getWheelRotation(
+						0,
+						winnerIndex,
+						candidates.length,
+						landingFraction,
+					),
+					landingFraction,
 					listVersion: state.snapshot.listVersion,
 					gameFilter: state.snapshot.gameFilter
 						? {

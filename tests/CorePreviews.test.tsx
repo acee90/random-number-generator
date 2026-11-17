@@ -7,6 +7,7 @@ import {
 	screen,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { lunchSpinDurationMs } from "../src/lib/lunch";
 import { createPreviewDraw, previewSelfId } from "../stories/core/fixtures";
 import { VotePlayground, WheelPlayground } from "../stories/core/playgrounds";
 
@@ -107,7 +108,7 @@ describe("CORE component previews", () => {
 				.getByRole("button", { name: "룰렛이 돌아가고 있어요" })
 				.matches(":disabled"),
 		).toBe(true);
-		act(() => vi.advanceTimersByTime(7199));
+		act(() => vi.advanceTimersByTime(lunchSpinDurationMs - 1));
 		expect(screen.getByRole("status").textContent).not.toContain("추첨 결과:");
 		act(() => vi.advanceTimersByTime(1));
 		expect(screen.getByRole("status").textContent).toContain("추첨 결과:");

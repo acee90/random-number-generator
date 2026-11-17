@@ -1,5 +1,5 @@
 import { type Connection, Server, type WSMessage } from "partyserver";
-import { getWheelRotation } from "@/lib/lunch";
+import { getWheelRotation, randomWheelLandingFraction } from "@/lib/lunch";
 import {
 	type ChatTrace,
 	type ClientMessage,
@@ -308,6 +308,11 @@ export class LunchRoomServer extends Server<RoomEnv> {
 					status: 410,
 					body: { code: "ROOM_EXPIRED", error: "방이 만료됐습니다." },
 				};
+			if (this.room?.snapshot.status === "closed")
+				return {
+					status: 410,
+					body: { code: "ROOM_CLOSED", error: "방장이 방을 종료했습니다." },
+				};
 			if (!this.room)
 				return {
 					status: 404,
@@ -382,6 +387,11 @@ export class LunchRoomServer extends Server<RoomEnv> {
 				return {
 					status: 410,
 					body: { code: "ROOM_EXPIRED", error: "방이 만료됐습니다." },
+				};
+			if (this.room?.snapshot.status === "closed")
+				return {
+					status: 410,
+					body: { code: "ROOM_CLOSED", error: "방장이 방을 종료했습니다." },
 				};
 			if (!this.room)
 				return {
@@ -520,6 +530,9 @@ export class LunchRoomServer extends Server<RoomEnv> {
 				return;
 			}
 			switch (message.type) {
+				case "room-close":
+					await this.closeRoom(connection, message.id);
+					break;
 				case "activity": {
 					const presenceChanged = this.recordActivity(connection);
 					await this.save();
@@ -569,6 +582,60 @@ export class LunchRoomServer extends Server<RoomEnv> {
 					break;
 			}
 		});
+	}
+
+	private async closeRoom(
+		connection: Connection<SocketState>,
+		requestId: string,
+	) {
+		if (!this.room) return;
+		const participant = connection.state?.participant;
+		if (
+			!participant?.isHost ||
+			participant.id !== this.room.hostParticipantId
+		) {
+			this.sendError(
+				connection,
+				"HOST_REQUIRED",
+				"방장만 방을 종료할 수 있습니다.",
+				requestId,
+			);
+			return;
+		}
+		if (["fetching", "drawing"].includes(this.room.snapshot.status)) {
+			this.sendError(
+				connection,
+				"DRAW_BUSY",
+				"추첨이 끝난 뒤 방을 종료해 주세요.",
+				requestId,
+			);
+			return;
+		}
+		const before = structuredClone(this.room);
+		this.room.snapshot.status = "closed";
+		this.room.snapshot.revision =
+			(this.room.snapshot.revision ?? this.room.snapshot.listVersion) + 1;
+		try {
+			await this.save();
+		} catch {
+			this.room = before;
+			this.sendError(
+				connection,
+				"SAVE_FAILED",
+				"방을 종료하지 못했습니다. 다시 시도해 주세요.",
+				requestId,
+			);
+			return;
+		}
+		this.send(connection, { type: "ack", requestId });
+		this.publish();
+		for (const socket of this.getConnections<SocketState>())
+			this.reject(
+				socket,
+				"ROOM_CLOSED",
+				"방장이 방을 종료했습니다. 새 방을 만들어 주세요.",
+				4008,
+			);
 	}
 
 	private async lifecycleCommand(
@@ -1376,7 +1443,13 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			)
 				throw new Error("Invalid entropy result");
 			const winnerIndex = result.numbers[0];
-			const toRotation = getWheelRotation(0, winnerIndex, candidates.length);
+			const landingFraction = randomWheelLandingFraction();
+			const toRotation = getWheelRotation(
+				0,
+				winnerIndex,
+				candidates.length,
+				landingFraction,
+			);
 			await this.exclusive(async () => {
 				if (
 					(await this.expireIfNeeded()) ||
@@ -1398,6 +1471,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 					durationMs: lunchRoomLimits.drawDurationMs,
 					fromRotation: 0,
 					toRotation,
+					landingFraction,
 					listVersion,
 					votes: [],
 				};
@@ -1756,6 +1830,15 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			return true;
 		}
 		if (await this.expireIfNeeded()) return true;
+		if (this.room?.snapshot.status === "closed") {
+			this.reject(
+				connection,
+				"ROOM_CLOSED",
+				"방장이 방을 종료했습니다. 새 방을 만들어 주세요.",
+				4008,
+			);
+			return true;
+		}
 		if (!this.room) {
 			this.reject(
 				connection,

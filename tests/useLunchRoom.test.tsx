@@ -121,6 +121,40 @@ function feedbackDraw(): RoomDraw {
 }
 
 describe("irreversible current-result feedback", () => {
+	it("acknowledges host closure and stops reconnection on the terminal snapshot", async () => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined();
+		let request!: Promise<boolean>;
+		act(() => {
+			request = result.current.closeRoom();
+		});
+		expect(sent("room-close")).toHaveLength(1);
+		expect(result.current.mutationPending).toBe("close");
+		await act(async () => {
+			receive({ type: "ack", requestId: sent("room-close")[0].id });
+			expect(await request).toBe(true);
+		});
+		receive({
+			type: "snapshot",
+			snapshot: snapshot({ status: "closed" }),
+			serverTime: Date.now(),
+			self: { id: "host-client", isHost: true },
+		});
+		expect(result.current.connection).toBe("closed");
+		expect(result.current.error).toContain("방장이 방을 종료");
+		act(() => {
+			vi.advanceTimersByTime(60000);
+		});
+		expect(socket().reconnect).not.toHaveBeenCalled();
+	});
+
+	it("does not send closure commands from a guest", async () => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(false);
+		expect(await result.current.closeRoom()).toBe(false);
+		expect(sent("room-close")).toHaveLength(0);
+	});
+
 	it("does not send a ballot for a late join even when the result is revealed", () => {
 		mocks.readHost.mockReturnValue(undefined);
 		const { result } = renderHook(() => useLunchRoom(roomId));

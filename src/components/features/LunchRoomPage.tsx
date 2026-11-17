@@ -1050,6 +1050,146 @@ export default function LunchRoomPage({
 									</h2>
 									<Button
 										variant="ghost"
+										size="auto"
+										type="button"
+										ref={nicknameButtonRef}
+										className="room-profile-trigger"
+										aria-label={`내 프로필: ${room.nickname || "참가자"}, ${selfPresenceLabel}`}
+										aria-expanded={editingName}
+										aria-controls={`${id}-profile-popover`}
+										onClick={() => {
+											if (editingName) {
+												setChatPopover(null);
+												return;
+											}
+											setNameDraft(room.nickname);
+											setNameError("");
+											setChatPopover("profile");
+										}}
+									>
+										<span className="room-profile-avatar" aria-hidden="true">
+											{Array.from(room.nickname || "참가자")[0]}
+											<span
+												className="room-presence-dot"
+												data-status={selfPresence}
+											/>
+										</span>
+										<span className="room-profile-text">
+											<strong>{room.nickname || "참가자"}</strong>
+											<small>{selfPresenceLabel}</small>
+										</span>
+										<ChevronDown size={15} aria-hidden="true" />
+									</Button>
+									{editingName && (
+										<section
+											id={`${id}-profile-popover`}
+											ref={profilePopoverRef}
+											className="room-chat-popover room-profile-popover"
+											role="dialog"
+											aria-labelledby={`${id}-profile-title`}
+										>
+											<div className="room-popover-heading">
+												<h3 id={`${id}-profile-title`}>
+													<Pencil size={14} aria-hidden="true" /> 내 프로필
+												</h3>
+												<Button
+													variant="ghost"
+													size="icon"
+													type="button"
+													className="room-chat-icon-button"
+													aria-label="프로필 닫기"
+													onClick={() => {
+														restoreNicknameFocusRef.current = true;
+														setChatPopover(null);
+													}}
+												>
+													<X size={16} aria-hidden="true" />
+												</Button>
+											</div>
+											<form
+												className="room-name-form"
+												onSubmit={(event) => {
+													event.preventDefault();
+													const value = nameDraft.trim();
+													if (
+														!value ||
+														value.length > lunchRoomLimits.maxNicknameLength
+													) {
+														setNameError(
+															`닉네임을 1~${lunchRoomLimits.maxNicknameLength}자로 입력해 주세요.`,
+														);
+														nicknameRef.current?.focus();
+														return;
+													}
+													setNameError("");
+													if (room.rename(value)) {
+														restoreNicknameFocusRef.current = true;
+														setChatPopover(null);
+													}
+												}}
+											>
+												<Label htmlFor={`${id}-name`}>닉네임</Label>
+												<span className="room-name-count">
+													{nameDraft.length}/{lunchRoomLimits.maxNicknameLength}
+												</span>
+												<Input
+													id={`${id}-name`}
+													ref={nicknameRef}
+													autoComplete="nickname"
+													maxLength={lunchRoomLimits.maxNicknameLength}
+													value={nameDraft}
+													disabled={!connected}
+													aria-invalid={Boolean(nameError)}
+													aria-describedby={
+														nameError ? `${id}-name-error` : undefined
+													}
+													onChange={(event) => {
+														setNameDraft(event.target.value);
+														setNameError("");
+													}}
+												/>
+												<p
+													id={`${id}-name-error`}
+													role="alert"
+													className={
+														nameError ? "room-error" : "room-empty-error"
+													}
+												>
+													{nameError}
+												</p>
+												<div className="room-profile-actions">
+													<Button
+														variant="default"
+														size="sm"
+														type="submit"
+														className="room-profile-save"
+														disabled={!connected}
+													>
+														변경
+													</Button>
+													<Button
+														variant="ghost"
+														size="sm"
+														type="button"
+														className="room-name-cancel"
+														onClick={() => {
+															setNameDraft(room.nickname);
+															setNameError("");
+															restoreNicknameFocusRef.current = true;
+															setChatPopover(null);
+														}}
+													>
+														취소
+													</Button>
+												</div>
+											</form>
+											<p className="room-roster-note">
+												현재 상태: {selfPresenceLabel}
+											</p>
+										</section>
+									)}
+									<Button
+										variant="ghost"
 										size="sm"
 										type="button"
 										ref={membersButtonRef}
@@ -1356,149 +1496,6 @@ export default function LunchRoomPage({
 											<span>{message.length}/500</span>
 										</div>
 									</form>
-									<div className="room-chat-footer">
-										<Button
-											variant="ghost"
-											size="auto"
-											type="button"
-											ref={nicknameButtonRef}
-											className="room-profile-trigger"
-											aria-label={`내 프로필: ${room.nickname || "참가자"}, ${selfPresenceLabel}`}
-											aria-expanded={editingName}
-											aria-controls={`${id}-profile-popover`}
-											onClick={() => {
-												if (editingName) {
-													setChatPopover(null);
-													return;
-												}
-												setNameDraft(room.nickname);
-												setNameError("");
-												setChatPopover("profile");
-											}}
-										>
-											<span className="room-profile-avatar" aria-hidden="true">
-												{Array.from(room.nickname || "참가자")[0]}
-												<span
-													className="room-presence-dot"
-													data-status={selfPresence}
-												/>
-											</span>
-											<span className="room-profile-text">
-												<strong>{room.nickname || "참가자"}</strong>
-												<small>{selfPresenceLabel}</small>
-											</span>
-											<ChevronUp size={15} aria-hidden="true" />
-										</Button>
-										{editingName && (
-											<section
-												id={`${id}-profile-popover`}
-												ref={profilePopoverRef}
-												className="room-chat-popover room-profile-popover"
-												role="dialog"
-												aria-labelledby={`${id}-profile-title`}
-											>
-												<div className="room-popover-heading">
-													<h3 id={`${id}-profile-title`}>
-														<Pencil size={14} aria-hidden="true" /> 내 프로필
-													</h3>
-													<Button
-														variant="ghost"
-														size="icon"
-														type="button"
-														className="room-chat-icon-button"
-														aria-label="프로필 닫기"
-														onClick={() => {
-															restoreNicknameFocusRef.current = true;
-															setChatPopover(null);
-														}}
-													>
-														<X size={16} aria-hidden="true" />
-													</Button>
-												</div>
-												<form
-													className="room-name-form"
-													onSubmit={(event) => {
-														event.preventDefault();
-														const value = nameDraft.trim();
-														if (
-															!value ||
-															value.length > lunchRoomLimits.maxNicknameLength
-														) {
-															setNameError(
-																`닉네임을 1~${lunchRoomLimits.maxNicknameLength}자로 입력해 주세요.`,
-															);
-															nicknameRef.current?.focus();
-															return;
-														}
-														setNameError("");
-														if (room.rename(value)) {
-															restoreNicknameFocusRef.current = true;
-															setChatPopover(null);
-														}
-													}}
-												>
-													<Label htmlFor={`${id}-name`}>닉네임</Label>
-													<span className="room-name-count">
-														{nameDraft.length}/
-														{lunchRoomLimits.maxNicknameLength}
-													</span>
-													<Input
-														id={`${id}-name`}
-														ref={nicknameRef}
-														autoComplete="nickname"
-														maxLength={lunchRoomLimits.maxNicknameLength}
-														value={nameDraft}
-														disabled={!connected}
-														aria-invalid={Boolean(nameError)}
-														aria-describedby={
-															nameError ? `${id}-name-error` : undefined
-														}
-														onChange={(event) => {
-															setNameDraft(event.target.value);
-															setNameError("");
-														}}
-													/>
-													<p
-														id={`${id}-name-error`}
-														role="alert"
-														className={
-															nameError ? "room-error" : "room-empty-error"
-														}
-													>
-														{nameError}
-													</p>
-													<div className="room-profile-actions">
-														<Button
-															variant="default"
-															size="sm"
-															type="submit"
-															className="room-profile-save"
-															disabled={!connected}
-														>
-															변경
-														</Button>
-														<Button
-															variant="ghost"
-															size="sm"
-															type="button"
-															className="room-name-cancel"
-															onClick={() => {
-																setNameDraft(room.nickname);
-																setNameError("");
-																restoreNicknameFocusRef.current = true;
-																setChatPopover(null);
-															}}
-														>
-															취소
-														</Button>
-													</div>
-												</form>
-												<p className="room-roster-note">
-													현재 상태: {selfPresenceLabel}
-												</p>
-											</section>
-										)}
-									</div>
 								</div>
 							</aside>
 						</div>

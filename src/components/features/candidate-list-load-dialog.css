@@ -10,6 +10,9 @@
 	gap: 10px;
 	min-inline-size: 0;
 }
+.candidate-load-section + .candidate-load-section {
+	margin-block-start: 20px;
+}
 .candidate-load-section h3 {
 	margin: 0;
 	font-size: 14px;
@@ -40,6 +43,26 @@
 .candidate-load-choice strong {
 	font-size: 15px;
 	line-height: 1.5;
+}
+.candidate-load-title,
+.candidate-load-dates {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 4px 10px;
+}
+.candidate-load-recent {
+	padding: 2px 6px;
+	border-radius: var(--control-radius);
+	background: var(--surface);
+	font-size: 11px;
+	font-weight: 700;
+}
+.candidate-load-choice small {
+	font-weight: 400;
+}
+.candidate-load-dates {
+	margin-block-start: 4px;
 }
 .candidate-load-choice small,
 .candidate-load-note,

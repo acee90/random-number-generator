@@ -11,6 +11,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LunchRoomPage from "../src/components/features/LunchRoomPage";
 import { useLunchRoom } from "../src/hooks/useLunchRoom";
 import { candidateLibraryKey } from "../src/lib/candidateLibrary";
+import {
+	defaultCandidateListSourceId,
+	readCandidateListUsage,
+} from "../src/lib/candidateListUsage";
 import { getWheelRotation, sampleLunchPlaces } from "../src/lib/lunch";
 import { lunchHistoryKey } from "../src/lib/lunchHistory";
 import type { RoomDraw, RoomSnapshot } from "../src/lib/lunchRoom";
@@ -156,6 +160,44 @@ describe("local chat delivery display", () => {
 			delivery,
 		};
 	}
+
+	it("confirms host-only closure, preserves cancellation and allows retry after failure", async () => {
+		room.self = { id: "host-client", isHost: true };
+		render(<LunchRoomPage roomId={roomId} />);
+		fireEvent.click(screen.getByRole("button", { name: "방 설정" }));
+		fireEvent.click(screen.getByRole("button", { name: "방 종료" }));
+		let confirmation = screen.getByRole("alertdialog");
+		expect(
+			within(confirmation).getByText(/모든 참가자의 이용이 종료/),
+		).toBeTruthy();
+		fireEvent.click(within(confirmation).getByRole("button", { name: "취소" }));
+		expect(room.closeRoom).not.toHaveBeenCalled();
+		fireEvent.click(screen.getByRole("button", { name: "방 종료" }));
+		confirmation = screen.getByRole("alertdialog");
+		vi.mocked(room.closeRoom).mockResolvedValueOnce(false);
+		await act(async () =>
+			fireEvent.click(
+				within(confirmation).getByRole("button", { name: "방 종료" }),
+			),
+		);
+		expect(within(confirmation).getByRole("alert").textContent).toContain(
+			"다시 시도",
+		);
+		await act(async () =>
+			fireEvent.click(
+				within(confirmation).getByRole("button", { name: "방 종료" }),
+			),
+		);
+		expect(room.closeRoom).toHaveBeenCalledTimes(2);
+		expect(screen.queryByRole("alertdialog")).toBeNull();
+	});
+
+	it("does not offer closure to guests", () => {
+		room.self = { id: "guest-client", isHost: false };
+		render(<LunchRoomPage roomId={roomId} />);
+		fireEvent.click(screen.getByRole("button", { name: "방 설정" }));
+		expect(screen.queryByRole("button", { name: "방 종료" })).toBeNull();
+	});
 
 	it("labels an immediate message as sending and shows one confirmed copy when the server acknowledges it", () => {
 		const local = localChat("sending");
@@ -511,6 +553,7 @@ beforeEach(() => {
 		addCandidate: vi.fn(async () => true),
 		removeCandidate: vi.fn(async () => true),
 		editRoom: vi.fn(async () => true),
+		closeRoom: vi.fn(async () => true),
 		updateRoomOptions: vi.fn(async () => true),
 		updateGameFilter: vi.fn(async () => true),
 		resetExclusions: vi.fn(async () => true),
@@ -673,6 +716,26 @@ describe("synchronized lunch room UI", () => {
 		expect(candidates.textContent).toContain("수정된 식당");
 		expect(candidates.textContent).toContain("한식");
 		expect(candidates.textContent).not.toContain(sampleLunchPlaces[0].name);
+	});
+
+	it("closes candidate view when the shared list becomes empty and does not reopen on a later addition", async () => {
+		const view = render(<LunchRoomPage roomId={roomId} />);
+		fireEvent.click(screen.getByRole("button", { name: "후보 보기" }));
+		expect(screen.getByRole("dialog", { name: "후보 보기" })).toBeTruthy();
+		updateRoom(view, {
+			snapshot: snapshot({ status: "editing", candidates: [], listVersion: 2 }),
+		});
+		await act(async () => vi.advanceTimersByTime(0));
+		expect(screen.queryByRole("dialog", { name: "후보 보기" })).toBeNull();
+		expect(document.activeElement).toBe(
+			screen.getByRole("region", { name: "게임 진행" }),
+		);
+		updateRoom(view, {
+			snapshot: snapshot({ status: "editing", listVersion: 3 }),
+		});
+		expect(screen.queryByRole("dialog", { name: "후보 보기" })).toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: "후보 보기" }));
+		expect(screen.getByRole("dialog", { name: "후보 보기" })).toBeTruthy();
 	});
 
 	it("shows only entry preparation while resolving an automatic join, then opens the accepted room", async () => {
@@ -1105,7 +1168,10 @@ describe("synchronized lunch room UI", () => {
 		expect(toggle.getAttribute("aria-expanded")).toBe("true");
 		expect(body?.contains(log)).toBe(true);
 		expect(body?.contains(input)).toBe(true);
-		expect(body?.contains(profile)).toBe(true);
+		expect(profile.closest(".room-chat-header")).toBe(
+			toggle.closest(".room-chat-header"),
+		);
+		expect(body?.contains(profile)).toBe(false);
 		const draft = "이 메뉴 어때요?\n같이 먹어요.";
 		fireEvent.change(input, { target: { value: draft } });
 		fireEvent.click(screen.getByRole("button", { name: "참가자 2명" }));
@@ -1124,7 +1190,7 @@ describe("synchronized lunch room UI", () => {
 		expect(input.value).toBe(draft);
 		expect(screen.queryByRole("log", { name: "방 채팅 메시지" })).toBeNull();
 		expect(screen.queryByRole("textbox", { name: "메시지" })).toBeNull();
-		expect(screen.queryByRole("button", { name: /^내 프로필:/ })).toBeNull();
+		expect(screen.getByRole("button", { name: /^내 프로필:/ })).toBe(profile);
 		expect(screen.queryByRole("dialog", { name: "참가자" })).toBeNull();
 		expect(room.sendChat).not.toHaveBeenCalled();
 		fireEvent.click(toggle, { detail: 0 });
@@ -1340,7 +1406,7 @@ describe("synchronized lunch room UI", () => {
 			input.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING,
 		).toBeTruthy();
 		expect(
-			list.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING,
+			list.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_PRECEDING,
 		).toBeTruthy();
 		expect(
 			screen.getAllByRole("switch", { name: "후보 추천받기" }),
@@ -2314,7 +2380,15 @@ describe("synchronized lunch room UI", () => {
 				.matches(":disabled"),
 		).toBe(false);
 		expect(screen.queryByRole("switch", { name: "후보 추천받기" })).toBeNull();
-		fireEvent.click(screen.getByRole("button", { name: "후보 편집" }));
+		const edit = screen.getByRole("button", { name: "후보 편집" });
+		expect(edit.closest(".room-lifecycle-tools")).not.toBeNull();
+		expect(
+			within(edit.parentElement as HTMLElement).getByRole("button", {
+				name: "후보 보기",
+			}),
+		).toBeTruthy();
+		expect(document.querySelector(".room-waiting-actions")).toBeNull();
+		fireEvent.click(edit);
 		expect(room.enterEditing).toHaveBeenCalledOnce();
 		expect(screen.queryByRole("button", { name: "게임 필터" })).toBeNull();
 		expect(screen.queryByRole("dialog")).toBeNull();
@@ -2325,6 +2399,11 @@ describe("synchronized lunch room UI", () => {
 		expect(screen.queryByRole("region", { name: "룰렛" })).toBeNull();
 		expect(screen.queryByRole("textbox", { name: "후보 추천" })).toBeNull();
 		expect(screen.getByRole("heading", { name: "후보 편집" })).toBeTruthy();
+		expect(
+			screen
+				.getByRole("button", { name: "마감" })
+				.closest(".room-simple-heading"),
+		).not.toBeNull();
 		expect(screen.getByRole("switch", { name: "후보 추천받기" })).toBeTruthy();
 		expect(filterButton().getAttribute("aria-expanded")).toBe("false");
 		expect(screen.queryByRole("button", { name: "목록 편집" })).toBeNull();
@@ -2583,6 +2662,7 @@ describe("synchronized lunch room UI", () => {
 		expect(
 			within(picker).getByText(
 				`회사 주변 음식점 · 후보 ${sampleLunchPlaces.length}개`,
+				{ exact: false },
 			),
 		).toBeTruthy();
 		expect(within(picker).getByText(/저장한 목록이 없어요/)).toBeTruthy();
@@ -2629,11 +2709,16 @@ describe("synchronized lunch room UI", () => {
 		);
 		picker = screen.getByRole("dialog", { name: "목록 불러오기" });
 		expect(screen.queryByRole("alertdialog")).toBeNull();
+		expect(readCandidateListUsage().recentId).toBeNull();
 		expect(first.value).toBe("보존할 초안");
 		fireEvent.click(
 			within(picker).getByRole("button", { name: /^기본 음식점 목록/ }),
 		);
 		fireEvent.click(screen.getByRole("button", { name: "목록 바꾸기" }));
+		expect(readCandidateListUsage()).toEqual({
+			recentId: defaultCandidateListSourceId,
+			loadedAt: { [defaultCandidateListSourceId]: baseTime },
+		});
 		expect(screen.queryByRole("dialog")).toBeNull();
 		expect(screen.queryByRole("alertdialog")).toBeNull();
 		expect((candidateName(1) as HTMLInputElement).value).toBe(
@@ -2711,7 +2796,7 @@ describe("synchronized lunch room UI", () => {
 		fireEvent.click(screen.getByRole("button", { name: /^목록 불러오기/ }));
 		const picker = screen.getByRole("dialog", { name: "목록 불러오기" });
 		fireEvent.click(
-			within(picker).getByRole("button", { name: /^우리 팀 단골\s*후보 1개$/ }),
+			within(picker).getByRole("button", { name: /^우리 팀 단골.*후보 1개/ }),
 		);
 		expect(
 			within(candidateRows()[0]).getByRole("button", {
@@ -3567,7 +3652,7 @@ describe("synchronized lunch room UI", () => {
 				.compareDocumentPosition(
 					screen.getByRole("button", { name: /^내 프로필:/ }),
 				),
-		).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+		).toBe(Node.DOCUMENT_POSITION_PRECEDING);
 	});
 
 	it("replaces a closed room with a clear new-room action and removes prior room content", () => {

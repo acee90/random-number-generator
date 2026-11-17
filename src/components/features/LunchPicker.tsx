@@ -12,6 +12,8 @@ import {
 	type LunchPlace,
 	lunchCategories,
 	lunchSource,
+	lunchSpinDurationMs,
+	randomWheelLandingFraction,
 	resolveLunchWinner,
 	sampleLunchPlaces,
 } from "@/lib/lunch";
@@ -30,7 +32,7 @@ import "./lunch-picker.css";
 type Phase = "idle" | "fetching" | "spinning" | "done";
 type LunchResult = LunchHistoryRecord;
 type ActivePanel = "wheel" | "candidates" | "history";
-const spinDurationMs = 7200;
+const spinDurationMs = lunchSpinDurationMs;
 
 export default function LunchPicker({
 	places = sampleLunchPlaces,
@@ -166,8 +168,14 @@ export default function LunchPicker({
 				candidateCount: snapshot.length,
 				timestamp,
 			};
+			const landingFraction = randomWheelLandingFraction();
 			setRotation((previous) =>
-				getWheelRotation(previous, response.numbers[0], snapshot.length),
+				getWheelRotation(
+					previous,
+					response.numbers[0],
+					snapshot.length,
+					landingFraction,
+				),
 			);
 			if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
 				finishSpin();

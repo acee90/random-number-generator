@@ -84,6 +84,19 @@ afterEach(() => {
 });
 
 describe("nickname preflight entry UI", () => {
+	it("replaces nickname admission with a new-room action for an explicitly closed room", () => {
+		mocks.entryInfo.mockReturnValue({ title: null, status: "closed" });
+		render(gate());
+		expect(
+			screen.getByRole("heading", { name: "방이 종료되었습니다" }),
+		).toBeTruthy();
+		expect(
+			screen.getByRole("link", { name: "새 방 만들기" }).getAttribute("href"),
+		).toBe("/create");
+		expect(screen.queryByRole("textbox", { name: "닉네임" })).toBeNull();
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
 	it("identifies the room beside the icon without redundant entry instructions", () => {
 		render(gate());
 		expect(

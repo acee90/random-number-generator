@@ -28,6 +28,15 @@ afterEach(() => {
 });
 
 describe("room entry info", () => {
+	it("exposes explicit closure as a terminal entry state", async () => {
+		fetchMock.mockResolvedValue(
+			Response.json({ code: "ROOM_CLOSED" }, { status: 410 }),
+		);
+		const { result } = renderHook(() => useRoomEntryInfo({ roomId }));
+		await flush();
+		expect(result.current).toEqual({ title: null, status: "closed" });
+	});
+
 	it("reads only a title before nickname input using a cancellable no-store GET without proofs", async () => {
 		fetchMock.mockResolvedValue(
 			Response.json({ title: "  점심 모임  ", participants: ["private"] }),

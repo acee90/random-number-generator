@@ -17,6 +17,11 @@ import {
 	readCandidateLibrary,
 	saveCandidateList,
 } from "../src/lib/candidateLibrary";
+import {
+	defaultCandidateListSourceId,
+	recordCandidateListUse,
+	savedCandidateListSourceId,
+} from "../src/lib/candidateListUsage";
 import { sampleLunchPlaces } from "../src/lib/lunch";
 
 beforeEach(() => localStorage.clear());
@@ -59,6 +64,50 @@ const open = () =>
 	fireEvent.click(screen.getByRole("button", { name: "불러오기 열기" }));
 
 describe("candidate list load dialog", () => {
+	it("shows saved dates, previews and the most recently imported saved list first", () => {
+		const now = vi.spyOn(Date, "now").mockReturnValue(1700000000000);
+		const first = saveCandidateList({
+			id: "a",
+			name: "예전 저장본",
+			items: [
+				{ id: "one", name: "국밥집", category: "한식", included: true },
+				{ id: "two", name: "우동집", category: "일식", included: true },
+			],
+		});
+		now.mockReturnValue(1700000001000);
+		saveCandidateList({ id: "b", name: "새 저장본", items: first.items });
+		now.mockReturnValue(1700000002000);
+		recordCandidateListUse(savedCandidateListSourceId(first.id));
+		harness();
+		open();
+		const section = screen.getByRole("region", { name: "저장한 목록" });
+		const choices = within(section).getAllByRole("button", {
+			name: /후보 2개/,
+		});
+		expect(choices[0].textContent).toContain("예전 저장본");
+		expect(within(choices[0]).getByText("최근 불러온 목록")).toBeTruthy();
+		expect(within(choices[0]).getByText("국밥집 · 우동집")).toBeTruthy();
+		expect(within(choices[0]).getByText("후보 2개 · 분류 2개")).toBeTruthy();
+		expect(
+			[...choices[0].querySelectorAll("time")].map(
+				(element) => element.dateTime,
+			),
+		).toEqual([
+			new Date(1700000000000).toISOString(),
+			new Date(1700000002000).toISOString(),
+		]);
+		expect(within(choices[1]).getByText("불러온 기록 없음")).toBeTruthy();
+	});
+
+	it("marks the default source when it was last imported without inventing a saved date", () => {
+		recordCandidateListUse(defaultCandidateListSourceId);
+		harness();
+		open();
+		const source = screen.getByRole("button", { name: /^기본 음식점 목록/ });
+		expect(within(source).getByText("최근 불러온 목록")).toBeTruthy();
+		expect(source.querySelectorAll("time")).toHaveLength(1);
+		expect(within(source).queryByText(/^저장 /)).toBeNull();
+	});
 	it("opens above the current draft and cancel restores trigger focus without changes", async () => {
 		const { select } = harness();
 		open();

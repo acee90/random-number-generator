@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LunchRoomPage from "../src/components/features/LunchRoomPage";
-import { sampleLunchPlaces } from "../src/lib/lunch";
+import { lunchSpinDurationMs, sampleLunchPlaces } from "../src/lib/lunch";
 import {
 	previewRoomId,
 	RoomPageFixtureProvider,
@@ -222,7 +222,7 @@ describe("Storybook room page with the local transport adapter", () => {
 		expect(
 			screen.queryByRole("navigation", { name: "모바일 추첨방 화면" }),
 		).toBeNull();
-		act(() => vi.advanceTimersByTime(7200));
+		act(() => vi.advanceTimersByTime(lunchSpinDurationMs));
 		expect(screen.getByText("0명 참여")).toBeTruthy();
 		expect(document.activeElement).toBe(input);
 		expect((input as HTMLTextAreaElement).value).toBe("룰렛 보면서 이야기해요");
@@ -239,7 +239,7 @@ describe("Storybook room page with the local transport adapter", () => {
 				.getByRole("button", { name: "룰렛이 돌아가고 있어요" })
 				.matches(":disabled"),
 		).toBe(true);
-		act(() => vi.advanceTimersByTime(7199));
+		act(() => vi.advanceTimersByTime(lunchSpinDurationMs - 1));
 		expect(screen.queryByText("실시간 투표 현황")).toBeNull();
 		act(() => vi.advanceTimersByTime(1));
 		expect(screen.getByText("0명 참여")).toBeTruthy();
@@ -344,9 +344,7 @@ describe("Storybook room page with the local transport adapter", () => {
 		expect(
 			within(exclusions).getByRole("heading", { name: "저장된 당첨 내역" }),
 		).toBeTruthy();
-		expect(
-			within(exclusions).getByText("당첨 제외 내역이 없습니다."),
-		).toBeTruthy();
+		expect(within(exclusions).getByText("0")).toBeTruthy();
 		expect(
 			within(exclusions).queryByRole("button", { name: "제외 목록 초기화" }),
 		).toBeNull();
