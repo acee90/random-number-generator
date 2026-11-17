@@ -4,7 +4,7 @@
 
 ## 위치
 
-- `origin/main f852b20`에서 만든 `afk/2026-11-17`. 최초 6개에 사용자 피드백 후속 3개를 더해 총 9개 로컬 커밋.
+- `origin/main f852b20`에서 만든 `afk/2026-11-17`. 최초 6개에 사용자 피드백 후속 6개를 더해 총 12개 로컬 커밋.
 - 작업 디렉터리: `/Users/junhee/Documents/projects/random-number-generator/.afk/worktree-2026-11-17`.
 - 미리보기: http://127.0.0.1:3017 . Vite만 실행해 둡니다. 비교 서버3018·Storybook6017은 종료했습니다.
 - 기존 checkout의 main과 미추적 작업은 그대로 보존했습니다. push·PR·merge·운영 배포는 하지 않았습니다.
@@ -99,3 +99,18 @@ React19/TanStack Start, Tailwind4와 기존 shadcn/Radix/CSS. 기준 문서 AGEN
 - 캡처: `feedback-desktop.png`, `feedback-mobile-320.png`, `feedback-mobile-597.png`. 현재도 로컬 완료·운영 미배포입니다.
 
 ![피드백 반영 데스크톱](feedback-desktop.png)
+
+
+## 투표·다음 게임 피드백 — 2026-11-17
+
+**반영 완료**
+- `941b2a1`: 결과 투표 버튼64→88px, 숫자28→40px, 아이콘32px, 라벨18px. 320px에서는 아이콘/숫자 위·라벨 아래로 배치하며 실제 두 버튼125×98.2px입니다. 선택 체크·내 선택·집계/순위·투표 잠금은 유지하고 읽기 전용 집계는 opacity1로 읽기 쉽게 표시합니다.
+- `1fd5000`: 문구를 **다음 게임**으로 축약하고 라임 배경/반경999px/최소160×48px 주 버튼으로 강조했습니다. 기존의 대기 화면 이동과 별도 추첨 시작은 그대로입니다.
+- 최종1,496개 테스트/51파일·타입·변경8파일 Biome·앱/Storybook 빌드 통과. 실제 공통 페이지 fixture1146/597/320px의 투표 전/선택 후를 확인했고, 두 자리 집계·읽기 전용은 기존 자동 회귀를 유지합니다. 브라우저에서 선택·다음 게임→대기 이동과 실제88px/40px 숫자/320px 가로넘침 없음을 확인했습니다. 캡처 `larger-votes-desktop.png`, `larger-votes-320.png`.
+
+**배치 검토 시안 — 서비스에는 미적용**
+- 하단 통합: 중복 제외와 다음 게임 버튼을 같은 하단 행에 묶고 ON이면 그 아래 제외 내역을 펼칩니다.
+- 상단 접기형: 작은 ON/OFF를 결과 상단에 두고 ON일 때 내역이 펼쳐집니다. OFF에서도 저장된 내역이 있으면 개수 표시를 유지하는 시안입니다.
+- 두 안 모두 다음 게임은 별도 대기 이동입니다. 배치 변경은 미확정이고 기존 중복 제외 정책/API/회차 상태는 변경하지 않았습니다. 검토를 확정 구현으로 기록하지 않습니다.
+- 대화형 비교 원본: `/Users/junhee/.codex/visualizations/2026/11/17/01a1e859-3fda-7d71-aa16-655ce3fa5824/game-actions-wireframes.html`. 두 안의 ON/OFF·내역 보존 표시·투표 선택을 로컬 preview736/320px에서 확인했습니다. 일반 JS구문·정적 DOM참조 검사 통과, 외부 API 호출 없음. Tweak 조작부의 실제 호스트 패널은 수동 미검증입니다.
+- 캡처 `wireframe-bottom.png`, `wireframe-bottom-320.png`, `wireframe-top.png`는 검토용으로 서비스 화면과 구분합니다. 미리보기용 서버3029·Storybook6017은 종료하고 Vite3017만 유지합니다.
