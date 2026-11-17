@@ -104,7 +104,7 @@ describe("shared solo game screen", () => {
 		expect(screen.getByRole("heading", { name: "한식당" })).toBeTruthy();
 		expect(screen.queryByRole("button", { name: /좋아요/ })).toBeNull();
 		const next = screen.getByRole("button", {
-			name: "다음 게임 대기 화면으로",
+			name: "다음 게임",
 		});
 		next.focus();
 		fireEvent.click(next);

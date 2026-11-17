@@ -1,0 +1,282 @@
+[
+  {
+    "port": 3018,
+    "path": "/",
+    "layout": {
+      "controls": [
+        {
+          "height": 72,
+          "padding": "16px 22px",
+          "text": "방 만들기"
+        }
+      ],
+      "scroll": 1280,
+      "w": 1280
+    }
+  },
+  {
+    "port": 3018,
+    "path": "/create",
+    "layout": {
+      "controls": [
+        {
+          "height": 64,
+          "padding": "12px 20px",
+          "text": " 방 만들고 입장하기"
+        }
+      ],
+      "scroll": 1280,
+      "w": 1280
+    }
+  },
+  {
+    "port": 3018,
+    "path": "/solo",
+    "layout": {
+      "controls": [
+        {
+          "height": 112,
+          "padding": "20px",
+          "text": "새로 작성"
+        },
+        {
+          "height": 112,
+          "padding": "20px",
+          "text": "목록 불러오기"
+        }
+      ],
+      "scroll": 1280,
+      "w": 1280
+    }
+  },
+  {
+    "port": 3018,
+    "path": "/tools?tool=number",
+    "layout": {
+      "controls": [
+        {
+          "height": 65.5,
+          "padding": "13px 14px",
+          "text": null
+        },
+        {
+          "height": 65.5,
+          "padding": "13px 14px",
+          "text": null
+        }
+      ],
+      "scroll": 1280,
+      "w": 1280
+    }
+  },
+  {
+    "port": 3018,
+    "path": "/tools?tool=lotto",
+    "layout": {
+      "controls": [
+        {
+          "height": 86.796875,
+          "padding": "14px 0px 12px",
+          "text": "1게임"
+        },
+        {
+          "height": 86.796875,
+          "padding": "14px 0px 12px",
+          "text": "2게임"
+        },
+        {
+          "height": 86.796875,
+          "padding": "14px 0px 12px",
+          "text": "3게임"
+        },
+        {
+          "height": 86.796875,
+          "padding": "14px 0px 12px",
+          "text": "4게임"
+        },
+        {
+          "height": 86.796875,
+          "padding": "14px 0px 12px",
+          "text": "5게임"
+        }
+      ],
+      "scroll": 1280,
+      "w": 1280
+    }
+  },
+  {
+    "port": 3018,
+    "path": "/tools?tool=pension",
+    "layout": {
+      "controls": [
+        {
+          "height": 86.796875,
+          "padding": "14px 0px 12px",
+          "text": "1게임"
+        },
+        {
+          "height": 86.796875,
+          "padding": "14px 0px 12px",
+          "text": "2게임"
+        },
+        {
+          "height": 86.796875,
+          "padding": "14px 0px 12px",
+          "text": "3게임"
+        },
+        {
+          "height": 86.796875,
+          "padding": "14px 0px 12px",
+          "text": "4게임"
+        },
+        {
+          "height": 86.796875,
+          "padding": "14px 0px 12px",
+          "text": "5게임"
+        }
+      ],
+      "scroll": 1280,
+      "w": 1280
+    }
+  },
+  {
+    "port": 3017,
+    "path": "/",
+    "layout": {
+      "controls": [
+        {
+          "height": 44,
+          "padding": "8px 16px",
+          "text": "방 만들기"
+        }
+      ],
+      "scroll": 1280,
+      "w": 1280
+    }
+  },
+  {
+    "port": 3017,
+    "path": "/create",
+    "layout": {
+      "controls": [
+        {
+          "height": 44,
+          "padding": "10px 16px",
+          "text": " 방 만들고 입장하기"
+        }
+      ],
+      "scroll": 1280,
+      "w": 1280
+    }
+  },
+  {
+    "port": 3017,
+    "path": "/solo",
+    "layout": {
+      "controls": [
+        {
+          "height": 64,
+          "padding": "12px 16px",
+          "text": "새로 작성"
+        },
+        {
+          "height": 64,
+          "padding": "12px 16px",
+          "text": "목록 불러오기"
+        }
+      ],
+      "scroll": 1280,
+      "w": 1280
+    }
+  },
+  {
+    "port": 3017,
+    "path": "/tools?tool=number",
+    "layout": {
+      "controls": [
+        {
+          "height": 47,
+          "padding": "9px 12px",
+          "text": null
+        },
+        {
+          "height": 47,
+          "padding": "9px 12px",
+          "text": null
+        }
+      ],
+      "scroll": 1280,
+      "w": 1280
+    }
+  },
+  {
+    "port": 3017,
+    "path": "/tools?tool=lotto",
+    "layout": {
+      "controls": [
+        {
+          "height": 44,
+          "padding": "8px 4px",
+          "text": "1게임"
+        },
+        {
+          "height": 44,
+          "padding": "8px 4px",
+          "text": "2게임"
+        },
+        {
+          "height": 44,
+          "padding": "8px 4px",
+          "text": "3게임"
+        },
+        {
+          "height": 44,
+          "padding": "8px 4px",
+          "text": "4게임"
+        },
+        {
+          "height": 44,
+          "padding": "8px 4px",
+          "text": "5게임"
+        }
+      ],
+      "scroll": 1280,
+      "w": 1280
+    }
+  },
+  {
+    "port": 3017,
+    "path": "/tools?tool=pension",
+    "layout": {
+      "controls": [
+        {
+          "height": 44,
+          "padding": "8px 4px",
+          "text": "1게임"
+        },
+        {
+          "height": 44,
+          "padding": "8px 4px",
+          "text": "2게임"
+        },
+        {
+          "height": 44,
+          "padding": "8px 4px",
+          "text": "3게임"
+        },
+        {
+          "height": 44,
+          "padding": "8px 4px",
+          "text": "4게임"
+        },
+        {
+          "height": 44,
+          "padding": "8px 4px",
+          "text": "5게임"
+        }
+      ],
+      "scroll": 1280,
+      "w": 1280
+    }
+  }
+]

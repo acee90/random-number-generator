@@ -9,7 +9,7 @@
 .lunch-wheel-rotor {
 	inline-size: 100%;
 	block-size: 100%;
-	border: 2px solid var(--ink);
+	border: 1px solid var(--ink);
 	border-radius: 50%;
 	overflow: hidden;
 }
@@ -19,8 +19,6 @@
 	block-size: 100%;
 	border-radius: 50%;
 	overflow: hidden;
-	outline: 2px solid var(--ink);
-	outline-offset: 6px;
 }
 
 .lunch-wheel-rotor > svg {
@@ -61,7 +59,7 @@
 	aspect-ratio: 1;
 	padding: 6px;
 	border-radius: 50%;
-	border: 2px solid var(--ink);
+	border: 1px solid var(--ink);
 	background: var(--lime);
 	font-size: clamp(14px, 3cqi, 22px);
 	line-height: 1.3;

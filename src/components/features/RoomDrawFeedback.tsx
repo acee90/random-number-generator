@@ -245,7 +245,10 @@ export default function RoomDrawFeedback({
 				{choices.map(({ vote, label }) => {
 					const voters = vote === "up" ? upVotes : downVotes;
 					const voterList = (
-						<ul aria-label={`${label} 투표한 참가자`}>
+						<ul
+							aria-label={`${label} 투표한 참가자`}
+							tabIndex={mode === "results" ? 0 : undefined}
+						>
 							{voters.map((entry) => {
 								const confirmed = "reactionMs" in entry;
 								const rank = confirmed

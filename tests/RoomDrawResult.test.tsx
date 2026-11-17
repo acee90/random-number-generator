@@ -101,11 +101,11 @@ describe("optimistic room result voting", () => {
 	it("lets the host vote optimistically and keeps next-game navigation separate until the vote settles", () => {
 		const { original, send, update, container } = resultHarness(true);
 		const next = screen.getByRole("button", {
-			name: "다음 게임 대기 화면으로",
+			name: "다음 게임",
 		}) as HTMLButtonElement;
 		update({ canNext: true });
 		expect(next.disabled).toBe(false);
-		expect(next.getAttribute("data-variant")).toBe("outline");
+		expect(next.getAttribute("data-variant")).toBe("default");
 		expect(
 			screen.getByRole("heading", { name: original.draw.candidates[0].name }),
 		).toBeTruthy();
@@ -158,9 +158,7 @@ describe("optimistic room result voting", () => {
 			longName,
 		);
 		expect(screen.queryByRole("button", { name: "좋아요 투표" })).toBeNull();
-		expect(
-			screen.queryByRole("button", { name: "다음 게임 대기 화면으로" }),
-		).toBeNull();
+		expect(screen.queryByRole("button", { name: "다음 게임" })).toBeNull();
 		expect(onVote).not.toHaveBeenCalled();
 	});
 	it("updates selection, count and own row immediately, then confirms without duplication or a second burst", () => {

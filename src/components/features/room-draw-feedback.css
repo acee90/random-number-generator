@@ -70,21 +70,31 @@
 	justify-content: center;
 	isolation: isolate;
 }
+.room-feedback-team-label {
+	line-height: 1.25;
+	color: var(--ink);
+}
+.room-draw-feedback[data-mode="results"] .room-feedback-tally-icon svg {
+	inline-size: 32px;
+	block-size: 32px;
+}
 .room-feedback-tally-number {
 	margin-inline-start: auto;
 }
 .room-draw-feedback[data-mode="results"] .room-feedback-tally {
 	display: grid;
-	grid-template-columns: 28px max-content max-content;
+	grid-template-columns: 32px max-content max-content;
 	justify-content: center;
 	align-items: center;
+	align-content: center;
 	gap: 8px;
 	min-block-size: 88px;
 	margin: 0;
-	padding: 10px 10px 24px;
+	padding: 12px 16px;
+	border-radius: var(--control-radius);
 
 	color: var(--team-color);
-	font-size: 15px;
+	font-size: 18px;
 	background: color-mix(in srgb, var(--team-color) 8%, var(--background));
 }
 
@@ -95,15 +105,30 @@
 	font-size: 40px;
 	letter-spacing: -0.04em;
 	line-height: 1.1;
-	font-weight: 850;
+	font-weight: 700;
 	font-variant-numeric: tabular-nums;
 	margin: 0;
 	color: var(--ink);
 }
+.room-draw-feedback[data-mode="results"]
+	:is(.room-feedback-list ul, .room-feedback-empty) {
+	background: repeating-linear-gradient(
+		to bottom,
+		transparent 0 35px,
+		var(--line) 35px 36px
+	);
+}
+.room-draw-feedback[data-mode="results"] .room-feedback-list li {
+	min-block-size: 36px;
+	border-block-start: 0;
+	padding-block-start: 0;
+}
 .room-draw-feedback[data-mode="results"] .room-feedback-list ul {
 	flex: none;
 	align-content: start;
-	max-block-size: 300px;
+	block-size: 108px;
+	max-block-size: none;
+	scrollbar-gutter: stable;
 	overflow-y: auto;
 	overscroll-behavior: contain;
 	scrollbar-width: thin;
@@ -111,12 +136,12 @@
 	gap: 0;
 }
 .room-draw-feedback[data-mode="results"] .room-feedback-empty {
-	display: grid;
-	place-items: center;
+	display: block;
 	flex: none;
-	min-block-size: 36px;
+	block-size: 108px;
 	margin: 8px 0 0;
-	padding: 8px 0;
+	padding: 0 8px;
+	line-height: 36px;
 }
 .room-feedback-list[data-selected="true"] .room-feedback-tally {
 	background: color-mix(
@@ -298,7 +323,7 @@
 	gap: 6px;
 	inline-size: 100%;
 	min-inline-size: 0;
-	min-block-size: 76px;
+	min-block-size: 64px;
 	padding: 10px 6px 24px;
 	font-size: 13px;
 	font-weight: 700;
@@ -319,15 +344,19 @@
 	white-space: nowrap;
 	transform: translateX(-50%);
 }
-.room-feedback-tally[aria-disabled="false"]:hover {
-	background: color-mix(
-		in srgb,
-		var(--team-color, var(--accent-foreground)) 18%,
-		var(--background)
-	);
+@media (hover: hover) {
+	.room-feedback-tally[aria-disabled="false"]:hover {
+		background: color-mix(
+			in srgb,
+			var(--team-color, var(--accent-foreground)) 18%,
+			var(--background)
+		);
+	}
 }
+
 .room-feedback-tally[aria-disabled="true"] {
 	cursor: default;
+	opacity: 1;
 }
 .room-feedback-list ul {
 	display: grid;
@@ -393,16 +422,32 @@
 
 @container room-feedback (max-width: 360px) {
 	.room-draw-feedback[data-mode="results"] .room-feedback-tally {
-		grid-template-columns: 24px max-content max-content;
+		grid-template-columns: 28px max-content;
+		min-block-size: 104px;
+		padding: 16px;
 		gap: 4px;
-		font-size: 13px;
+		font-size: 15px;
 	}
-	.room-feedback-tally-icon svg {
-		inline-size: 24px;
-		block-size: 24px;
+	.room-feedback-team-label {
+		grid-row: 2;
+		grid-column: 1 / -1;
+		text-align: center;
+	}
+
+	.room-draw-feedback[data-mode="results"] .room-feedback-tally-number {
+		grid-row: 1;
+		grid-column: 2;
+	}
+	.room-draw-feedback[data-mode="results"] .room-feedback-tally-icon {
+		grid-row: 1;
+		grid-column: 1;
+	}
+	.room-draw-feedback[data-mode="results"] .room-feedback-tally-icon svg {
+		inline-size: 28px;
+		block-size: 28px;
 	}
 	.room-draw-feedback[data-mode="results"] .room-feedback-tally strong {
-		font-size: 30px;
+		font-size: 32px;
 	}
 	.room-feedback-list li {
 		gap: 4px;
@@ -416,24 +461,6 @@
 		margin-inline-end: 0;
 	}
 }
-@container room-feedback (max-width: 280px) {
-	.room-draw-feedback[data-mode="results"] .room-feedback-tally {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		justify-items: center;
-		column-gap: 8px;
-	}
-	.room-feedback-tally-icon {
-		grid-area: 1 / 1;
-	}
-	.room-feedback-tally-number {
-		grid-area: 1 / 2;
-	}
-	.room-feedback-team-label {
-		grid-area: 2 / 1 / 3 / 3;
-		text-align: center;
-	}
-}
-
 @container room-feedback (max-width: 300px) {
 	.room-feedback-list li {
 		grid-template-columns: 20px minmax(0, 1fr);

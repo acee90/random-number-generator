@@ -243,9 +243,7 @@ describe("Storybook room page with the local transport adapter", () => {
 		expect(screen.queryByText("실시간 투표 현황")).toBeNull();
 		act(() => vi.advanceTimersByTime(1));
 		expect(screen.getByText("0명 참여")).toBeTruthy();
-		fireEvent.click(
-			screen.getByRole("button", { name: "다음 게임 대기 화면으로" }),
-		);
+		fireEvent.click(screen.getByRole("button", { name: "다음 게임" }));
 		expect(screen.queryByText("실시간 투표 현황")).toBeNull();
 		expect(
 			screen.getByRole("button", { name: "룰렛 돌리기" }).matches(":disabled"),
@@ -260,7 +258,7 @@ describe("Storybook room page with the local transport adapter", () => {
 	it("acknowledges the host ballot before returning to waiting and freezes it in the archived round", () => {
 		renderPage(true, "result");
 		const next = screen.getByRole("button", {
-			name: "다음 게임 대기 화면으로",
+			name: "다음 게임",
 		});
 		expect(next.matches(":disabled")).toBe(false);
 		fireEvent.click(screen.getByRole("button", { name: "좋아요 투표" }));
@@ -295,7 +293,7 @@ describe("Storybook room page with the local transport adapter", () => {
 		).toBeNull();
 		expect(
 			within(archived).queryByRole("button", {
-				name: "다음 게임 대기 화면으로",
+				name: "다음 게임",
 			}),
 		).toBeNull();
 		expect(fetchRequest).not.toHaveBeenCalled();
@@ -339,7 +337,7 @@ describe("Storybook room page with the local transport adapter", () => {
 	it("keeps waiting view readonly and applies candidate edits only in the editing stage", async () => {
 		renderPage(true, "idle");
 		const exclusions = screen.getByRole("complementary", {
-			name: "후보 제외 목록",
+			name: /후보 제외 목록|다음 게임 준비/,
 		});
 		expect(
 			within(exclusions).queryByRole("heading", { name: "저장된 당첨 내역" }),
@@ -380,7 +378,11 @@ describe("Storybook room page with the local transport adapter", () => {
 			within(options).getAllByRole("button", { name: "닫기" })[0],
 		);
 		expect(
-			within(screen.getByRole("complementary", { name: "후보 제외 목록" }))
+			within(
+				screen.getByRole("complementary", {
+					name: /후보 제외 목록|다음 게임 준비/,
+				}),
+			)
 				.getByRole("switch", { name: "중복 없이 추첨 · 뽑힌 후보 제외" })
 				.matches(":disabled"),
 		).toBe(false);
@@ -408,7 +410,7 @@ describe("Storybook room page with the local transport adapter", () => {
 			screen.queryByRole("checkbox", {
 				name: `${sampleLunchPlaces[0].name} 추첨 포함`,
 			}),
-		).toBeNull();
+		).toBeTruthy();
 		fireEvent.change(candidateName(1), {
 			target: { value: "필터와 별개로 바꾼 이름" },
 		});
@@ -504,9 +506,7 @@ describe("Storybook room page with the local transport adapter", () => {
 			screen.getByRole("heading", { level: 1, name: "결과에서 바꾼 방 이름" }),
 		).toBeTruthy();
 		expect(screen.getByText("실시간 투표 현황")).toBeTruthy();
-		expect(
-			screen.getByRole("button", { name: "다음 게임 대기 화면으로" }),
-		).toBeTruthy();
+		expect(screen.getByRole("button", { name: "다음 게임" })).toBeTruthy();
 		expect(screen.queryByRole("button", { name: "후보 편집" })).toBeNull();
 		expect(
 			document
@@ -525,7 +525,7 @@ describe("Storybook room page with the local transport adapter", () => {
 			within(settings).getAllByRole("button", { name: "닫기" })[0],
 		);
 		const options = screen.getByRole("complementary", {
-			name: "후보 제외 목록",
+			name: /후보 제외 목록|다음 게임 준비/,
 		});
 		await act(async () =>
 			fireEvent.click(
@@ -538,9 +538,7 @@ describe("Storybook room page with the local transport adapter", () => {
 			roomName,
 		);
 		expect(screen.getByText("실시간 투표 현황")).toBeTruthy();
-		expect(
-			screen.getByRole("button", { name: "다음 게임 대기 화면으로" }),
-		).toBeTruthy();
+		expect(screen.getByRole("button", { name: "다음 게임" })).toBeTruthy();
 		expect(
 			document
 				.querySelector(".lunch-wheel")
@@ -552,13 +550,13 @@ describe("Storybook room page with the local transport adapter", () => {
 		renderPage(true, "result", 1);
 		const switchForDrawn = () =>
 			within(
-				screen.getByRole("complementary", { name: "후보 제외 목록" }),
+				screen.getByRole("complementary", {
+					name: /후보 제외 목록|다음 게임 준비/,
+				}),
 			).getByRole("switch", { name: "중복 없이 추첨 · 뽑힌 후보 제외" });
 		await act(async () => fireEvent.click(switchForDrawn()));
 		await act(async () =>
-			fireEvent.click(
-				screen.getByRole("button", { name: "다음 게임 대기 화면으로" }),
-			),
+			fireEvent.click(screen.getByRole("button", { name: "다음 게임" })),
 		);
 		expectWaitingCandidateCount(0);
 		await act(async () =>

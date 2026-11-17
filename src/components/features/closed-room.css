@@ -1,0 +1,59 @@
+.room-terminal-actions {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px;
+	margin-block-start: 24px;
+}
+.room-terminal-actions .ui-button {
+	inline-size: 100%;
+	margin: 0;
+}
+.closed-room-history {
+	margin-block-start: 24px;
+	padding-block-start: 24px;
+	border-block-start: 1px solid var(--line);
+}
+.closed-room-history-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.closed-room-history-heading h3 {
+	margin: 0;
+	font-size: 16px;
+}
+.closed-room-history-note {
+	color: var(--muted);
+	font-size: 12px;
+	line-height: 1.6;
+}
+.closed-room-history-list {
+	list-style: none;
+	padding: 0;
+	margin: 16px 0 0;
+}
+.closed-room-history-list > li {
+	border-block-start: 1px solid var(--line);
+}
+.closed-room-history-list summary {
+	min-block-size: 48px;
+	padding-block: 12px;
+	cursor: pointer;
+}
+.closed-room-history-list summary span {
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+.closed-room-history-list summary time {
+	display: block;
+	margin: 4px 0 0 16px;
+	color: var(--muted);
+	font-size: 12px;
+}
+@media (max-width: 400px) {
+	.room-terminal-actions {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}

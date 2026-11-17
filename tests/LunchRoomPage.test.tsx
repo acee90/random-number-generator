@@ -282,7 +282,7 @@ describe("current result feedback and frozen history", () => {
 		room.snapshot = snapshot({ draw: current, status: "result" });
 		const view = render(<LunchRoomPage roomId={roomId} />);
 		const next = screen.getByRole("button", {
-			name: "다음 게임 대기 화면으로",
+			name: "다음 게임",
 		});
 		expect(next.matches(":disabled")).toBe(false);
 		expect(
@@ -428,7 +428,7 @@ describe("current result feedback and frozen history", () => {
 		expect(screen.getByText(/추첨 시작 후 입장해/)).toBeTruthy();
 		expect(
 			screen.queryByRole("button", {
-				name: /룰렛 다시 보기|다음 게임 대기 화면으로|한 번 더 추첨하기/,
+				name: /룰렛 다시 보기|다음 게임|한 번 더 추첨하기/,
 			}),
 		).toBeNull();
 		expect(
@@ -442,9 +442,7 @@ describe("current result feedback and frozen history", () => {
 		room.snapshot = snapshot({ draw: current });
 		const view = render(<LunchRoomPage roomId={roomId} />);
 		expect(screen.queryByRole("button", { name: "룰렛 다시 보기" })).toBeNull();
-		fireEvent.click(
-			screen.getByRole("button", { name: "다음 게임 대기 화면으로" }),
-		);
+		fireEvent.click(screen.getByRole("button", { name: "다음 게임" }));
 		expect(room.nextRound).toHaveBeenCalledExactlyOnceWith(current.id);
 		expect(room.startDraw).not.toHaveBeenCalled();
 		updateRoom(view, { nextPending: true });
@@ -1217,7 +1215,7 @@ describe("synchronized lunch room UI", () => {
 		expect(room.sendChat).toHaveBeenCalledExactlyOnceWith(draft);
 	});
 
-	it("separates profile editing from the single header chevron and preserves drafts from either disclosure", () => {
+	it("keeps a single chat disclosure without a visible title and preserves the profile draft", () => {
 		render(<LunchRoomPage roomId={roomId} />);
 		const profile = screen.getByRole("button", { name: /^내 프로필:/ });
 		expect(profile.querySelector("svg")).toBeNull();
@@ -1234,13 +1232,13 @@ describe("synchronized lunch room UI", () => {
 				.getByRole("button", { name: "채팅 접기" })
 				.getAttribute("aria-expanded"),
 		).toBe("true");
-		const header = screen.getByRole("button", { name: "채팅 접기 (헤더)" });
+		const header = screen.getByRole("button", { name: "채팅 접기" });
 		fireEvent.click(header);
 		expect(screen.queryByRole("dialog", { name: "내 프로필" })).toBeNull();
 		expect(header.getAttribute("aria-expanded")).toBe("false");
 		expect(
 			screen.getByRole("button", { name: "채팅 펼치기" }).querySelector("svg"),
-		).toBeNull();
+		).not.toBeNull();
 		fireEvent.click(screen.getByRole("button", { name: "채팅 펼치기" }));
 		expect(input.value).toBe("접어도 남는 초안");
 		expect(header.getAttribute("aria-expanded")).toBe("true");
@@ -1994,7 +1992,9 @@ describe("synchronized lunch room UI", () => {
 		fireEvent.change(candidateName(1), {
 			target: { value: "새 이름" },
 		});
-		expect(screen.queryByRole("checkbox", { name: /추첨 포함$/ })).toBeNull();
+		expect(
+			screen.getAllByRole("checkbox", { name: /추첨 포함$/ }),
+		).toHaveLength(2);
 		setCandidateCategory(1, "새로운 분류");
 		await act(async () => saveDraftBeforeStage());
 		expect(room.editRoom).toHaveBeenCalledWith({
@@ -2162,7 +2162,7 @@ describe("synchronized lunch room UI", () => {
 		expect(within(popup).getAllByText("추첨 확률 0%")).toHaveLength(2);
 		fireEvent.click(within(popup).getAllByRole("button", { name: "닫기" })[0]);
 		const exclusionPanel = screen.getByRole("complementary", {
-			name: "후보 제외 목록",
+			name: /후보 제외 목록|다음 게임 준비/,
 		});
 		expect(
 			within(exclusionPanel).getByRole("heading", { name: "당첨 제외 내역" }),
@@ -2219,7 +2219,9 @@ describe("synchronized lunch room UI", () => {
 			],
 		});
 		render(<LunchRoomPage roomId={roomId} />);
-		const panel = screen.getByRole("complementary", { name: "후보 제외 목록" });
+		const panel = screen.getByRole("complementary", {
+			name: /후보 제외 목록|다음 게임 준비/,
+		});
 		expect(within(panel).queryByText(/직접 제외/)).toBeNull();
 		expect(within(panel).queryByText(candidates[0].name)).toBeNull();
 		const rows = within(
@@ -2294,7 +2296,7 @@ describe("synchronized lunch room UI", () => {
 				?.getAttribute("data-candidate-count"),
 		).toBe("0");
 		const options = screen.getByRole("complementary", {
-			name: "후보 제외 목록",
+			name: /후보 제외 목록|다음 게임 준비/,
 		});
 		const toggle = within(options).getByRole("switch", {
 			name: "중복 없이 추첨 · 뽑힌 후보 제외",
@@ -2864,7 +2866,9 @@ describe("synchronized lunch room UI", () => {
 		});
 		const before = structuredClone(room.snapshot);
 		const view = render(<LunchRoomPage roomId={roomId} />);
-		expect(screen.queryByRole("checkbox", { name: /추첨 포함$/ })).toBeNull();
+		expect(
+			screen.getAllByRole("checkbox", { name: /추첨 포함$/ }).length,
+		).toBeGreaterThan(0);
 		fireEvent.click(filterButton());
 		expect(filterButton().getAttribute("aria-expanded")).toBe("true");
 		expect(screen.queryByRole("textbox", { name: /번 후보 이름$/ })).toBeNull();
@@ -2887,7 +2891,9 @@ describe("synchronized lunch room UI", () => {
 		fireEvent.click(filterButton());
 		expect(candidateRows()).toHaveLength(1);
 		expect(screen.getByText("전체 후보 3개")).toBeTruthy();
-		expect(screen.queryByRole("checkbox", { name: /추첨 포함$/ })).toBeNull();
+		expect(
+			screen.getAllByRole("checkbox", { name: /추첨 포함$/ }).length,
+		).toBeGreaterThan(0);
 		fireEvent.click(filterButton());
 		expect(
 			screen
@@ -3284,6 +3290,49 @@ describe("synchronized lunch room UI", () => {
 		expect(room.updateGameFilter).not.toHaveBeenCalled();
 	});
 
+	it("groups intake with finalize and allows direct exclusion, removal and undo", () => {
+		room.self = { id: "host-client", isHost: true };
+		room.snapshot = snapshot({
+			status: "editing",
+			candidates: sampleLunchPlaces.slice(0, 3),
+		});
+		const original = structuredClone(room.snapshot);
+		render(<LunchRoomPage roomId={roomId} />);
+		const header = document.querySelector(
+			".room-simple-header-actions",
+		) as HTMLElement;
+		expect(
+			within(header).getByRole("switch", { name: "후보 추천받기" }),
+		).toBeTruthy();
+		expect(within(header).getByRole("button", { name: "마감" })).toBeTruthy();
+		const name = sampleLunchPlaces[0].name;
+		const included = screen.getByRole("checkbox", {
+			name: `${name} 추첨 포함`,
+		}) as HTMLInputElement;
+		fireEvent.click(included);
+		expect(included.checked).toBe(false);
+		expect(
+			screen.getByRole("button", { name: `${name} 이름 수정` }).textContent,
+		).toContain("제외");
+		fireEvent.click(screen.getByRole("button", { name: `${name} 후보 삭제` }));
+		expect(candidateRows()).toHaveLength(2);
+		expect(document.activeElement).toBe(
+			screen.getByRole("textbox", { name: "새 후보 이름" }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "되돌리기" }));
+		expect(candidateRows()).toHaveLength(3);
+		expect(
+			(
+				screen.getByRole("checkbox", {
+					name: `${name} 추첨 포함`,
+				}) as HTMLInputElement
+			).checked,
+		).toBe(false);
+		expect(room.snapshot).toEqual(original);
+		expect(room.editRoom).not.toHaveBeenCalled();
+		expect(room.updateGameFilter).not.toHaveBeenCalled();
+	});
+
 	it("keeps the waiting view free of candidate and filter editing controls for participants", () => {
 		render(<LunchRoomPage roomId={roomId} />);
 		expect(document.querySelector(".room-game-filter")).toBeNull();
@@ -3424,6 +3473,26 @@ describe("synchronized lunch room UI", () => {
 		expect(room.updateRoomOptions).not.toHaveBeenCalled();
 	});
 
+	it("groups the next game with exclusion settings and keeps one host action", () => {
+		room.self = { id: "host-client", isHost: true };
+		room.snapshot = snapshot({ status: "result", draw: draw(baseTime - 8000) });
+		render(<LunchRoomPage roomId={roomId} />);
+		const preparation = screen.getByRole("complementary", {
+			name: "다음 게임 준비",
+		});
+		expect(
+			within(preparation).getByRole("switch", {
+				name: "중복 없이 추첨 · 뽑힌 후보 제외",
+			}),
+		).toBeTruthy();
+		const next = within(preparation).getByRole("button", { name: "다음 게임" });
+		expect(screen.getAllByRole("button", { name: "다음 게임" })).toHaveLength(
+			1,
+		);
+		fireEvent.click(next);
+		expect(room.nextRound).toHaveBeenCalledOnce();
+	});
+
 	it.each([
 		"waiting",
 		"result",
@@ -3439,7 +3508,7 @@ describe("synchronized lunch room UI", () => {
 		const before = structuredClone(room.snapshot);
 		const view = render(<LunchRoomPage roomId={roomId} />);
 		const options = screen.getByRole("complementary", {
-			name: "후보 제외 목록",
+			name: /후보 제외 목록|다음 게임 준비/,
 		});
 		expect(document.querySelector(".room-next-options")).toBeNull();
 		await act(async () =>
@@ -3466,7 +3535,7 @@ describe("synchronized lunch room UI", () => {
 	it("keeps the game option read-only for participants", () => {
 		render(<LunchRoomPage roomId={roomId} />);
 		const options = screen.getByRole("complementary", {
-			name: "후보 제외 목록",
+			name: /후보 제외 목록|다음 게임 준비/,
 		});
 		const toggle = within(options).getByRole("switch", {
 			name: "중복 없이 추첨 · 뽑힌 후보 제외",
@@ -3491,7 +3560,7 @@ describe("synchronized lunch room UI", () => {
 		});
 		render(<LunchRoomPage roomId={roomId} />);
 		const options = screen.getByRole("complementary", {
-			name: "후보 제외 목록",
+			name: /후보 제외 목록|다음 게임 준비/,
 		});
 		expect(
 			within(options)

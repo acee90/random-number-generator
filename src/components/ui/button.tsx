@@ -3,8 +3,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
 
-// shadcn/ui's open component API, themed for the score sheet. Feature geometry
-// (roulette, ballots and number tiles) opts into plain/auto without losing semantics.
+// Game geometry opts into plain/auto while ordinary controls share theme tokens.
 const buttonVariants = cva("ui-button", {
 	variants: {
 		variant: {

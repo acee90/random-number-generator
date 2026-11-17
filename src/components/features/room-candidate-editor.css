@@ -5,7 +5,6 @@
 .room-simple-heading,
 .room-simple-listbar,
 .room-simple-footer,
-.room-simple-stage-actions,
 .room-simple-filter-reset,
 .room-simple-undo {
 	display: flex;
@@ -133,7 +132,7 @@
 }
 .room-simple-row {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) auto auto;
+	grid-template-columns: auto minmax(0, 1fr) auto auto;
 	align-items: center;
 	gap: 6px;
 	min-block-size: 50px;
@@ -141,7 +140,7 @@
 	border-block-end: 1px solid var(--line);
 }
 .room-simple-row[data-selecting="true"] {
-	grid-template-columns: auto minmax(0, 1fr) auto auto;
+	grid-template-columns: auto auto minmax(0, 1fr) auto auto;
 }
 .room-simple-name-column {
 	min-inline-size: 0;
@@ -227,7 +226,7 @@
 	overflow-wrap: anywhere;
 }
 .room-simple-check {
-	display: grid;
+	display: none;
 	place-items: center;
 	min-inline-size: 28px;
 	min-block-size: 40px;
@@ -242,16 +241,6 @@
 	margin-block-start: 16px;
 	padding-block-start: 12px;
 	border-block-start: 1px solid var(--line);
-}
-.room-simple-stage-actions {
-	margin-inline-start: auto;
-	justify-content: flex-end;
-}
-.room-simple-stage-actions > p {
-	flex-basis: 100%;
-	font-size: 12px;
-	line-height: 1.6;
-	color: var(--muted);
 }
 .room-simple-save-status {
 	margin-block-start: 8px;
@@ -302,5 +291,52 @@
 	.room-simple-editor .ui-button,
 	.room-simple-check {
 		min-block-size: 44px;
+	}
+}
+
+.room-simple-header-actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+	max-inline-size: 100%;
+}
+.room-simple-row[data-selecting="true"] .room-simple-check {
+	display: grid;
+}
+.room-simple-index {
+	min-inline-size: 3ch;
+	text-align: center;
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	color: var(--muted);
+}
+.room-simple-row .room-simple-delete {
+	display: none;
+	color: var(--destructive);
+}
+@media (min-width: 901px) {
+	.room-simple-row,
+	.room-simple-row[data-selecting="true"] {
+		grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+	}
+	.room-simple-check,
+	.room-simple-row .room-simple-delete {
+		display: grid;
+	}
+	.room-simple-row .room-simple-row-menu {
+		display: none;
+	}
+}
+@container (max-width: 480px) {
+	.room-simple-heading h2 {
+		flex-basis: 100%;
+	}
+	.room-simple-header-actions {
+		inline-size: 100%;
+		justify-content: flex-end;
+	}
+	.room-simple-header-actions .room-editor-stage-actions {
+		margin-inline-end: auto;
 	}
 }

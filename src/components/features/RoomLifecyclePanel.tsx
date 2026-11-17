@@ -78,6 +78,7 @@ export default function RoomLifecyclePanel({
 	room,
 	busy,
 	showResult,
+	resultAction,
 	onStart,
 	onHistory,
 	historyButtonRef,
@@ -88,6 +89,7 @@ export default function RoomLifecyclePanel({
 	solo?: boolean;
 	busy: boolean;
 	showResult: boolean;
+	resultAction?: ReactNode;
 	onStart: (options?: StartOptions) => void;
 	onHistory: () => void;
 	historyButtonRef?: RefObject<HTMLButtonElement | null>;
@@ -736,7 +738,7 @@ export default function RoomLifecyclePanel({
 									requestAnimationFrame(() => newCandidateRef.current?.focus());
 								}}
 							>
-								<Plus size={36} aria-hidden="true" />
+								<Plus size={20} aria-hidden="true" />
 								<strong>새로 작성</strong>
 							</Button>
 							<Button
@@ -745,7 +747,7 @@ export default function RoomLifecyclePanel({
 								onClick={(event) => openLoader(event.currentTarget)}
 								aria-haspopup="dialog"
 							>
-								<FolderOpen size={36} aria-hidden="true" />
+								<FolderOpen size={20} aria-hidden="true" />
 								<strong>목록 불러오기</strong>
 							</Button>
 						</section>
@@ -1030,6 +1032,7 @@ export default function RoomLifecyclePanel({
 							locked={locked}
 							busy={busy}
 							showResult={showResult}
+							action={showResult ? resultAction : undefined}
 							onToggle={(checked) =>
 								void room.updateRoomOptions(checked, revision)
 							}

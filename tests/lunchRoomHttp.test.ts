@@ -809,3 +809,61 @@ describe("unrelated request fallback", () => {
 		expect(party.get).not.toHaveBeenCalled();
 	});
 });
+
+describe("closed room history HTTP", () => {
+	const historyUrl = `${endpoint}/${roomId}/history`;
+	function request(
+		headers: HeadersInit = {
+			Origin: origin,
+			"Content-Type": "application/json",
+		},
+		body = JSON.stringify({ hostToken: "a".repeat(64) }),
+	) {
+		return new Request(historyUrl, { method: "POST", headers, body });
+	}
+	it("forwards private proofs only in a same-origin bounded POST and prevents caching", async () => {
+		party.roomFetch.mockResolvedValue(
+			Response.json({ title: "종료", expiresAt: now + 1000, draws: [] }),
+		);
+		const response = await responseFor(request());
+		expect(response.status).toBe(200);
+		expect(response.headers.get("Cache-Control")).toBe("no-store");
+		const forwarded = party.roomFetch.mock.calls[0][0] as Request;
+		expect(forwarded.url).toBe(
+			"https://lunch-room.internal/_internal/lunch-room/history",
+		);
+		expect(await forwarded.json()).toEqual({ hostToken: "a".repeat(64) });
+	});
+	it("rejects cross-origin, missing origin, non-JSON, oversized bodies and non-POST before reaching storage", async () => {
+		for (const headers of [
+			{ "Content-Type": "application/json" },
+			{ Origin: "https://other.example", "Content-Type": "application/json" },
+			{
+				Origin: origin,
+				"Sec-Fetch-Site": "cross-site",
+				"Content-Type": "application/json",
+			},
+		])
+			expect(
+				(await responseFor(request(headers as Record<string, string>))).status,
+			).toBe(403);
+		expect((await responseFor(request({ Origin: origin }))).status).toBe(415);
+		expect(
+			(
+				await responseFor(
+					request(undefined, "x".repeat(lunchRoomLimits.maxMessageBytes + 1)),
+				)
+			).status,
+		).toBe(413);
+		expect((await responseFor(new Request(historyUrl))).status).toBe(405);
+		expect(party.roomFetch).not.toHaveBeenCalled();
+	});
+	it.each([
+		403, 404, 409, 410,
+	])("preserves denial status %s", async (status) => {
+		party.roomFetch.mockResolvedValue(
+			Response.json({ error: "기록 확인 불가" }, { status }),
+		);
+		expect((await responseFor(request())).status).toBe(status);
+	});
+});

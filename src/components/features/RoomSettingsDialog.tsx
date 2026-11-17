@@ -296,7 +296,8 @@ export default function RoomSettingsDialog({
 						<AlertDialogTitle>방을 종료할까요?</AlertDialogTitle>
 						<AlertDialogDescription>
 							모든 참가자의 이용이 종료되며 이 링크로 다시 입장할 수 없습니다.
-							저장하지 않은 변경은 사라집니다.
+							저장하지 않은 변경은 사라집니다. 추첨 기록은 원래 만료 시각까지
+							확인하고 저장할 수 있어요.
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					{error && (

@@ -25,8 +25,8 @@
 	gap: 12px;
 	inline-size: 100%;
 	min-inline-size: 0;
-	min-block-size: 76px;
-	padding: 14px;
+	min-block-size: 64px;
+	padding: 12px;
 	text-align: start;
 	white-space: normal;
 }
@@ -41,7 +41,7 @@
 	overflow-wrap: anywhere;
 }
 .candidate-load-choice strong {
-	font-size: 15px;
+	font-size: 14px;
 	line-height: 1.5;
 }
 .candidate-load-title,

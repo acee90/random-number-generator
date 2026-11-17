@@ -1,0 +1,114 @@
+[
+  {
+    "path": "/",
+    "width": 320,
+    "layout": {
+      "scroll": 320,
+      "w": 320
+    }
+  },
+  {
+    "path": "/create",
+    "width": 320,
+    "layout": {
+      "scroll": 320,
+      "w": 320
+    }
+  },
+  {
+    "path": "/solo",
+    "width": 320,
+    "layout": {
+      "scroll": 320,
+      "w": 320
+    }
+  },
+  {
+    "path": "/tools?tool=number",
+    "width": 320,
+    "layout": {
+      "scroll": 320,
+      "w": 320
+    }
+  },
+  {
+    "path": "/tools?tool=lotto",
+    "width": 320,
+    "layout": {
+      "scroll": 320,
+      "w": 320
+    }
+  },
+  {
+    "path": "/tools?tool=pension",
+    "width": 320,
+    "layout": {
+      "scroll": 320,
+      "w": 320
+    }
+  },
+  {
+    "path": "/ui-check-not-found",
+    "width": 320,
+    "layout": {
+      "scroll": 320,
+      "w": 320
+    }
+  },
+  {
+    "path": "/",
+    "width": 597,
+    "layout": {
+      "scroll": 597,
+      "w": 597
+    }
+  },
+  {
+    "path": "/create",
+    "width": 597,
+    "layout": {
+      "scroll": 597,
+      "w": 597
+    }
+  },
+  {
+    "path": "/solo",
+    "width": 597,
+    "layout": {
+      "scroll": 597,
+      "w": 597
+    }
+  },
+  {
+    "path": "/tools?tool=number",
+    "width": 597,
+    "layout": {
+      "scroll": 597,
+      "w": 597
+    }
+  },
+  {
+    "path": "/tools?tool=lotto",
+    "width": 597,
+    "layout": {
+      "scroll": 597,
+      "w": 597
+    }
+  },
+  {
+    "path": "/tools?tool=pension",
+    "width": 597,
+    "layout": {
+      "scroll": 597,
+      "w": 597
+    }
+  },
+  {
+    "path": "/ui-check-not-found",
+    "width": 597,
+    "layout": {
+      "scroll": 597,
+      "w": 597
+    }
+  }
+]

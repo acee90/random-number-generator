@@ -47,6 +47,8 @@ import {
 	type RoomDraw,
 } from "@/lib/lunchRoom";
 import { getSourceDisplayName } from "@/services/randomService";
+import ClosedRoomHistory, { RoomTerminalActions } from "./ClosedRoomHistory";
+import RoomNextGameButton from "./RoomNextGameButton";
 import "./lunch-room.css";
 import "./lunch-room-mobile.css";
 
@@ -723,12 +725,8 @@ export default function LunchSessionPage({
 						<p>
 							{room.error || "방이 만료되었거나 더 이상 이용할 수 없습니다."}
 						</p>
-						<Button asChild size="lg" className="room-terminal-action">
-							<a href="/create">새 방 만들기</a>
-						</Button>
-						<Button asChild variant="outline">
-							<a href="/solo">혼자 추첨하기</a>
-						</Button>
+						<RoomTerminalActions />
+						<ClosedRoomHistory key={roomId} roomId={roomId} />
 					</section>
 				) : (
 					<>
@@ -780,6 +778,21 @@ export default function LunchSessionPage({
 									historyButtonRef={historyTriggerRef}
 									busy={busy}
 									showResult={showResult}
+									resultAction={
+										showResult && isHost && !drawArchived ? (
+											<RoomNextGameButton
+												disabled={
+													!connected ||
+													busy ||
+													room.candidatesPending ||
+													room.nextPending ||
+													room.votePendingDrawId === displayedDraw?.id
+												}
+												pending={room.nextPending}
+												onClick={nextRound}
+											/>
+										) : undefined
+									}
 									onStart={start}
 									onHistory={() => changeView("history")}
 								>
@@ -839,6 +852,7 @@ export default function LunchSessionPage({
 													<div className="room-result-overlay">
 														<RoomDrawResult
 															key={displayedDraw.id}
+															showNextAction={false}
 															draw={displayedDraw}
 															solo={solo}
 															selfId={room.self?.id}
@@ -1054,26 +1068,8 @@ export default function LunchSessionPage({
 									onPointerDownCapture={keepChatFocus}
 								>
 									<div className="room-chat-header">
-										<h2 id={`${id}-chat`} aria-label="채팅">
-											<Button
-												variant="plain"
-												size="auto"
-												type="button"
-												className="room-chat-toggle"
-												aria-label={chatCollapsed ? "채팅 펼치기" : "채팅 접기"}
-												aria-expanded={!chatCollapsed}
-												aria-controls={`${id}-chat-content`}
-												aria-describedby={
-													unread > 0 ? `${id}-chat-unread` : undefined
-												}
-												onClick={toggleChat}
-											>
-												채팅{" "}
-												<RoomChatUnreadBadge
-													count={unread}
-													id={`${id}-chat-unread`}
-												/>
-											</Button>
+										<h2 id={`${id}-chat`} className="sr-only">
+											채팅
 										</h2>
 										<Button
 											variant="ghost"
@@ -1105,15 +1101,18 @@ export default function LunchSessionPage({
 											variant="ghost"
 											size="auto"
 											className="room-chat-header-toggle"
-											aria-label={
-												chatCollapsed
-													? "채팅 펼치기 (헤더)"
-													: "채팅 접기 (헤더)"
-											}
+											aria-label={chatCollapsed ? "채팅 펼치기" : "채팅 접기"}
 											aria-expanded={!chatCollapsed}
 											aria-controls={`${id}-chat-content`}
+											aria-describedby={
+												unread > 0 ? `${id}-chat-unread` : undefined
+											}
 											onClick={toggleChat}
 										>
+											<RoomChatUnreadBadge
+												count={unread}
+												id={`${id}-chat-unread`}
+											/>
 											{chatCollapsed ? (
 												<ChevronUp size={17} aria-hidden="true" />
 											) : (

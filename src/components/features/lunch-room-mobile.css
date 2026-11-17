@@ -161,11 +161,11 @@
 		min-block-size: clamp(460px, calc(100dvh - 210px), 620px);
 	}
 	.lunch-room.room-live .room-result-summary {
-		min-block-size: 156px;
+		min-block-size: 0;
 		padding: 24px 12px;
 	}
 	.lunch-room.room-live .room-result h3 {
-		font-size: clamp(38px, 8cqi, 60px);
+		font-size: clamp(28px, 5cqi, 48px);
 		line-height: 1.14;
 	}
 	.lunch-room.room-live .room-result-category {
@@ -175,10 +175,7 @@
 		margin: 0;
 		padding: 0 16px 16px;
 	}
-	.lunch-room.room-live .room-result-actions .room-next-round {
-		min-block-size: 48px;
-		padding: 8px;
-	}
+
 	.lunch-room.room-live .room-draw-feedback[data-mode="results"] {
 		padding: 0 16px 16px;
 	}
@@ -197,29 +194,7 @@
 		gap: 12px;
 		margin-block-start: 8px;
 	}
-	.lunch-room.room-live
-		.room-draw-feedback[data-mode="results"]
-		.room-feedback-tally {
-		display: grid;
-		justify-content: center;
-		align-items: center;
-		gap: 4px;
-		font-size: 14px;
-	}
-	.lunch-room.room-live .room-feedback-tally-icon svg {
-		inline-size: 24px;
-		block-size: 24px;
-	}
-	.lunch-room.room-live
-		.room-draw-feedback[data-mode="results"]
-		.room-feedback-tally
-		strong {
-		font-size: 36px;
-	}
-	.lunch-room.room-live
-		.room-draw-feedback[data-mode="results"]
-		.room-feedback-list
-		ul,
+
 	.lunch-room.room-live .room-history-list {
 		max-block-size: none;
 		overflow: visible;
@@ -229,17 +204,15 @@
 		margin-block-start: 6px;
 	}
 	.lunch-room.room-live .room-feedback-empty {
-		min-block-size: 28px;
 		margin-block-start: 6px;
-		padding: 4px 0;
 	}
 	.lunch-room.room-live .room-feedback-list li {
-		min-block-size: 28px;
+		min-block-size: 36px;
 		gap: 4px;
 		font-size: 12px;
 	}
 	.lunch-room.room-live .room-feedback-list li + li {
-		padding-block-start: 4px;
+		padding-block-start: 0;
 	}
 	.lunch-room.room-live .room-feedback-list .room-feedback-delay {
 		font-size: 11px;
@@ -251,9 +224,7 @@
 		min-block-size: 0;
 		padding: 0;
 	}
-	.lunch-room.room-live .room-chat-header h2 {
-		font-size: 14px;
-	}
+
 	.lunch-room.room-live
 		.room-chat-panel[data-collapsed="true"]
 		.room-chat-popover {

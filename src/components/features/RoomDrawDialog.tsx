@@ -64,7 +64,13 @@ export function roomDrawCopyText(draw: RoomDraw, solo = false) {
 	].join("\n");
 }
 
-function RoomDrawRecordBody({ draw, solo }: { draw: RoomDraw; solo: boolean }) {
+export function RoomDrawRecordBody({
+	draw,
+	solo,
+}: {
+	draw: RoomDraw;
+	solo: boolean;
+}) {
 	const times = [
 		{ label: "추첨 요청", value: draw.requestedAt },
 		{ label: "난수 결과 생성", value: draw.timestamp },
