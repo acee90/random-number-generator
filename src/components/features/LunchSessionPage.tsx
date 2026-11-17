@@ -1054,26 +1054,8 @@ export default function LunchSessionPage({
 									onPointerDownCapture={keepChatFocus}
 								>
 									<div className="room-chat-header">
-										<h2 id={`${id}-chat`} aria-label="채팅">
-											<Button
-												variant="plain"
-												size="auto"
-												type="button"
-												className="room-chat-toggle"
-												aria-label={chatCollapsed ? "채팅 펼치기" : "채팅 접기"}
-												aria-expanded={!chatCollapsed}
-												aria-controls={`${id}-chat-content`}
-												aria-describedby={
-													unread > 0 ? `${id}-chat-unread` : undefined
-												}
-												onClick={toggleChat}
-											>
-												채팅{" "}
-												<RoomChatUnreadBadge
-													count={unread}
-													id={`${id}-chat-unread`}
-												/>
-											</Button>
+										<h2 id={`${id}-chat`} className="sr-only">
+											채팅
 										</h2>
 										<Button
 											variant="ghost"
@@ -1105,15 +1087,18 @@ export default function LunchSessionPage({
 											variant="ghost"
 											size="auto"
 											className="room-chat-header-toggle"
-											aria-label={
-												chatCollapsed
-													? "채팅 펼치기 (헤더)"
-													: "채팅 접기 (헤더)"
-											}
+											aria-label={chatCollapsed ? "채팅 펼치기" : "채팅 접기"}
 											aria-expanded={!chatCollapsed}
 											aria-controls={`${id}-chat-content`}
+											aria-describedby={
+												unread > 0 ? `${id}-chat-unread` : undefined
+											}
 											onClick={toggleChat}
 										>
+											<RoomChatUnreadBadge
+												count={unread}
+												id={`${id}-chat-unread`}
+											/>
 											{chatCollapsed ? (
 												<ChevronUp size={17} aria-hidden="true" />
 											) : (

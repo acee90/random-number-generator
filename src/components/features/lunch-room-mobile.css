@@ -251,9 +251,7 @@
 		min-block-size: 0;
 		padding: 0;
 	}
-	.lunch-room.room-live .room-chat-header h2 {
-		font-size: 14px;
-	}
+
 	.lunch-room.room-live
 		.room-chat-panel[data-collapsed="true"]
 		.room-chat-popover {

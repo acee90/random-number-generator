@@ -807,32 +807,6 @@
 .room-chat-header > .ui-button:not(:disabled):active {
 	translate: none;
 }
-.room-chat-header h2 {
-	flex-shrink: 0;
-	min-inline-size: 0;
-	margin: 0;
-	font-size: 16px;
-	font-weight: 700;
-	line-height: 1.4;
-}
-.room-chat-toggle {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	flex: 1;
-	gap: 8px;
-	inline-size: 100%;
-	min-inline-size: 44px;
-	min-block-size: 44px;
-	padding: 0 4px;
-	border: 0;
-	border-radius: var(--control-radius);
-	background: transparent;
-	color: inherit;
-	font: inherit;
-	text-align: start;
-	cursor: pointer;
-}
 .room-chat-header-toggle {
 	display: flex;
 	flex: 1;
