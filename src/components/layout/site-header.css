@@ -5,7 +5,7 @@
 	flex-shrink: 0;
 	gap: 24px;
 	min-inline-size: 0;
-	min-block-size: 76px;
+	min-block-size: 64px;
 	border-block-end: 1px solid var(--line);
 }
 
@@ -15,8 +15,8 @@
 	flex-shrink: 0;
 	gap: 10px;
 	min-block-size: 44px;
-	font-size: 25px;
-	font-weight: 800;
+	font-size: 20px;
+	font-weight: 700;
 	letter-spacing: -1px;
 	line-height: 1.2;
 }
@@ -58,7 +58,7 @@
 
 	.site-header-brand {
 		inline-size: fit-content;
-		font-size: 23px;
+		font-size: 20px;
 	}
 
 	.site-header-nav {

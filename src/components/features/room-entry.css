@@ -8,7 +8,7 @@
 	inline-size: min(100%, 440px);
 	padding: 28px;
 	border: 1px solid var(--section-line, #68715e);
-	border-block-start: 4px solid var(--ink);
+
 	border-radius: var(--panel-radius, 2px);
 	background: #fff;
 }
@@ -16,8 +16,8 @@
 .room-entry-heading {
 	display: flex;
 	align-items: center;
-	gap: 14px;
-	margin-block-end: 28px;
+	gap: 12px;
+	margin-block-end: 24px;
 }
 
 .room-entry-title-block {
@@ -30,7 +30,7 @@
 	inline-size: 48px;
 	block-size: 48px;
 	flex-shrink: 0;
-	border: 1px solid var(--ink);
+	border: 1px solid var(--line);
 	border-radius: var(--control-radius, 2px);
 	background: var(--lime);
 	color: var(--ink);
@@ -48,7 +48,7 @@
 	font-size: clamp(21px, 4.5vw, 26px);
 	overflow-wrap: anywhere;
 	line-height: 1.4;
-	font-weight: 850;
+	font-weight: 650;
 	letter-spacing: -0.05em;
 }
 .room-entry-loading {
@@ -85,7 +85,7 @@
 }
 .room-entry-form input {
 	inline-size: 100%;
-	min-block-size: 52px;
+	min-block-size: 44px;
 	padding-inline-end: 44px;
 }
 .room-entry-input-status {

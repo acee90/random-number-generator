@@ -30,12 +30,19 @@ export default function LunchHome() {
 							<p>링크로 모여 같은 룰렛을 돌려요.</p>
 						</div>
 						<div className="lunch-home-actions">
-							<Button asChild variant="secondary" size="auto">
+							<Button asChild size="default">
 								<a className="lunch-home-create" href="/create">
 									<span>
-										<Users size={22} aria-hidden="true" />방 만들기
+										<Users size={18} aria-hidden="true" />방 만들기
 									</span>
-									<ArrowRight size={24} aria-hidden="true" />
+									<ArrowRight size={18} aria-hidden="true" />
+								</a>
+							</Button>
+							<Button asChild variant="outline" size="default">
+								<a className="lunch-home-solo" href="/solo">
+									<Dices size={20} aria-hidden="true" />
+									혼자 추첨하기
+									<ArrowRight size={18} aria-hidden="true" />
 								</a>
 							</Button>
 							<ol className="lunch-home-steps" aria-label="이용 방법">
@@ -55,13 +62,6 @@ export default function LunchHome() {
 						</div>
 					</div>
 					<div className="lunch-home-secondary">
-						<Button asChild variant="ghost" size="default">
-							<a className="lunch-home-solo" href="/solo">
-								<Dices size={20} aria-hidden="true" />
-								혼자 추첨하기
-								<ArrowRight size={18} aria-hidden="true" />
-							</a>
-						</Button>
 						<details className="lunch-home-details">
 							<summary>
 								식당 목록 · 이용 안내

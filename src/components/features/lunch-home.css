@@ -6,116 +6,88 @@
 }
 .jeommechu-home main {
 	flex: 1;
-	padding-block: clamp(28px, 6vh, 64px) 32px;
+	padding-block: 32px;
 }
 .lunch-home-board {
 	min-inline-size: 0;
-	border: 2px solid var(--ink);
-	border-radius: var(--panel-radius, 2px);
-	background: #fff;
+	border: 1px solid var(--line);
+	border-radius: var(--panel-radius);
+	background: var(--card);
 }
 .lunch-home-start {
 	display: grid;
-	grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+	grid-template-columns: minmax(0, 1.15fr) minmax(240px, 0.85fr);
 	align-items: center;
-	gap: 48px;
-	padding: clamp(28px, 4vw, 48px);
-	border-radius: 0;
-	background: var(--lime);
+	gap: 32px;
+	padding: 32px;
 }
-.lunch-home-intro {
+.lunch-home-intro,
+.lunch-home-actions,
+.lunch-home-details {
 	min-inline-size: 0;
 }
 .lunch-home-intro .lunch-home-kicker {
-	margin: 0 0 18px;
+	margin: 0 0 16px;
+	color: var(--accent-foreground);
 	font-size: 13px;
-	font-weight: 700;
+	font-weight: 600;
 }
 .lunch-home-intro h1 {
 	margin: 0;
-	font-size: clamp(40px, 5vw, 64px);
-	font-weight: 800;
-	letter-spacing: -0.06em;
-	line-height: 1.15;
+	font-size: clamp(30px, 4vw, 40px);
+	font-weight: 700;
+	letter-spacing: -0.04em;
+	line-height: 1.3;
 }
 .lunch-home-intro p {
-	margin: 20px 0 0;
-	color: #3f5129;
-	font-size: 15px;
-	line-height: 1.6;
+	margin: 16px 0 0;
+	color: var(--muted);
+	font-size: 14px;
+	line-height: 1.7;
 }
 .lunch-home-actions {
-	min-inline-size: 0;
+	display: grid;
+	gap: 8px;
 }
-.lunch-home-create {
-	justify-content: space-between;
+.lunch-home-create,
+.lunch-home-solo {
 	inline-size: 100%;
-	gap: 16px;
-	min-block-size: 72px;
-	padding: 16px 22px;
-	background: var(--ink);
-	color: #fff;
-	font-size: 21px;
 }
 .lunch-home-create > span {
 	display: inline-flex;
 	align-items: center;
-	gap: 10px;
-}
-.lunch-home-create svg {
-	flex-shrink: 0;
+	gap: 8px;
 }
 .lunch-home-steps {
 	display: grid;
-	gap: 0;
+	gap: 12px;
 	padding: 0;
-	margin: 20px 0 0;
+	margin: 16px 0 0;
 	list-style: none;
 }
 .lunch-home-steps li {
 	display: flex;
 	align-items: center;
-	gap: 10px;
-	min-block-size: 38px;
-	border-block-end: 1px solid rgb(39 43 36 / 18%);
+	gap: 8px;
+	color: var(--muted);
 	font-size: 13px;
-	font-weight: 550;
 	line-height: 1.5;
-}
-.lunch-home-steps li:last-child {
-	border-block-end: 0;
 }
 .lunch-home-steps svg {
 	flex-shrink: 0;
 }
 .lunch-home-secondary {
-	display: grid;
-	grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
-	align-items: start;
-	gap: 48px;
-	padding: 12px clamp(28px, 4vw, 48px);
-	border-block-start: 2px solid var(--ink);
-	background: #fff;
-}
-.lunch-home-solo {
-	gap: 9px;
-	inline-size: fit-content;
-	padding-inline: 2px;
-}
-.lunch-home-solo > svg:last-child {
-	margin-inline-start: 10px;
-}
-.lunch-home-details {
-	min-inline-size: 0;
+	padding: 8px 32px;
+	border-block-start: 1px solid var(--line);
 }
 .lunch-home-details summary {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	gap: 12px;
-	min-block-size: 48px;
+	min-block-size: 44px;
 	list-style: none;
-	font-size: 12px;
+	font-size: 13px;
 	color: var(--muted);
 	cursor: pointer;
 }
@@ -126,12 +98,12 @@
 	transform: rotate(180deg);
 }
 .lunch-home-details > div {
-	padding-block: 4px 16px;
+	padding-block: 8px 16px;
 }
 .lunch-home-details p {
-	margin: 0 0 6px;
+	margin: 0 0 8px;
 	color: var(--muted);
-	font-size: 12px;
+	font-size: 13px;
 	line-height: 1.7;
 }
 .lunch-home-footer {
@@ -140,110 +112,20 @@
 	flex-wrap: wrap;
 	gap: 12px;
 	padding-block: 20px;
-	border-block-start: 1px solid var(--section-line, #68715e);
+	border-block-start: 1px solid var(--line);
 	font-size: 11px;
 	color: var(--muted);
 }
-@media (hover: hover) and (pointer: fine) {
-	.lunch-home-create:hover {
-		background: #3d482f;
-	}
-}
-@media (prefers-reduced-motion: no-preference) {
-	.lunch-home-board {
-		animation: lunch-home-arrive 300ms ease-out both;
-	}
-	.lunch-home-solo > svg:last-child {
-		transition: translate 150ms ease-out;
-	}
-	.lunch-home-solo:hover > svg:last-child {
-		translate: 3px;
-	}
-}
-@keyframes lunch-home-arrive {
-	from {
-		opacity: 0.6;
-		translate: 0 8px;
-	}
-	to {
-		opacity: 1;
-		translate: 0 0;
-	}
-}
-@media (max-width: 900px) {
-	.lunch-home-start,
-	.lunch-home-secondary {
-		grid-template-columns: minmax(0, 1fr) minmax(240px, 0.9fr);
-		gap: 28px;
-	}
-}
 @media (max-width: 720px) {
 	.jeommechu-home main {
-		padding-block: 22px 24px;
+		padding-block: 24px;
 	}
-	.lunch-home-start,
-	.lunch-home-secondary {
+	.lunch-home-start {
 		grid-template-columns: minmax(0, 1fr);
 		gap: 24px;
 		padding: 24px;
 	}
-	.lunch-home-intro .lunch-home-kicker {
-		margin-block-end: 16px;
-		font-size: 12px;
-	}
-	.lunch-home-intro h1 {
-		font-size: clamp(38px, 10vw, 48px);
-	}
-	.lunch-home-intro p {
-		margin-block-start: 14px;
-		font-size: 13px;
-	}
-	.lunch-home-create {
-		min-block-size: 64px;
-		padding: 14px 18px;
-		font-size: 19px;
-	}
-	.lunch-home-steps {
-		gap: 12px;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
-		margin-block-start: 16px;
-	}
-	.lunch-home-steps li {
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 6px;
-		padding-block: 0;
-		border: 0;
-		font-size: 11px;
-		line-height: 1.5;
-	}
 	.lunch-home-secondary {
-		gap: 0;
-		padding-block: 8px;
-	}
-	.lunch-home-solo {
-		font-size: 13px;
-	}
-	.lunch-home-details {
-		border-block-start: 1px solid var(--line);
-	}
-	.lunch-home-details summary {
-		min-block-size: 44px;
-	}
-	.lunch-home-footer {
-		padding-block: 16px;
-		font-size: 10px;
-	}
-}
-@media (max-width: 360px) {
-	.lunch-home-start,
-	.lunch-home-secondary {
-		padding-inline: 20px;
-	}
-	.lunch-home-intro h1 {
-		font-size: 36px;
-	}
-	.lunch-home-steps {
-		gap: 8px;
+		padding-inline: 24px;
 	}
 }
