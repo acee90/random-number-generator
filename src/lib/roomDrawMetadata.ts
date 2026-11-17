@@ -1,4 +1,5 @@
 import {
+	getRoomPhase,
 	lunchRoomLimits,
 	type RoomDraw,
 	type RoomExclusionRecord,
@@ -88,4 +89,48 @@ export function recordRoomDrawMetadata(
 				record,
 			]
 		: [record];
+}
+
+/** Apply the live option without rewriting the immutable draw's original rules. */
+export function setRoomExcludeDrawn(
+	snapshot: RoomSnapshot,
+	enabled: boolean,
+): void {
+	snapshot.excludeDrawn = enabled;
+	const draw = snapshot.draw;
+	if (!enabled || !draw || getRoomPhase(snapshot) !== "result") return;
+	const winner = draw.candidates[draw.winnerIndex];
+	if (
+		!winner ||
+		!snapshot.candidates.some((candidate) => candidate.id === winner.id)
+	)
+		return;
+	snapshot.excludedIds = [
+		...new Set([...(snapshot.excludedIds ?? []), winner.id]),
+	];
+	snapshot.exclusionRecords = [
+		...(snapshot.exclusionRecords ?? []).filter(
+			(record) => record.candidateId !== winner.id,
+		),
+		exclusionRecordFor(draw),
+	];
+}
+
+/** Do not publish the next winning exclusion before its reveal time. */
+export function visibleRoomExclusions(
+	snapshot: RoomSnapshot,
+): Pick<RoomSnapshot, "excludedIds" | "exclusionRecords"> {
+	const excludedIds =
+		snapshot.status === "drawing" && snapshot.draw
+			? snapshot.draw.excludeDrawn
+				? (snapshot.draw.excludedIdsBefore ?? [])
+				: []
+			: (snapshot.excludedIds ?? []);
+	const ids = new Set(excludedIds);
+	return {
+		excludedIds,
+		exclusionRecords: snapshot.exclusionRecords?.filter((record) =>
+			ids.has(record.candidateId),
+		),
+	};
 }

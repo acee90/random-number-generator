@@ -1250,6 +1250,66 @@ async function run(config) {
 			observations: publicSnapshotCount,
 		});
 
+		activeStage = "result-time-exclusion-enable";
+		const guestEnable = await command(guest, {
+			type: "options",
+			excludeDrawn: true,
+			expectedRevision: guest.snapshot.revision,
+		});
+		ensure(
+			guestEnable.code === "HOST_REQUIRED" &&
+				host.snapshot.excludedIds.length === 0,
+			"GUEST_CHANGED_RESULT_EXCLUSIONS",
+		);
+		pass("only-host-can-enable-result-exclusion");
+		await command(host, {
+			type: "options",
+			excludeDrawn: false,
+			expectedRevision: host.snapshot.revision,
+		});
+		const lateEnable = await command(host, {
+			type: "options",
+			excludeDrawn: true,
+			expectedRevision: host.snapshot.revision,
+		});
+		await Promise.all([sync(host), sync(guest), sync(late)]);
+		ensure(
+			lateEnable.type === "ack" &&
+				[host, guest, late].every(
+					(client) =>
+						client.snapshot.excludeDrawn === true &&
+						JSON.stringify(client.snapshot.excludedIds) ===
+							JSON.stringify([secondWinnerId]) &&
+						client.snapshot.exclusionRecords?.length === 1 &&
+						client.snapshot.exclusionRecords[0].drawId === second.id &&
+						JSON.stringify(client.snapshot.draw) === currentResult &&
+						JSON.stringify(client.snapshot.history) === existingHistory,
+				),
+			"RESULT_ENABLE_DID_NOT_SYNC_CURRENT_WINNER_OR_MUTATED_RECORDS",
+		);
+		pass(
+			"result-enable-after-reset-syncs-current-winner-and-preserves-records",
+		);
+		const afterLateEnableNext = await command(host, {
+			type: "next",
+			drawId: second.id,
+		});
+		await Promise.all([sync(host), sync(guest), sync(late)]);
+		ensure(
+			afterLateEnableNext.type === "ack" &&
+				[host, guest, late].every(
+					(client) =>
+						client.snapshot.status === "waiting" &&
+						client.snapshot.draw === null &&
+						client.snapshot.excludeDrawn === true &&
+						JSON.stringify(client.snapshot.excludedIds) ===
+							JSON.stringify([secondWinnerId]) &&
+						JSON.stringify(client.snapshot.history[0]) === currentResult,
+				),
+			"RESULT_ENABLE_LOST_WINNER_ON_NEXT_GAME",
+		);
+		pass("result-enable-keeps-current-winner-excluded-in-next-game");
+
 		activeStage = "explicit-room-closure";
 		const deniedClose = await command(guest, { type: "room-close" });
 		ensure(

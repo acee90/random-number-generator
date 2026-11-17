@@ -205,4 +205,45 @@ describe("local game controller", () => {
 			fresh.result.current.room.snapshot.listVersion,
 		).toBeGreaterThanOrEqual(record.listVersion);
 	});
+	it("applies result-time ON immediately after reset and keeps the completed record immutable", async () => {
+		const { result } = setup();
+		await spin(result);
+		const record = structuredClone(result.current.room.snapshot.draw);
+		assert(record);
+		await act(async () => {
+			await result.current.room.resetExclusions();
+		});
+		expect(result.current.room.snapshot.excludedIds).toEqual([]);
+		await act(async () => {
+			await result.current.room.updateRoomOptions(true);
+		});
+		expect(result.current.room.snapshot.excludedIds).toEqual([
+			record.candidates[record.winnerIndex].id,
+		]);
+		expect(result.current.room.snapshot.draw).toEqual(record);
+		expect(result.current.room.snapshot.history[0]).toEqual(record);
+		await act(async () => {
+			await result.current.room.updateRoomOptions(false);
+			await result.current.room.updateRoomOptions(true);
+		});
+		expect(result.current.room.snapshot.exclusionRecords).toHaveLength(1);
+		act(() => {
+			result.current.room.nextRound(record.id);
+		});
+		expect(
+			getEligibleRoomCandidates(result.current.room.snapshot),
+		).toHaveLength(1);
+	});
+	it("does not reveal the winning exclusion before a solo draw finishes", async () => {
+		const { result } = setup();
+		await act(async () => {
+			await result.current.room.updateRoomOptions(true);
+			result.current.room.startDraw();
+		});
+		expect(result.current.room.snapshot.status).toBe("drawing");
+		expect(result.current.room.snapshot.excludedIds).toEqual([]);
+		expect(result.current.room.snapshot.exclusionRecords).toEqual([]);
+		await act(async () => vi.advanceTimersByTime(lunchSpinDurationMs));
+		expect(result.current.room.snapshot.excludedIds).toEqual(["a"]);
+	});
 });

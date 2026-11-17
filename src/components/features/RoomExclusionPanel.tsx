@@ -38,7 +38,20 @@ export default function RoomExclusionPanel({
 	const id = useId();
 	const phase = snapshot ? getRoomPhase(snapshot) : "waiting";
 	const excludeDrawn = snapshot?.excludeDrawn ?? false;
-	const rows = getRoomExclusionHistory(snapshot);
+	const allRows = getRoomExclusionHistory(snapshot);
+	const currentDraw = snapshot?.draw;
+	const currentEntry =
+		showResult && currentDraw
+			? allRows.find(
+					(entry) =>
+						entry.record?.drawId === currentDraw.id &&
+						entry.candidate.id ===
+							currentDraw.candidates[currentDraw.winnerIndex]?.id,
+				)
+			: undefined;
+	const rows = currentEntry
+		? allRows.filter((entry) => entry !== currentEntry)
+		: allRows;
 	const rowKey = rows
 		.map((entry) => `${entry.candidate.id}:${entry.record?.drawnAt ?? ""}`)
 		.join("|");
@@ -76,23 +89,37 @@ export default function RoomExclusionPanel({
 
 	const note = inProgress
 		? "추첨 후 변경할 수 있어요."
-		: showResult
-			? "다음 추첨부터 적용돼요."
+		: showResult && !excludeDrawn
+			? "켜면 이번 당첨부터 제외해요."
 			: null;
 
 	return (
 		<aside className="room-draw-exclusions" aria-label="후보 제외 목록">
 			<div className="room-draw-exclusion-toggle">
 				<Label htmlFor={`${id}-enabled`}>중복 없이 추첨</Label>
-				<Switch
-					id={`${id}-enabled`}
-					size="lg"
-					aria-label="중복 없이 추첨 · 뽑힌 후보 제외"
-					aria-describedby={note ? `${id}-note` : undefined}
-					checked={excludeDrawn}
-					disabled={disabled}
-					onCheckedChange={onToggle}
-				/>
+				<div className="room-draw-exclusion-actions">
+					<Switch
+						id={`${id}-enabled`}
+						size="lg"
+						aria-label="중복 없이 추첨 · 뽑힌 후보 제외"
+						aria-describedby={note ? `${id}-note` : undefined}
+						checked={excludeDrawn}
+						disabled={disabled}
+						onCheckedChange={onToggle}
+					/>
+					{isHost && (
+						<Button
+							variant="ghost"
+							size="icon"
+							aria-label="제외 목록 초기화"
+							title="제외 목록 초기화"
+							disabled={disabled || (snapshot?.excludedIds?.length ?? 0) === 0}
+							onClick={onReset}
+						>
+							<RotateCcw size={14} aria-hidden="true" />
+						</Button>
+					)}
+				</div>
 			</div>
 			{note && (
 				<p className="room-draw-exclusion-note" id={`${id}-note`}>
@@ -102,10 +129,13 @@ export default function RoomExclusionPanel({
 			<div className="room-draw-exclusion-heading">
 				<h3>{excludeDrawn ? "당첨 제외 내역" : "저장된 당첨 내역"}</h3>
 				<span className="room-draw-exclusion-count">
-					{rows.length}
+					{allRows.length}
 					<span className="sr-only">개</span>
 				</span>
 			</div>
+			{currentEntry && (
+				<p className="room-draw-exclusion-note">이번 당첨 포함</p>
+			)}
 			{rows.length > 0 && (
 				<>
 					<div className="room-draw-exclusion-order">
@@ -148,16 +178,6 @@ export default function RoomExclusionPanel({
 						</p>
 					)}
 				</>
-			)}
-			{isHost && (snapshot?.excludedIds?.length ?? 0) > 0 && (
-				<Button
-					variant="outline"
-					size="sm"
-					disabled={disabled}
-					onClick={onReset}
-				>
-					<RotateCcw size={14} aria-hidden="true" /> 제외 목록 초기화
-				</Button>
 			)}
 		</aside>
 	);

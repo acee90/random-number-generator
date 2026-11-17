@@ -1318,7 +1318,7 @@ describe("synchronized lunch room UI", () => {
 		);
 	});
 
-	it("shows completed room history and copies a row without exposing the active draw", async () => {
+	it("shows completed room history with details only and does not expose the active draw", async () => {
 		const completed = draw(baseTime - 8000);
 		const active = {
 			...draw(),
@@ -1350,18 +1350,10 @@ describe("synchronized lunch room UI", () => {
 		expect(
 			within(history).getByText(/2곳 중 추첨 · 출처: quantum/),
 		).toBeTruthy();
-		await act(async () =>
-			fireEvent.click(
-				within(history).getByRole("button", {
-					name: `${sampleLunchPlaces[1].name} 기록 복사`,
-				}),
-			),
-		);
-		expect(writeText).toHaveBeenCalledTimes(1);
-		expect(writeText.mock.calls[0][0]).toContain(
-			`음식점: ${sampleLunchPlaces[1].name}\n분류: ${sampleLunchPlaces[1].category}`,
-		);
-		expect(writeText.mock.calls[0][0]).toContain(`추첨 ID: ${completed.id}`);
+		expect(
+			within(history).queryByRole("button", { name: /기록 복사/ }),
+		).toBeNull();
+		expect(writeText).not.toHaveBeenCalled();
 		expect(localStorage.getItem(lunchHistoryKey)).toBeNull();
 	});
 

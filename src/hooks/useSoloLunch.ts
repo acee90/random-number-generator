@@ -13,7 +13,11 @@ import {
 	type RoomDraw,
 	type RoomSnapshot,
 } from "@/lib/lunchRoom";
-import { recordRoomDrawMetadata } from "@/lib/roomDrawMetadata";
+import {
+	recordRoomDrawMetadata,
+	setRoomExcludeDrawn,
+	visibleRoomExclusions,
+} from "@/lib/roomDrawMetadata";
 import { generateRandomNumbers } from "@/services/randomService";
 import type { useLunchRoom } from "./useLunchRoom";
 
@@ -185,7 +189,7 @@ export function useSoloLunch(places: readonly LunchPlace[] = emptyPlaces) {
 		typeof useLunchRoom
 	>["updateRoomOptions"] = (excludeDrawn, revision) =>
 		mutate((next) => {
-			next.excludeDrawn = excludeDrawn;
+			setRoomExcludeDrawn(next, excludeDrawn);
 			return true;
 		}, revision);
 	const resetExclusions: ReturnType<typeof useLunchRoom>["resetExclusions"] = (
@@ -315,7 +319,7 @@ export function useSoloLunch(places: readonly LunchPlace[] = emptyPlaces) {
 		return true;
 	};
 	const room = {
-		snapshot,
+		snapshot: { ...snapshot, ...visibleRoomExclusions(snapshot) },
 		self,
 		connection: "connected",
 		nickname: self.name,

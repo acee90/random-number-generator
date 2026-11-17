@@ -88,7 +88,7 @@
 }
 .room-roulette-and-exclusions {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) 170px;
+	grid-template-columns: minmax(0, 1fr) 208px;
 	min-inline-size: 0;
 }
 @container (max-width: 700px) {
