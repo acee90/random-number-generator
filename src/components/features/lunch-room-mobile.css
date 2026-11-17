@@ -195,10 +195,6 @@
 		margin-block-start: 8px;
 	}
 
-	.lunch-room.room-live
-		.room-draw-feedback[data-mode="results"]
-		.room-feedback-list
-		ul,
 	.lunch-room.room-live .room-history-list {
 		max-block-size: none;
 		overflow: visible;

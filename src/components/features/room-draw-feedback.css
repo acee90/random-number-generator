@@ -111,7 +111,9 @@
 .room-draw-feedback[data-mode="results"] .room-feedback-list ul {
 	flex: none;
 	align-content: start;
-	max-block-size: 300px;
+	block-size: 108px;
+	max-block-size: none;
+	scrollbar-gutter: stable;
 	overflow-y: auto;
 	overscroll-behavior: contain;
 	scrollbar-width: thin;
@@ -122,7 +124,7 @@
 	display: grid;
 	place-items: center;
 	flex: none;
-	min-block-size: 36px;
+	block-size: 108px;
 	margin: 8px 0 0;
 	padding: 8px 0;
 }
