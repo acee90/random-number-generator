@@ -64,7 +64,7 @@ describe("RoomExclusionPanel", () => {
 		const rows = within(list).getAllByRole("listitem");
 		expect(rows).toHaveLength(200);
 		expect(within(rows[0]).getByText("후보 200")).toBeTruthy();
-		expect(within(rows[0]).getByText("200회 추첨")).toBeTruthy();
+		expect(within(rows[0]).getByText("200회차 당첨")).toBeTruthy();
 		expect(rows[0].querySelector("time")?.getAttribute("datetime")).toBe(
 			new Date(1794800000000 + 199 * 20000).toISOString(),
 		);
@@ -82,7 +82,7 @@ describe("RoomExclusionPanel", () => {
 		expect(input.onReset).toHaveBeenCalledOnce();
 	});
 
-	it("labels an off ledger as stored and does not mix individual game-filter exclusions into it", () => {
+	it("hides stored winners while disabled without mixing game-filter exclusions", () => {
 		const state = snapshot(2, {
 			excludeDrawn: false,
 			excludedIds: ["candidate-0"],
@@ -90,15 +90,15 @@ describe("RoomExclusionPanel", () => {
 		});
 		render(<RoomExclusionPanel {...props(state)} />);
 		expect(
-			screen.getByRole("heading", { name: "저장된 당첨 내역" }),
-		).toBeTruthy();
+			screen.queryByRole("heading", { name: "저장된 당첨 내역" }),
+		).toBeNull();
 		expect(
 			screen.queryByText("꺼짐 · 저장된 당첨 후보도 추첨에 포함됩니다."),
 		).toBeNull();
 		expect(
 			screen.getByRole("switch").getAttribute("aria-describedby"),
 		).toBeNull();
-		expect(screen.getAllByRole("listitem")).toHaveLength(1);
+		expect(screen.queryAllByRole("listitem")).toHaveLength(0);
 		expect(screen.queryByText("후보 2")).toBeNull();
 		expect(screen.queryByText(/직접 제외/)).toBeNull();
 	});

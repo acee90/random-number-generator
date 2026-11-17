@@ -96,5 +96,5 @@ export function roomExclusionRoundLabel(record?: RoomExclusionRecord): string {
 	if (record?.roundNumber === undefined) return "이전 추첨";
 	return record.roundNumberIsExact === false
 		? `기록 ${record.roundNumber}번째`
-		: `${record.roundNumber}회 추첨`;
+		: `${record.roundNumber}회차 당첨`;
 }

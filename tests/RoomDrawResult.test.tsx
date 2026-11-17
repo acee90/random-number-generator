@@ -277,15 +277,15 @@ describe("optimistic room result voting", () => {
 	it.each([
 		["좋아요", /좋아요\s*2/],
 		["싫어요", /싫어요\s*2/],
-	] as const)("moves mobile keyboard focus from %s voting to its selected tally immediately", (label, tallyName) => {
+	] as const)("keeps mobile %s focus on its mounted tally button through acknowledgement", (label, tallyName) => {
 		setMobileViewport(true);
 		const { original, update } = resultHarness();
 		const button = screen.getByRole("button", { name: `${label} 투표` });
 		button.focus();
 		fireEvent.click(button);
 		const tally = screen.getByRole("heading", { level: 5, name: tallyName });
-		expect(document.activeElement).toBe(tally);
-		expect(tally.tabIndex).toBe(-1);
+		expect(document.activeElement).toBe(button);
+		expect(tally.contains(button)).toBe(true);
 		const choice = label === "좋아요" ? "up" : "down";
 		update({
 			pending: false,
@@ -294,7 +294,7 @@ describe("optimistic room result voting", () => {
 				votes: [...(original.draw.votes ?? []), ballot("self", choice, 600)],
 			},
 		});
-		expect(document.activeElement).toBe(tally);
+		expect(document.activeElement).toBe(button);
 	});
 	it("keeps desktop focus on the selected action rather than moving it to the tally", () => {
 		setMobileViewport(false);

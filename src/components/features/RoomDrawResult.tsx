@@ -48,8 +48,6 @@ export default function RoomDrawResult({
 		| null
 	>(null);
 	const submitted = useRef(false);
-	const resultLayoutRef = useRef<HTMLDivElement>(null);
-	const voteFocusRef = useRef<Element | null>(null);
 	const ownVote = draw.votes?.find((vote) => vote.participantId === selfId);
 	const eligible = isRoomDrawVoter(draw, selfId);
 	const activeOptimisticVote =
@@ -63,23 +61,6 @@ export default function RoomDrawResult({
 			? optimisticVote
 			: undefined;
 	const ownChoice = ownVote?.vote ?? activeOptimisticVote?.vote;
-	useEffect(() => {
-		const previousFocus = voteFocusRef.current;
-		voteFocusRef.current = null;
-		if (
-			!previousFocus ||
-			!ownChoice ||
-			!window.matchMedia?.("(max-width: 900px)").matches ||
-			(document.activeElement !== previousFocus &&
-				document.activeElement !== document.body)
-		)
-			return;
-		resultLayoutRef.current
-			?.querySelector<HTMLElement>(
-				`[data-mode="results"] [data-choice="${ownChoice}"] .room-feedback-tally`,
-			)
-			?.focus({ preventScroll: true });
-	}, [ownChoice]);
 	useEffect(() => {
 		if (
 			!pending ||
@@ -122,12 +103,6 @@ export default function RoomDrawResult({
 			submitted.current = false;
 			return false;
 		}
-		const activeElement = document.activeElement;
-		voteFocusRef.current =
-			activeElement?.closest(".room-feedback-actions") &&
-			resultLayoutRef.current?.contains(activeElement)
-				? activeElement
-				: null;
 		setOptimisticVote({
 			drawId,
 			participantId: participant.id,
@@ -140,7 +115,6 @@ export default function RoomDrawResult({
 		<div
 			className="room-result-layout"
 			data-solo={solo || undefined}
-			ref={resultLayoutRef}
 			data-own-choice={ownChoice}
 		>
 			<section className="room-result" aria-labelledby={titleId}>
@@ -151,18 +125,6 @@ export default function RoomDrawResult({
 					</h3>
 					<p className="room-result-category">{winner.category}</p>
 				</div>
-				{!solo && !readOnly && (
-					<RoomDrawFeedback
-						mode="actions"
-						draw={draw}
-						selfId={selfId}
-						isHost={isHost}
-						connected={connected}
-						pending={pending}
-						onVote={submitVote}
-						optimisticVote={activeOptimisticVote}
-					/>
-				)}
 			</section>
 			{!solo && (
 				<RoomDrawFeedback

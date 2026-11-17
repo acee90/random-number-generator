@@ -64,12 +64,18 @@ function VoteTally({
 	count,
 	animate,
 	selected,
+	readOnly,
+	canVote,
+	onVote,
 }: {
 	id: string;
 	choice: VoteChoice;
 	count: number;
 	animate: boolean;
 	selected: boolean;
+	readOnly: boolean;
+	canVote: boolean;
+	onVote: () => void;
 }) {
 	const previous = useRef({ count, animate });
 	const [burst, setBurst] = useState(0);
@@ -79,13 +85,8 @@ function VoteTally({
 		previous.current = { count, animate };
 	}, [count, animate]);
 	const { label, Icon } = choice === "up" ? choices[0] : choices[1];
-	return (
-		<h5
-			id={id}
-			tabIndex={-1}
-			className="room-feedback-tally"
-			data-burst={(animate && burst) || undefined}
-		>
+	const content = (
+		<>
 			<span
 				className="room-feedback-tally-icon"
 				key={`icon:${burst}`}
@@ -103,6 +104,31 @@ function VoteTally({
 				<span className="room-feedback-team-selection" aria-hidden="true">
 					<Check size={12} />내 선택
 				</span>
+			)}
+		</>
+	);
+	return (
+		<h5
+			aria-label={`${label} ${count}`}
+			id={id}
+			className="room-feedback-tally-heading"
+			data-burst={(animate && burst) || undefined}
+		>
+			{readOnly ? (
+				<span className="room-feedback-tally">{content}</span>
+			) : (
+				<Button
+					variant="outline"
+					size="auto"
+					className="room-feedback-tally"
+					data-burst={(animate && burst) || undefined}
+					aria-label={`${label} 투표`}
+					aria-pressed={selected}
+					aria-disabled={!canVote}
+					onClick={onVote}
+				>
+					{content}
+				</Button>
 			)}
 		</h5>
 	);
@@ -125,7 +151,7 @@ export default function RoomDrawFeedback({
 	pending: boolean;
 	optimisticVote?: OptimisticVote;
 	readOnly?: boolean;
-	mode?: "full" | "actions" | "results";
+	mode?: "full" | "results";
 	onVote: (drawId: string, vote: VoteChoice) => boolean;
 }) {
 	const id = useId();
@@ -198,160 +224,118 @@ export default function RoomDrawFeedback({
 		>
 			<div className="room-feedback-heading">
 				<h4 id={`${id}-title`}>
-					{mode === "actions"
-						? "이 메뉴, 어때요?"
-						: mode === "results"
-							? "실시간 투표 현황"
-							: "메뉴 투표"}
+					{mode === "results" ? "실시간 투표 현황" : "메뉴 투표"}
 				</h4>
-				{mode !== "actions" && (
-					<span>{votes.length + (pendingVote ? 1 : 0)}명 참여</span>
-				)}
+				<span>{votes.length + (pendingVote ? 1 : 0)}명 참여</span>
 			</div>
-			{mode !== "results" && !readOnly && (
-				<div className="room-feedback-action-collapse">
-					<div className="room-feedback-action-clip">
-						<fieldset className="room-feedback-actions">
-							<legend className="sr-only">이번 추첨 결과 투표</legend>
-							{choices.map(({ vote, label, Icon }) => (
-								<Button
-									variant="plain"
-									size="auto"
-									key={vote}
-									type="button"
-									aria-label={`${label} 투표`}
-									aria-pressed={ownVote?.vote === vote}
-									data-selected={ownVote?.vote === vote || undefined}
-									data-choice={vote}
-									data-voted={Boolean(ownVote) || undefined}
-									disabled={!canVote}
-									onClick={() => {
-										if (!canVote) return;
-										setFailedSubmission(null);
-										if (!onVote(draw.id, vote))
-											setFailedSubmission({
-												drawId: draw.id,
-												message:
-													"투표를 보내지 못했습니다. 다시 시도해 주세요.",
-											});
-									}}
-								>
-									<Icon
-										className="room-feedback-choice-icon"
-										size={32}
-										aria-hidden="true"
-									/>
-									<span>{label}</span>
-									{ownVote?.vote === vote && (
-										<span className="room-feedback-selected-label">
-											<Check size={13} aria-hidden="true" />내 선택
-										</span>
-									)}
-								</Button>
-							))}
-						</fieldset>
-					</div>
-				</div>
-			)}
-			{mode !== "results" && (
-				<output
-					className={showVisibleStatus ? "room-feedback-status" : "sr-only"}
-					aria-live="polite"
-					aria-atomic="true"
-					data-error={Boolean(submitError) || undefined}
-				>
-					<span className="sr-only">
-						좋아요 {upVotes.length}명, 싫어요 {downVotes.length}명.{" "}
-					</span>
-					{statusMessage}
-				</output>
-			)}
-			{mode !== "actions" && (
-				<div className="room-feedback-lists">
-					{choices.map(({ vote, label }) => {
-						const voters = vote === "up" ? upVotes : downVotes;
-						const voterList = (
-							<ul aria-label={`${label} 투표한 참가자`}>
-								{voters.map((entry) => {
-									const confirmed = "reactionMs" in entry;
-									const rank = confirmed
-										? ranksByParticipant.get(entry.participantId)
-										: undefined;
-									return (
-										<li
-											key={entry.participantId}
-											data-self={entry.participantId === selfId || undefined}
-											data-pending={!confirmed || undefined}
-										>
-											<span
-												className="room-feedback-rank"
-												title={rank ? `전체 반응 속도 ${rank}위` : undefined}
-												aria-hidden={!confirmed || undefined}
-											>
-												{rank ? (
-													rank <= 3 ? (
-														<span
-															className="room-feedback-medal"
-															role="img"
-															aria-label={reactionMedals[rank - 1].label}
-														>
-															{reactionMedals[rank - 1].symbol}
-														</span>
-													) : (
-														`${rank}위`
-													)
-												) : null}
-											</span>
-											<span className="room-feedback-voter" title={entry.name}>
-												{entry.name}
-												{entry.participantId === selfId && <small>나</small>}
-											</span>
-											{confirmed ? (
-												<span className="room-feedback-delay">
-													<span className="sr-only">결과 공개 후 </span>
-													{reactionDelayLabel(entry.reactionMs)}
-												</span>
-											) : (
-												<span
-													className="room-feedback-delay"
-													role="note"
-													aria-label="투표 확인 중"
-												>
-													…
-												</span>
-											)}
-										</li>
-									);
-								})}
-							</ul>
-						);
 
-						return (
-							<section
-								key={vote}
-								className="room-feedback-list"
-								data-choice={vote}
-								data-selected={ownVote?.vote === vote || undefined}
-								aria-labelledby={`${id}-${vote}`}
-							>
-								<VoteTally
-									key={`${draw.id}:${vote}`}
-									id={`${id}-${vote}`}
-									choice={vote}
-									count={voters.length}
-									selected={ownVote?.vote === vote}
-									animate={mode === "results" && !readOnly && connected}
-								/>
-								{voters.length > 0 ? (
-									voterList
-								) : (
-									<p className="room-feedback-empty">아직 없어요</p>
-								)}
-							</section>
-						);
-					})}
-				</div>
-			)}
+			<output
+				className={showVisibleStatus ? "room-feedback-status" : "sr-only"}
+				aria-live="polite"
+				aria-atomic="true"
+				data-error={Boolean(submitError) || undefined}
+			>
+				<span className="sr-only">
+					좋아요 {upVotes.length}명, 싫어요 {downVotes.length}명.{" "}
+				</span>
+				{statusMessage}
+			</output>
+			<fieldset className="room-feedback-lists">
+				<legend className="sr-only">이번 추첨 결과 투표</legend>
+				{choices.map(({ vote, label }) => {
+					const voters = vote === "up" ? upVotes : downVotes;
+					const voterList = (
+						<ul aria-label={`${label} 투표한 참가자`}>
+							{voters.map((entry) => {
+								const confirmed = "reactionMs" in entry;
+								const rank = confirmed
+									? ranksByParticipant.get(entry.participantId)
+									: undefined;
+								return (
+									<li
+										key={entry.participantId}
+										data-self={entry.participantId === selfId || undefined}
+										data-pending={!confirmed || undefined}
+									>
+										<span
+											className="room-feedback-rank"
+											title={rank ? `전체 반응 속도 ${rank}위` : undefined}
+											aria-hidden={!confirmed || undefined}
+										>
+											{rank ? (
+												rank <= 3 ? (
+													<span
+														className="room-feedback-medal"
+														role="img"
+														aria-label={reactionMedals[rank - 1].label}
+													>
+														{reactionMedals[rank - 1].symbol}
+													</span>
+												) : (
+													`${rank}위`
+												)
+											) : null}
+										</span>
+										<span className="room-feedback-voter" title={entry.name}>
+											{entry.name}
+											{entry.participantId === selfId && <small>나</small>}
+										</span>
+										{confirmed ? (
+											<span className="room-feedback-delay">
+												<span className="sr-only">결과 공개 후 </span>
+												{reactionDelayLabel(entry.reactionMs)}
+											</span>
+										) : (
+											<span
+												className="room-feedback-delay"
+												role="note"
+												aria-label="투표 확인 중"
+											>
+												…
+											</span>
+										)}
+									</li>
+								);
+							})}
+						</ul>
+					);
+
+					return (
+						<section
+							key={vote}
+							className="room-feedback-list"
+							data-choice={vote}
+							data-selected={ownVote?.vote === vote || undefined}
+							aria-labelledby={`${id}-${vote}`}
+						>
+							<VoteTally
+								key={`${draw.id}:${vote}`}
+								id={`${id}-${vote}`}
+								choice={vote}
+								count={voters.length}
+								selected={ownVote?.vote === vote}
+								animate={mode === "results" && !readOnly && connected}
+								readOnly={readOnly}
+								canVote={canVote}
+								onVote={() => {
+									if (!canVote) return;
+									setFailedSubmission(null);
+									if (!onVote(draw.id, vote))
+										setFailedSubmission({
+											drawId: draw.id,
+											message: "투표를 보내지 못했습니다. 다시 시도해 주세요.",
+										});
+								}}
+							/>
+							{voters.length > 0 ? (
+								voterList
+							) : (
+								<p className="room-feedback-empty">아직 없어요</p>
+							)}
+						</section>
+					);
+				})}
+			</fieldset>
 		</section>
 	);
 }

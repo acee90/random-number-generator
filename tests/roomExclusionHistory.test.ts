@@ -65,9 +65,9 @@ describe("automatic draw exclusion history", () => {
 		const rows = getRoomExclusionHistory(state);
 		expect(rows.map((entry) => entry.candidate.id)).toEqual(["b", "c", "a"]);
 		expect(rows.map((entry) => roomExclusionRoundLabel(entry.record))).toEqual([
-			"3회 추첨",
-			"2회 추첨",
-			"1회 추첨",
+			"3회차 당첨",
+			"2회차 당첨",
+			"1회차 당첨",
 		]);
 		expect(state).toEqual(before);
 	});
