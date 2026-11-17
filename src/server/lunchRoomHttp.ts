@@ -8,6 +8,7 @@ import {
 	nicknameCheckPath,
 	readBoundedRoomJson,
 	roomEntryInfoPath,
+	roomHistoryPath,
 } from "@/lib/lunchRoomRequest.server";
 import { parseRoomEntryInfo } from "@/lib/roomEntryInfo";
 
@@ -33,6 +34,57 @@ export async function handleLunchRoomRequest(
 	env: LunchRoomEnvironment,
 ): Promise<Response | null> {
 	const url = new URL(request.url);
+	const historyPath = url.pathname.match(
+		/^\/api\/lunch\/rooms\/([^/]+)\/history$/,
+	);
+	if (historyPath) {
+		const roomId = historyPath[1];
+		if (!isLunchRoomId(roomId))
+			return json({ error: "방을 찾을 수 없습니다." }, 404);
+		if (request.method !== "POST")
+			return json({ error: "POST 요청이 필요합니다." }, 405, { Allow: "POST" });
+		if (
+			request.headers.get("Origin") !== url.origin ||
+			request.headers.get("Sec-Fetch-Site") === "cross-site"
+		)
+			return json({ error: "같은 사이트에서 기록을 확인해 주세요." }, 403);
+		if (
+			request.headers.get("Content-Type")?.split(";")[0].trim() !==
+			"application/json"
+		)
+			return json({ error: "JSON 형식이 필요합니다." }, 415);
+		let body: unknown;
+		try {
+			body = await readBoundedRoomJson(request);
+		} catch (error) {
+			return json(
+				{ error: "입력 내용을 확인해 주세요." },
+				error instanceof RangeError ? 413 : 400,
+			);
+		}
+		try {
+			const room = env.LunchRooms.get(
+				env.LunchRooms.idFromName(roomId),
+				roomLocationOptions(env),
+			);
+			const response = await room.fetch(
+				new Request(`https://lunch-room.internal${roomHistoryPath}`, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						"x-partykit-room": roomId,
+					},
+					body: JSON.stringify(body),
+				}),
+			);
+			return json(await response.json(), response.status);
+		} catch {
+			return json(
+				{ error: "기록을 불러오지 못했습니다. 다시 시도해 주세요." },
+				503,
+			);
+		}
+	}
 	const entryInfoPath = url.pathname.match(
 		/^\/api\/lunch\/rooms\/([^/]+)\/entry-info$/,
 	);

@@ -174,3 +174,7 @@
 		padding: 22px;
 	}
 }
+
+.room-closed-entry {
+	inline-size: min(100%, 680px);
+}

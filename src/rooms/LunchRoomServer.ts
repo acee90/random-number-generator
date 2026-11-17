@@ -25,6 +25,7 @@ import {
 	nicknameCheckPath,
 	readBoundedRoomJson,
 	roomEntryInfoPath,
+	roomHistoryPath,
 } from "@/lib/lunchRoomRequest.server";
 import {
 	clearDisabledRoomExclusions,
@@ -405,6 +406,60 @@ export class LunchRoomServer extends Server<RoomEnv> {
 		});
 	}
 
+	async getClosedHistory(input: unknown) {
+		return this.exclusive(async () => {
+			await this.load();
+			if (
+				this.expired ||
+				(this.room && Date.now() >= this.room.snapshot.expiresAt)
+			)
+				return {
+					status: 410,
+					body: { error: "방이 만료되어 기록이 삭제되었습니다." },
+				};
+			if (!this.room)
+				return { status: 404, body: { error: "방을 찾을 수 없습니다." } };
+			const proof =
+				input && typeof input === "object" && !Array.isArray(input)
+					? (input as Record<string, unknown>)
+					: {};
+			const valid = async (token: unknown, host: boolean) => {
+				if (typeof token !== "string" || !tokenPattern.test(token))
+					return false;
+				const hash = await this.hashToken(token);
+				return host
+					? hash === this.room?.hostTokenHash
+					: Boolean(this.room?.guestTokenIds[hash]);
+			};
+			if (
+				!(await valid(proof.hostToken, true)) &&
+				!(await valid(proof.guestToken, false))
+			)
+				return {
+					status: 403,
+					body: {
+						error: "이 방에 참가했던 브라우저에서 기록을 확인해 주세요.",
+					},
+				};
+			if (this.room.snapshot.status !== "closed")
+				return {
+					status: 409,
+					body: { error: "진행 중인 방의 기록은 방 안에서 확인해 주세요." },
+				};
+			const { title, expiresAt, draw, history } = this.room.snapshot;
+			const draws = [...(draw ? [draw] : []), ...history]
+				.filter(
+					(entry, index, all) =>
+						all.findIndex((other) => other.id === entry.id) === index,
+				)
+				.slice(0, lunchRoomLimits.maxHistory);
+			return {
+				status: 200,
+				body: { title, expiresAt, draws: structuredClone(draws) },
+			};
+		});
+	}
+
 	async onRequest(request: Request): Promise<Response> {
 		if (
 			request.method === "GET" &&
@@ -418,7 +473,9 @@ export class LunchRoomServer extends Server<RoomEnv> {
 		}
 		if (
 			request.method !== "POST" ||
-			new URL(request.url).pathname !== nicknameCheckPath
+			![nicknameCheckPath, roomHistoryPath].includes(
+				new URL(request.url).pathname,
+			)
 		)
 			return new Response("Not Found", { status: 404 });
 		const startedAt = performance.now();
@@ -447,7 +504,10 @@ export class LunchRoomServer extends Server<RoomEnv> {
 				error instanceof RangeError ? 413 : 400,
 			);
 		}
-		const result = await this.checkNicknameAvailability(body);
+		const result =
+			new URL(request.url).pathname === roomHistoryPath
+				? await this.getClosedHistory(body)
+				: await this.checkNicknameAvailability(body);
 		return respond(result.body, result.status);
 	}
 

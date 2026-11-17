@@ -1277,12 +1277,7 @@
 	line-height: 1.7;
 	overflow-wrap: anywhere;
 }
-.room-terminal .room-terminal-action {
-	display: flex;
-	justify-content: center;
-	inline-size: 100%;
-	margin-block: 24px 12px;
-}
+
 @media (max-width: 900px) {
 	.room-layout {
 		grid-template-columns: minmax(0, 1fr);

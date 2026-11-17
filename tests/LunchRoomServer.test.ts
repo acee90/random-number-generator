@@ -301,6 +301,61 @@ describe("LunchRoomServer", () => {
 		expect(context.storage.alarm).toBeNull();
 	});
 
+	it("lets only former participants read closed history across wake without extending TTL or exposing chat/proofs", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const guestToken = "g".repeat(64);
+		await connect(server, context, "참가자", undefined, undefined, guestToken);
+		expect((await server.getClosedHistory({ hostToken })).status).toBe(409);
+		await send(server, host, { type: "start", id: "archive-draw" });
+		await context.drain();
+		vi.advanceTimersByTime(1500 + lunchRoomLimits.drawDurationMs);
+		await server.onAlarm();
+		const draw = latestSnapshot(host).snapshot.draw;
+		await returnToWaiting(server, host);
+		await send(server, host, { type: "start", id: "last-draw" });
+		await context.drain();
+		vi.advanceTimersByTime(1500 + lunchRoomLimits.drawDurationMs);
+		await server.onAlarm();
+		const last = latestSnapshot(host).snapshot.draw;
+		await send(server, host, { type: "room-close", id: "archive-close" });
+		const restored = createServer(context);
+		await restored.onStart();
+		const before = structuredClone(context.storage.values);
+		const alarm = context.storage.alarm;
+		for (const proof of [
+			{},
+			{ hostToken: "z".repeat(64) },
+			{ guestToken: "z".repeat(64) },
+			{ guestToken: hostToken },
+			null,
+		])
+			expect((await restored.getClosedHistory(proof)).status).toBe(403);
+		for (const proof of [{ hostToken }, { guestToken }]) {
+			const result = await restored.getClosedHistory(proof);
+			expect(result).toEqual({
+				status: 200,
+				body: {
+					title: "오늘의 점심",
+					expiresAt: storedSnapshot(context).expiresAt,
+					draws: [last, draw],
+				},
+			});
+			expect(Object.keys(result.body).sort()).toEqual([
+				"draws",
+				"expiresAt",
+				"title",
+			]);
+		}
+		expect(context.storage.values).toEqual(before);
+		expect(context.storage.alarm).toBe(alarm);
+		vi.setSystemTime(storedSnapshot(context).expiresAt);
+		expect((await restored.getClosedHistory({ hostToken })).status).toBe(410);
+		await restored.onAlarm();
+		expect(context.storage.values.size).toBe(0);
+		expect((await restored.getClosedHistory({ guestToken })).status).toBe(410);
+	});
+
 	it("keeps a room usable on closure save failure and permits a retry", async () => {
 		const { server, context } = await room();
 		const host = await connect(server, context, "방장", hostToken);

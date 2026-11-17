@@ -18,6 +18,7 @@ import {
 	normalizeLunchRoomNickname,
 } from "@/lib/lunchRoom";
 import { readLunchRoomName } from "@/lib/lunchRoomClient";
+import ClosedRoomHistory, { RoomTerminalActions } from "./ClosedRoomHistory";
 import "./room-entry.css";
 
 export default function RoomEntryGate({
@@ -79,14 +80,16 @@ export default function RoomEntryGate({
 	if (!loading && entryInfo.status === "closed")
 		return (
 			<section
-				className="room-entry-card"
+				className="room-entry-card room-closed-entry"
 				aria-labelledby={`${id}-closed-title`}
 			>
 				<h1 id={`${id}-closed-title`}>방이 종료되었습니다</h1>
-				<p>방장이 방을 종료했습니다. 새 방을 만들어 주세요.</p>
-				<Button asChild>
-					<a href="/create">새 방 만들기</a>
-				</Button>
+				<p>
+					방장이 방을 종료했습니다. 남아 있는 추첨 기록을 확인하고 저장할 수
+					있어요.
+				</p>
+				<RoomTerminalActions />
+				<ClosedRoomHistory key={roomId} roomId={roomId} />
 			</section>
 		);
 

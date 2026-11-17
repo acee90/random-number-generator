@@ -47,6 +47,7 @@ import {
 	type RoomDraw,
 } from "@/lib/lunchRoom";
 import { getSourceDisplayName } from "@/services/randomService";
+import ClosedRoomHistory, { RoomTerminalActions } from "./ClosedRoomHistory";
 import "./lunch-room.css";
 import "./lunch-room-mobile.css";
 
@@ -723,12 +724,8 @@ export default function LunchSessionPage({
 						<p>
 							{room.error || "방이 만료되었거나 더 이상 이용할 수 없습니다."}
 						</p>
-						<Button asChild size="lg" className="room-terminal-action">
-							<a href="/create">새 방 만들기</a>
-						</Button>
-						<Button asChild variant="outline">
-							<a href="/solo">혼자 추첨하기</a>
-						</Button>
+						<RoomTerminalActions />
+						<ClosedRoomHistory key={roomId} roomId={roomId} />
 					</section>
 				) : (
 					<>
