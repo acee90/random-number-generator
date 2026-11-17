@@ -176,4 +176,33 @@ describe("local game controller", () => {
 			expect(result.current.room.startDraw()).toBe(true);
 		});
 	});
+	it("restores history from edited lists into a fresh empty preparation session", async () => {
+		const first = setup();
+		await act(async () => {
+			await first.result.current.room.enterEditing();
+		});
+		await act(async () => {
+			await first.result.current.room.editRoom({
+				baseVersion: 1,
+				candidates: [{ ...places[0], name: "편집한 후보" }, places[1]],
+			});
+		});
+		await act(async () => {
+			await first.result.current.room.finalizeIntake();
+		});
+		await spin(first.result);
+		const record = structuredClone(
+			first.result.current.room.snapshot.history[0],
+		);
+		expect(record.listVersion).toBe(2);
+		first.unmount();
+		const fresh = renderHook(() => useSoloLunch());
+		expect(fresh.result.current.storageFailed).toBe(false);
+		expect(fresh.result.current.room.snapshot.history[0]).toEqual(record);
+		expect(fresh.result.current.room.snapshot.candidates).toEqual([]);
+		expect(fresh.result.current.room.snapshot.status).toBe("editing");
+		expect(
+			fresh.result.current.room.snapshot.listVersion,
+		).toBeGreaterThanOrEqual(record.listVersion);
+	});
 });

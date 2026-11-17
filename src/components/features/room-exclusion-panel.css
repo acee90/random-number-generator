@@ -24,32 +24,6 @@
 	line-height: 1.4;
 	cursor: pointer;
 }
-.room-draw-exclusions .room-draw-exclusion-switch {
-	inline-size: 42px;
-	block-size: 24px;
-	padding: 2px;
-	border: 1px solid var(--muted);
-	background: var(--surface);
-}
-.room-draw-exclusion-switch[data-state="checked"] {
-	background: var(--primary);
-	border-color: var(--ink);
-}
-.room-draw-exclusion-switch [data-slot="switch-thumb"] {
-	inline-size: 18px;
-	block-size: 18px;
-	background: var(--card);
-	translate: 0;
-	transform: translateX(0);
-}
-.room-draw-exclusion-switch[data-state="checked"] [data-slot="switch-thumb"] {
-	transform: translateX(18px);
-}
-[dir="rtl"]
-	.room-draw-exclusion-switch[data-state="checked"]
-	[data-slot="switch-thumb"] {
-	transform: translateX(-18px);
-}
 .room-draw-exclusion-note {
 	margin: 8px 0;
 	color: var(--muted);

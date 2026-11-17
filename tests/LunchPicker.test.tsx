@@ -166,6 +166,9 @@ describe("shared solo game screen", () => {
 		first.unmount();
 		render(<LunchPicker places={places} />);
 		fireEvent.click(screen.getByRole("button", { name: "지난 기록" }));
+		expect(document.activeElement).toBe(
+			screen.getByRole("heading", { name: "추첨 기록" }),
+		);
 		expect(
 			screen.getByRole("button", { name: "한식당 상세 기록 열기" }),
 		).toBeTruthy();
