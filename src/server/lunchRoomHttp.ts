@@ -18,7 +18,9 @@ const json = (value: unknown, status: number, headers?: HeadersInit) =>
 		headers: { "Cache-Control": "no-store", ...headers },
 	});
 
-type LunchRoomEnvironment = Env & { LUNCH_ROOM_LOCATION_HINT?: string };
+export type LunchRoomEnvironment = Cloudflare.Env & {
+	LUNCH_ROOM_LOCATION_HINT?: string;
+};
 
 function roomLocationOptions(
 	env: LunchRoomEnvironment,

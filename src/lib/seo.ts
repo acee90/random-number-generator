@@ -2,6 +2,28 @@ export const siteOrigin = "https://jeommechu.dev";
 export const socialImage = `${siteOrigin}/og-jeommechu-simple.png`;
 export const privateRobots = "noindex, nofollow";
 
+export type RoomShareInfo =
+	| { status: "open"; title: string }
+	| { status: "closed" | "expired" | "missing" | "unavailable" };
+
+export function createRoomSeoHead(roomId: string, info?: RoomShareInfo) {
+	const shareUrl = `${siteOrigin}/lunch-room/${encodeURIComponent(roomId)}`;
+	const unavailableTitles = {
+		closed: "종료된 추첨방 · 점메추",
+		expired: "만료된 추첨방 · 점메추",
+		missing: "찾을 수 없는 추첨방 · 점메추",
+		unavailable: lunchPageSeo.room.title,
+	};
+	return createSeoHead({
+		title:
+			info?.status === "open"
+				? `${info.title} · 점메추 방 초대`
+				: unavailableTitles[info?.status ?? "unavailable"],
+		description: shareUrl,
+		shareUrl,
+	});
+}
+
 export const lunchPageSeo = {
 	home: {
 		title: "점메추 · 점심 메뉴 룰렛과 함께하는 추첨",
@@ -27,12 +49,15 @@ export function createSeoHead({
 	title,
 	description,
 	path,
+	shareUrl,
 }: {
 	title: string;
 	description: string;
 	path?: "/" | "/solo";
+	shareUrl?: string;
 }) {
 	const canonical = path ? `${siteOrigin}${path === "/" ? "/" : path}` : null;
+	const openGraphUrl = canonical ?? shareUrl;
 	return {
 		meta: [
 			{ title },
@@ -46,7 +71,7 @@ export function createSeoHead({
 			{ property: "og:locale", content: "ko_KR" },
 			{ property: "og:title", content: title },
 			{ property: "og:description", content: description },
-			...(canonical ? [{ property: "og:url", content: canonical }] : []),
+			...(openGraphUrl ? [{ property: "og:url", content: openGraphUrl }] : []),
 			{ property: "og:image", content: socialImage },
 			{ property: "og:image:width", content: "1200" },
 			{ property: "og:image:height", content: "630" },
