@@ -27,6 +27,28 @@ const fault = (code) => Object.assign(new Error(code), { publicCode: code });
 function ensure(condition, code) {
 	if (!condition) throw fault(code);
 }
+function checkDrawGeometry(draw) {
+	ensure(
+		draw.durationMs === 4000 &&
+			draw.fromRotation === 0 &&
+			Number.isFinite(draw.toRotation) &&
+			draw.toRotation >= 1440 &&
+			draw.toRotation < 1800 &&
+			Number.isSafeInteger(draw.winnerIndex) &&
+			draw.winnerIndex >= 0 &&
+			draw.winnerIndex < draw.candidates.length &&
+			Number.isFinite(draw.landingFraction) &&
+			draw.landingFraction >= 0.1 &&
+			draw.landingFraction <= 0.9,
+		"INVALID_DRAW_GEOMETRY",
+	);
+	const angleAtPointer = ((-draw.toRotation % 360) + 360) % 360;
+	const slicePosition = angleAtPointer / (360 / draw.candidates.length);
+	ensure(
+		Math.abs(slicePosition - draw.winnerIndex - draw.landingFraction) < 1e-7,
+		"POINTER_OUTSIDE_RECORDED_WINNING_POSITION",
+	);
+}
 function safeCode(error) {
 	return typeof error?.publicCode === "string"
 		? error.publicCode
@@ -284,6 +306,19 @@ async function run(config) {
 			if (client.ws.readyState === WebSocket.OPEN)
 				client.ws.close(1000, "Release check complete");
 			else client.ws.terminate();
+		});
+	}
+	function serverClosure(client) {
+		return new Promise((resolve, reject) => {
+			const timeout = setTimeout(
+				() => reject(fault("SERVER_CLOSE_TIMEOUT")),
+				config.timeoutMs,
+			);
+			client.ws.once("close", (code) => {
+				clearTimeout(timeout);
+				if (code === 4008) resolve();
+				else reject(fault("WRONG_ROOM_CLOSE_CODE"));
+			});
 		});
 	}
 	async function request(client, body, success) {
@@ -800,6 +835,9 @@ async function run(config) {
 
 		activeStage = "draw-sync-and-late-join";
 		const first = await start(host, guest);
+		const busyClose = await command(host, { type: "room-close" });
+		ensure(busyClose.code === "DRAW_BUSY", "ROOM_CLOSED_DURING_DRAW");
+		pass("host-cannot-close-room-during-draw");
 		const [hostDrawing, guestDrawing] = await Promise.all([
 			drawFor(host, first.id),
 			drawFor(guest, first.id),
@@ -814,7 +852,7 @@ async function run(config) {
 			"DRAW_CLIENTS_DIVERGED",
 		);
 		ensure(
-			firstDraw.durationMs === 7200 &&
+			firstDraw.durationMs === 4000 &&
 				Number.isSafeInteger(firstDraw.startedAt) &&
 				Number.isSafeInteger(firstDraw.timestamp) &&
 				Number.isSafeInteger(firstDraw.requestedAt) &&
@@ -827,6 +865,7 @@ async function run(config) {
 				firstDraw.listVersion === firstVersion,
 			"INVALID_DRAW_METADATA",
 		);
+		checkDrawGeometry(firstDraw);
 		ensure(
 			firstDraw.probabilities?.length === firstDrawCandidates.length &&
 				firstDraw.probabilities.every(
@@ -850,7 +889,10 @@ async function run(config) {
 		pass(
 			"custom-classifications-and-filtered-final-candidates-are-fixed-in-the-draw",
 		);
-		pass("draw-same-winner-and-7200ms-timeline", { source: firstDraw.source });
+		pass("draw-same-winner-and-4000ms-random-position", {
+			source: firstDraw.source,
+			landingFraction: firstDraw.landingFraction,
+		});
 		const late = await join(lateName, lateProof);
 		ensure(
 			late.snapshot.status === "drawing" &&
@@ -1142,6 +1184,10 @@ async function run(config) {
 			complete(guest, second.id),
 		]);
 		drawSources.push(secondCompleted.draw.source);
+		checkDrawGeometry(secondCompleted.draw);
+		pass("second-draw-retains-correct-winning-position", {
+			landingFraction: secondCompleted.draw.landingFraction,
+		});
 		const secondWinnerId =
 			secondCompleted.draw.candidates[secondCompleted.draw.winnerIndex].id;
 		ensure(
@@ -1203,6 +1249,52 @@ async function run(config) {
 		pass("public-snapshots-contain-no-proofs-or-hashes", {
 			observations: publicSnapshotCount,
 		});
+
+		activeStage = "explicit-room-closure";
+		const deniedClose = await command(guest, { type: "room-close" });
+		ensure(
+			deniedClose.code === "HOST_REQUIRED" && host.snapshot.status !== "closed",
+			"GUEST_CLOSED_ROOM",
+		);
+		pass("only-host-can-close-room");
+		const joinedClients = [host, guest, late];
+		const closureSnapshots = joinedClients.map((client) =>
+			waitSnapshot(client, (snapshot) => snapshot.status === "closed"),
+		);
+		const socketClosures = joinedClients.map(serverClosure);
+		const [closure] = await Promise.all([
+			command(host, { type: "room-close" }),
+			...closureSnapshots,
+			...socketClosures,
+		]);
+		ensure(closure.type === "ack", "HOST_ROOM_CLOSE_REJECTED");
+		pass("host-closure-acknowledged-and-all-clients-closed");
+		const closedEntry = await fetch(
+			`${config.origin}/api/lunch/rooms/${roomId}/entry-info`,
+			{
+				cache: "no-store",
+				signal: AbortSignal.any([
+					controller.signal,
+					AbortSignal.timeout(config.timeoutMs),
+				]),
+			},
+		);
+		const closedInfo = await closedEntry.json();
+		const closedNickname = await post(
+			`/api/lunch/rooms/${roomId}/nickname-availability`,
+			{ name: "종료검증", ...outsiderProof },
+		);
+		ensure(
+			closedEntry.status === 410 &&
+				closedInfo.code === "ROOM_CLOSED" &&
+				closedNickname.status === 410 &&
+				closedNickname.value.code === "ROOM_CLOSED",
+			"CLOSED_ROOM_HTTP_ADMISSION_ACCEPTED",
+		);
+		pass("closed-room-rejects-http-entry-and-nickname-check");
+		await join(hostName, hostProof, "ROOM_CLOSED");
+		await join("종료검증", outsiderProof, "ROOM_CLOSED");
+		pass("closed-room-rejects-host-and-guest-websocket-reentry");
 		passed = true;
 	} catch (error) {
 		emit("failure", { stage: activeStage, code: safeCode(error) });
