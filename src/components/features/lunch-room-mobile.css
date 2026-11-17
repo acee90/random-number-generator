@@ -204,17 +204,15 @@
 		margin-block-start: 6px;
 	}
 	.lunch-room.room-live .room-feedback-empty {
-		min-block-size: 28px;
 		margin-block-start: 6px;
-		padding: 4px 0;
 	}
 	.lunch-room.room-live .room-feedback-list li {
-		min-block-size: 28px;
+		min-block-size: 36px;
 		gap: 4px;
 		font-size: 12px;
 	}
 	.lunch-room.room-live .room-feedback-list li + li {
-		padding-block-start: 4px;
+		padding-block-start: 0;
 	}
 	.lunch-room.room-live .room-feedback-list .room-feedback-delay {
 		font-size: 11px;

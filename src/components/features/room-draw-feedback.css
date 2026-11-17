@@ -71,6 +71,7 @@
 	isolation: isolate;
 }
 .room-feedback-team-label {
+	line-height: 1.25;
 	color: var(--ink);
 }
 .room-draw-feedback[data-mode="results"] .room-feedback-tally-icon svg {
@@ -85,10 +86,11 @@
 	grid-template-columns: 32px max-content max-content;
 	justify-content: center;
 	align-items: center;
+	align-content: center;
 	gap: 8px;
 	min-block-size: 88px;
 	margin: 0;
-	padding: 12px 16px 24px;
+	padding: 12px 16px;
 	border-radius: var(--control-radius);
 
 	color: var(--team-color);
@@ -108,6 +110,19 @@
 	margin: 0;
 	color: var(--ink);
 }
+.room-draw-feedback[data-mode="results"]
+	:is(.room-feedback-list ul, .room-feedback-empty) {
+	background: repeating-linear-gradient(
+		to bottom,
+		transparent 0 35px,
+		var(--line) 35px 36px
+	);
+}
+.room-draw-feedback[data-mode="results"] .room-feedback-list li {
+	min-block-size: 36px;
+	border-block-start: 0;
+	padding-block-start: 0;
+}
 .room-draw-feedback[data-mode="results"] .room-feedback-list ul {
 	flex: none;
 	align-content: start;
@@ -121,12 +136,12 @@
 	gap: 0;
 }
 .room-draw-feedback[data-mode="results"] .room-feedback-empty {
-	display: grid;
-	place-items: center;
+	display: block;
 	flex: none;
 	block-size: 108px;
 	margin: 8px 0 0;
-	padding: 8px 0;
+	padding: 0 8px;
+	line-height: 36px;
 }
 .room-feedback-list[data-selected="true"] .room-feedback-tally {
 	background: color-mix(
@@ -408,6 +423,8 @@
 @container room-feedback (max-width: 360px) {
 	.room-draw-feedback[data-mode="results"] .room-feedback-tally {
 		grid-template-columns: 28px max-content;
+		min-block-size: 104px;
+		padding: 16px;
 		gap: 4px;
 		font-size: 15px;
 	}
