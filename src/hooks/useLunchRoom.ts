@@ -60,7 +60,8 @@ export type RoomMutation =
 	| "edit"
 	| "options"
 	| "filter"
-	| "reset";
+	| "reset"
+	| "close";
 type PendingMutation = {
 	id: string;
 	signature: string;
@@ -75,6 +76,7 @@ type MutationMessage = Extract<
 			| "recommend"
 			| "remove-candidate"
 			| "room-edit"
+			| "room-close"
 			| "options"
 			| "game-filter"
 			| "reset-exclusions";
@@ -84,6 +86,7 @@ type MutationMessage = Extract<
 const terminalCodes = new Set([
 	"ROOM_NOT_FOUND",
 	"ROOM_EXPIRED",
+	"ROOM_CLOSED",
 	"ROOM_FULL",
 	"HOST_AUTH_FAILED",
 ]);
@@ -736,7 +739,11 @@ export function useLunchRoom(
 				message.snapshot.status === "closed" ||
 				message.snapshot.expiresAt <= serverNow()
 			)
-				stop("이 방의 이용 시간이 끝났습니다. 새 방을 만들어 주세요.");
+				stop(
+					message.snapshot.expiresAt > serverNow()
+						? "방장이 방을 종료했습니다. 새 방을 만들어 주세요."
+						: "이 방의 이용 시간이 끝났습니다. 새 방을 만들어 주세요.",
+				);
 		}
 		function onOffline(event: Event) {
 			if (!active) return;
@@ -1154,6 +1161,11 @@ export function useLunchRoom(
 			)
 		);
 	}
+	function closeRoom() {
+		if (!canChangeOptions()) return Promise.resolve(false);
+		return requestMutation("close", { type: "room-close", id: actionId() });
+	}
+
 	function editRoom({
 		baseVersion,
 		title,
@@ -1379,6 +1391,7 @@ export function useLunchRoom(
 		addCandidate,
 		removeCandidate,
 		editRoom,
+		closeRoom,
 		updateRoomOptions,
 		updateGameFilter,
 		resetExclusions,

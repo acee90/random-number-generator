@@ -5,7 +5,7 @@ import { parseRoomEntryInfo } from "@/lib/roomEntryInfo";
 type EntryInfoState = {
 	roomId: string;
 	title: string | null;
-	status: "loading" | "ready" | "error";
+	status: "loading" | "ready" | "error" | "closed";
 };
 
 /** Read the invite's title without opening a socket or using identity proofs. */
@@ -35,6 +35,19 @@ export function useRoomEntryInfo({
 					cache: "no-store",
 					signal: controller.signal,
 				});
+				if (response.status === 410) {
+					const body: unknown = await response.json();
+					if (
+						typeof body === "object" &&
+						body !== null &&
+						"code" in body &&
+						body.code === "ROOM_CLOSED"
+					) {
+						if (active && !controller.signal.aborted)
+							setResult({ roomId, title: null, status: "closed" });
+						return;
+					}
+				}
 				if (!response.ok) throw new Error("Room info unavailable");
 				const info = parseRoomEntryInfo(await response.json());
 				if (!info) throw new Error("Invalid room info");

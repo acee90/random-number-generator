@@ -43,3 +43,9 @@
 	margin: 0;
 	overflow-wrap: anywhere;
 }
+
+.room-settings-end {
+	margin-block-start: 20px;
+	padding-block-start: 16px;
+	border-block-start: 1px solid var(--line);
+}

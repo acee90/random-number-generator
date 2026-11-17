@@ -404,6 +404,22 @@ export function RoomPageFixtureProvider({
 			);
 			return true;
 		},
+		async closeRoom() {
+			if (
+				!options.isHost ||
+				["fetching", "drawing", "closed"].includes(
+					current.current.snapshot.status,
+				)
+			)
+				return false;
+			commit((value) => ({
+				...value,
+				connection: "closed",
+				error: "방장이 방을 종료했습니다. 새 방을 만들어 주세요.",
+				snapshot: { ...value.snapshot, status: "closed" },
+			}));
+			return true;
+		},
 		enterEditing: (expectedRevision) => intake("edit", expectedRevision),
 		openIntake: (expectedRevision) => intake("open", expectedRevision),
 		closeIntake: (expectedRevision) => intake("close", expectedRevision),

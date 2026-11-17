@@ -264,6 +264,68 @@ afterEach(() => {
 });
 
 describe("LunchRoomServer", () => {
+	it("persists an explicit host closure, closes everyone and rejects reentry after wake until TTL cleanup", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const guest = await connect(server, context, "참가자");
+		const unjoined = await connect(server, context);
+		await send(server, unjoined, { type: "room-close", id: "close-unjoined" });
+		expect(hasError(unjoined, "JOIN_REQUIRED")).toBe(true);
+		await send(server, guest, { type: "room-close", id: "close-guest" });
+		expect(hasError(guest, "HOST_REQUIRED")).toBe(true);
+		expect(storedSnapshot(context).status).toBe("waiting");
+		const expiresAt = storedSnapshot(context).expiresAt;
+		await send(server, host, { type: "room-close", id: "close-host" });
+		expect(storedSnapshot(context).status).toBe("closed");
+		expect(storedSnapshot(context).expiresAt).toBe(expiresAt);
+		for (const socket of [host, guest, unjoined]) {
+			expect(socket.closed).toBe(true);
+			expect(hasError(socket, "ROOM_CLOSED")).toBe(true);
+		}
+		const restored = createServer(context);
+		await restored.onStart();
+		const returning = await connect(restored, context, "방장", hostToken);
+		expect(returning.closed).toBe(true);
+		expect(hasError(returning, "ROOM_CLOSED")).toBe(true);
+		expect(await restored.getEntryInfo()).toMatchObject({
+			status: 410,
+			body: { code: "ROOM_CLOSED" },
+		});
+		expect(
+			await restored.checkNicknameAvailability({ name: "새 참가자" }),
+		).toMatchObject({ status: 410, body: { code: "ROOM_CLOSED" } });
+		vi.setSystemTime(expiresAt);
+		await restored.onAlarm();
+		expect(context.storage.values.size).toBe(0);
+		expect(context.storage.alarm).toBeNull();
+	});
+
+	it("keeps a room usable on closure save failure and permits a retry", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const before = storedSnapshot(context);
+		vi.spyOn(context.storage, "put").mockRejectedValueOnce(
+			new Error("save failure"),
+		);
+		await send(server, host, { type: "room-close", id: "close-retry" });
+		expect(hasError(host, "SAVE_FAILED")).toBe(true);
+		expect(host.closed).toBe(false);
+		expect(storedSnapshot(context)).toEqual(before);
+		await send(server, host, { type: "room-close", id: "close-retry" });
+		expect(storedSnapshot(context).status).toBe("closed");
+	});
+
+	it("rejects closure while entropy is being fetched", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		entropy.mockImplementationOnce(() => new Promise(() => {}));
+		await send(server, host, { type: "start", id: "pending-draw" });
+		await send(server, host, { type: "room-close", id: "close-drawing" });
+		expect(hasError(host, "DRAW_BUSY")).toBe(true);
+		expect(storedSnapshot(context).status).toBe("fetching");
+		expect(host.closed).toBe(false);
+	});
+
 	it("rejects13-unit nicknames on initial joins and renames without changing identity or privileges", async () => {
 		const { server, context } = await room();
 		const host = await connect(server, context, "방장", hostToken);

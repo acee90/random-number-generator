@@ -71,10 +71,24 @@ export async function handleLunchRoomRequest(
 			}
 			if (response.status === 404 || response.status === 410) {
 				const expired = response.status === 410;
+				const closed =
+					expired &&
+					typeof body === "object" &&
+					body !== null &&
+					"code" in body &&
+					body.code === "ROOM_CLOSED";
 				return json(
 					{
-						code: expired ? "ROOM_EXPIRED" : "ROOM_NOT_FOUND",
-						error: expired ? "방이 만료됐습니다." : "방을 찾을 수 없습니다.",
+						code: closed
+							? "ROOM_CLOSED"
+							: expired
+								? "ROOM_EXPIRED"
+								: "ROOM_NOT_FOUND",
+						error: closed
+							? "방장이 방을 종료했습니다."
+							: expired
+								? "방이 만료됐습니다."
+								: "방을 찾을 수 없습니다.",
 					},
 					response.status,
 				);

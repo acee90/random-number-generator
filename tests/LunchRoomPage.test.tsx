@@ -157,6 +157,44 @@ describe("local chat delivery display", () => {
 		};
 	}
 
+	it("confirms host-only closure, preserves cancellation and allows retry after failure", async () => {
+		room.self = { id: "host-client", isHost: true };
+		render(<LunchRoomPage roomId={roomId} />);
+		fireEvent.click(screen.getByRole("button", { name: "방 설정" }));
+		fireEvent.click(screen.getByRole("button", { name: "방 종료" }));
+		let confirmation = screen.getByRole("alertdialog");
+		expect(
+			within(confirmation).getByText(/모든 참가자의 이용이 종료/),
+		).toBeTruthy();
+		fireEvent.click(within(confirmation).getByRole("button", { name: "취소" }));
+		expect(room.closeRoom).not.toHaveBeenCalled();
+		fireEvent.click(screen.getByRole("button", { name: "방 종료" }));
+		confirmation = screen.getByRole("alertdialog");
+		vi.mocked(room.closeRoom).mockResolvedValueOnce(false);
+		await act(async () =>
+			fireEvent.click(
+				within(confirmation).getByRole("button", { name: "방 종료" }),
+			),
+		);
+		expect(within(confirmation).getByRole("alert").textContent).toContain(
+			"다시 시도",
+		);
+		await act(async () =>
+			fireEvent.click(
+				within(confirmation).getByRole("button", { name: "방 종료" }),
+			),
+		);
+		expect(room.closeRoom).toHaveBeenCalledTimes(2);
+		expect(screen.queryByRole("alertdialog")).toBeNull();
+	});
+
+	it("does not offer closure to guests", () => {
+		room.self = { id: "guest-client", isHost: false };
+		render(<LunchRoomPage roomId={roomId} />);
+		fireEvent.click(screen.getByRole("button", { name: "방 설정" }));
+		expect(screen.queryByRole("button", { name: "방 종료" })).toBeNull();
+	});
+
 	it("labels an immediate message as sending and shows one confirmed copy when the server acknowledges it", () => {
 		const local = localChat("sending");
 		room.localChatMessages = [local];
@@ -511,6 +549,7 @@ beforeEach(() => {
 		addCandidate: vi.fn(async () => true),
 		removeCandidate: vi.fn(async () => true),
 		editRoom: vi.fn(async () => true),
+		closeRoom: vi.fn(async () => true),
 		updateRoomOptions: vi.fn(async () => true),
 		updateGameFilter: vi.fn(async () => true),
 		resetExclusions: vi.fn(async () => true),

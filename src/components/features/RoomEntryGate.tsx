@@ -48,7 +48,7 @@ export default function RoomEntryGate({
 		roomId,
 		name,
 		composing,
-		enabled: !loading && !pending,
+		enabled: !loading && !pending && entryInfo.status !== "closed",
 		rejected: Boolean(error),
 	});
 	const canEnter = !pending && availability.status === "available";
@@ -75,6 +75,20 @@ export default function RoomEntryGate({
 	useEffect(() => {
 		if (error && !loading && !pending) inputRef.current?.focus();
 	}, [loading, error, pending]);
+
+	if (!loading && entryInfo.status === "closed")
+		return (
+			<section
+				className="room-entry-card"
+				aria-labelledby={`${id}-closed-title`}
+			>
+				<h1 id={`${id}-closed-title`}>방이 종료되었습니다</h1>
+				<p>방장이 방을 종료했습니다. 새 방을 만들어 주세요.</p>
+				<Button asChild>
+					<a href="/create">새 방 만들기</a>
+				</Button>
+			</section>
+		);
 
 	if (loading)
 		return (

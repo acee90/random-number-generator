@@ -181,6 +181,7 @@ export type ClientMessage =
 			chatProtocol?: "delta-v1";
 	  }
 	| { type: "activity" }
+	| { type: "room-close"; id: string }
 	| { type: "chat"; id: string; text: string; diagnosticId?: string }
 	| {
 			type: "start";
@@ -581,6 +582,8 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
 						intakeId: value.intakeId,
 					}
 				: null;
+		case "room-close":
+			return isId(value.id) ? { type: "room-close", id: value.id } : null;
 		case "room-edit": {
 			const title =
 				value.title === undefined ? undefined : text(value.title, 60);
