@@ -88,6 +88,7 @@
 
 	color: var(--team-color);
 	font-size: 15px;
+	background: color-mix(in srgb, var(--team-color) 8%, var(--background));
 }
 
 .room-draw-feedback[data-mode="results"] .room-feedback-tally-number {
@@ -121,8 +122,12 @@
 	padding: 8px;
 }
 .room-feedback-list[data-selected="true"] .room-feedback-tally {
-	background: var(--lime);
-	color: var(--foreground);
+	background: color-mix(
+		in srgb,
+		var(--team-color, var(--accent-foreground)) 28%,
+		var(--background)
+	);
+	color: var(--team-color, var(--accent-foreground));
 	opacity: 1;
 }
 .room-feedback-rank {
@@ -317,9 +322,12 @@
 	white-space: nowrap;
 	transform: translateX(-50%);
 }
-.room-feedback-tally[aria-disabled="false"]:hover .room-feedback-team-label {
-	text-decoration: underline;
-	text-underline-offset: 4px;
+.room-feedback-tally[aria-disabled="false"]:hover {
+	background: color-mix(
+		in srgb,
+		var(--team-color, var(--accent-foreground)) 18%,
+		var(--background)
+	);
 }
 .room-feedback-tally[aria-disabled="true"] {
 	cursor: default;
