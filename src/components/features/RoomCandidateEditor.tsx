@@ -380,81 +380,84 @@ export default function RoomCandidateEditor({
 		<section className="room-simple-editor" aria-label="후보 편집">
 			<div className="room-simple-heading">
 				<h2>{title}</h2>
-				{headerActions}
-				<DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-					<DropdownMenuTrigger asChild>
-						<Button
-							ref={menuRef}
-							variant="ghost"
-							size="icon"
+				<div className="room-simple-header-actions">
+					{children}
+					{headerActions}
+					<DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+						<DropdownMenuTrigger asChild>
+							<Button
+								ref={menuRef}
+								variant="ghost"
+								size="icon"
+								aria-label="목록 작업"
+								disabled={disabled}
+							>
+								<Ellipsis size={18} aria-hidden="true" />
+							</Button>
+						</DropdownMenuTrigger>
+						<DropdownMenuContent
 							aria-label="목록 작업"
-							disabled={disabled}
-						>
-							<Ellipsis size={18} aria-hidden="true" />
-						</Button>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent
-						aria-label="목록 작업"
-						onCloseAutoFocus={(event) => {
-							if (overlayFromMenu.current) {
-								event.preventDefault();
-								overlayFromMenu.current = false;
-							}
-						}}
-					>
-						<DropdownMenuLabel>{sourceName}</DropdownMenuLabel>
-						<DropdownMenuItem
-							disabled={disabled}
-							onSelect={() => {
-								overlayFromMenu.current = true;
-								onLoad(menuRef.current);
+							onCloseAutoFocus={(event) => {
+								if (overlayFromMenu.current) {
+									event.preventDefault();
+									overlayFromMenu.current = false;
+								}
 							}}
 						>
-							<FolderOpen size={16} aria-hidden="true" /> 목록 불러오기
-						</DropdownMenuItem>
-						<DropdownMenuItem
-							disabled={disabled || (!candidates.length && !newName.trim())}
-							onSelect={() => {
-								overlayFromMenu.current = true;
-								onSave(menuRef.current);
-							}}
-						>
-							<Save size={16} aria-hidden="true" /> 내 목록에 저장
-						</DropdownMenuItem>
-						<DropdownMenuItem
-							disabled={
-								disabled || candidates.length >= lunchRoomLimits.maxCandidates
-							}
-							onSelect={() => {
-								overlayFromMenu.current = true;
-								setBulkError("");
-								setBulkOpen(true);
-							}}
-						>
-							<ListPlus size={16} aria-hidden="true" /> 여러 개 추가
-						</DropdownMenuItem>
-						<DropdownMenuSeparator />
-						<DropdownMenuItem
-							variant="destructive"
-							disabled={disabled || (!candidates.length && !newName.trim())}
-							onSelect={() => {
-								overlayFromMenu.current = true;
-								setClearOpen(true);
-							}}
-						>
-							<Trash2 size={16} aria-hidden="true" /> 전체 비우기
-						</DropdownMenuItem>
-						<DropdownMenuItem
-							disabled={disabled || !unsaved}
-							onSelect={() => {
-								overlayFromMenu.current = true;
-								onDiscard(menuRef.current);
-							}}
-						>
-							<RotateCcw size={16} aria-hidden="true" /> 변경 취소
-						</DropdownMenuItem>
-					</DropdownMenuContent>
-				</DropdownMenu>
+							<DropdownMenuLabel>{sourceName}</DropdownMenuLabel>
+							<DropdownMenuItem
+								disabled={disabled}
+								onSelect={() => {
+									overlayFromMenu.current = true;
+									onLoad(menuRef.current);
+								}}
+							>
+								<FolderOpen size={16} aria-hidden="true" /> 목록 불러오기
+							</DropdownMenuItem>
+							<DropdownMenuItem
+								disabled={disabled || (!candidates.length && !newName.trim())}
+								onSelect={() => {
+									overlayFromMenu.current = true;
+									onSave(menuRef.current);
+								}}
+							>
+								<Save size={16} aria-hidden="true" /> 내 목록에 저장
+							</DropdownMenuItem>
+							<DropdownMenuItem
+								disabled={
+									disabled || candidates.length >= lunchRoomLimits.maxCandidates
+								}
+								onSelect={() => {
+									overlayFromMenu.current = true;
+									setBulkError("");
+									setBulkOpen(true);
+								}}
+							>
+								<ListPlus size={16} aria-hidden="true" /> 여러 개 추가
+							</DropdownMenuItem>
+							<DropdownMenuSeparator />
+							<DropdownMenuItem
+								variant="destructive"
+								disabled={disabled || (!candidates.length && !newName.trim())}
+								onSelect={() => {
+									overlayFromMenu.current = true;
+									setClearOpen(true);
+								}}
+							>
+								<Trash2 size={16} aria-hidden="true" /> 전체 비우기
+							</DropdownMenuItem>
+							<DropdownMenuItem
+								disabled={disabled || !unsaved}
+								onSelect={() => {
+									overlayFromMenu.current = true;
+									onDiscard(menuRef.current);
+								}}
+							>
+								<RotateCcw size={16} aria-hidden="true" /> 변경 취소
+							</DropdownMenuItem>
+						</DropdownMenuContent>
+					</DropdownMenu>
+				</div>
 			</div>
 
 			<div className="room-simple-listbar">
@@ -611,6 +614,25 @@ export default function RoomCandidateEditor({
 				</p>
 			)}
 
+			{deleted && (
+				<div className="room-simple-undo">
+					<span>{deleted.candidate.name} 삭제됨</span>
+					<Button
+						variant="ghost"
+						size="sm"
+						disabled={
+							disabled || candidates.length >= lunchRoomLimits.maxCandidates
+						}
+						onClick={undoDelete}
+					>
+						되돌리기
+					</Button>
+					{candidates.length >= lunchRoomLimits.maxCandidates && (
+						<span>복구하려면 후보를 하나 비워 주세요.</span>
+					)}
+				</div>
+			)}
+
 			<ul className="room-simple-list" aria-label="후보 편집 목록">
 				{visible.map((candidate) => {
 					const index = candidates.findIndex(
@@ -638,23 +660,24 @@ export default function RoomCandidateEditor({
 							data-included={included}
 							data-selecting={filterOpen}
 						>
-							{filterOpen && (
-								<label
-									className="room-simple-check"
-									htmlFor={`${id}-include-${candidate.id}`}
-								>
-									<Input
-										id={`${id}-include-${candidate.id}`}
-										type="checkbox"
-										checked={!manualExcluded}
-										disabled={disabled}
-										onChange={(event) =>
-											changeInclusion(candidate, event.currentTarget.checked)
-										}
-									/>
-									<span className="sr-only">{candidate.name} 추첨 포함</span>
-								</label>
-							)}
+							<label
+								className="room-simple-check"
+								htmlFor={`${id}-include-${candidate.id}`}
+							>
+								<Input
+									id={`${id}-include-${candidate.id}`}
+									type="checkbox"
+									checked={!manualExcluded}
+									disabled={disabled}
+									onChange={(event) =>
+										changeInclusion(candidate, event.currentTarget.checked)
+									}
+								/>
+								<span className="sr-only">{candidate.name} 추첨 포함</span>
+							</label>
+							<span className="room-simple-index" aria-hidden="true">
+								{index + 1}
+							</span>
 							<div className="room-simple-name-column">
 								{editing?.id === candidate.id ? (
 									<div className="room-simple-name-edit">
@@ -810,6 +833,21 @@ export default function RoomCandidateEditor({
 							>
 								{categoryOf(candidate)}
 							</Button>
+							<Button
+								variant="ghost"
+								size="icon"
+								className="room-simple-delete"
+								aria-label={`${candidate.name} 후보 삭제`}
+								disabled={disabled}
+								onClick={() => {
+									if (!finishName()) return;
+									deleteCandidate(candidate);
+									focusAfterDelete.current = false;
+									newCandidateRef.current?.focus();
+								}}
+							>
+								<CircleMinus size={18} aria-hidden="true" />
+							</Button>
 							<DropdownMenu
 								open={rowMenu === candidate.id}
 								onOpenChange={(open) => {
@@ -822,6 +860,7 @@ export default function RoomCandidateEditor({
 										variant="ghost"
 										size="icon"
 										aria-label={`${candidate.name} 후보 관리`}
+										className="room-simple-row-menu"
 										disabled={disabled}
 									>
 										<Ellipsis size={18} aria-hidden="true" />
@@ -873,27 +912,8 @@ export default function RoomCandidateEditor({
 							: "선택한 분류의 후보가 없습니다. 필터를 변경해 주세요."}
 				</p>
 			)}
-			{deleted && (
-				<div className="room-simple-undo">
-					<span>{deleted.candidate.name} 삭제됨</span>
-					<Button
-						variant="ghost"
-						size="sm"
-						disabled={
-							disabled || candidates.length >= lunchRoomLimits.maxCandidates
-						}
-						onClick={undoDelete}
-					>
-						되돌리기
-					</Button>
-					{candidates.length >= lunchRoomLimits.maxCandidates && (
-						<span>복구하려면 후보를 하나 비워 주세요.</span>
-					)}
-				</div>
-			)}
 			<footer className="room-simple-footer">
 				<output aria-live="polite">추첨 {eligibleCount}개</output>
-				<div className="room-simple-stage-actions">{children}</div>
 			</footer>
 			<p className="room-simple-note room-simple-save-status">
 				{unsaved

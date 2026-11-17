@@ -1994,7 +1994,9 @@ describe("synchronized lunch room UI", () => {
 		fireEvent.change(candidateName(1), {
 			target: { value: "새 이름" },
 		});
-		expect(screen.queryByRole("checkbox", { name: /추첨 포함$/ })).toBeNull();
+		expect(
+			screen.getAllByRole("checkbox", { name: /추첨 포함$/ }),
+		).toHaveLength(2);
 		setCandidateCategory(1, "새로운 분류");
 		await act(async () => saveDraftBeforeStage());
 		expect(room.editRoom).toHaveBeenCalledWith({
@@ -2864,7 +2866,9 @@ describe("synchronized lunch room UI", () => {
 		});
 		const before = structuredClone(room.snapshot);
 		const view = render(<LunchRoomPage roomId={roomId} />);
-		expect(screen.queryByRole("checkbox", { name: /추첨 포함$/ })).toBeNull();
+		expect(
+			screen.getAllByRole("checkbox", { name: /추첨 포함$/ }).length,
+		).toBeGreaterThan(0);
 		fireEvent.click(filterButton());
 		expect(filterButton().getAttribute("aria-expanded")).toBe("true");
 		expect(screen.queryByRole("textbox", { name: /번 후보 이름$/ })).toBeNull();
@@ -2887,7 +2891,9 @@ describe("synchronized lunch room UI", () => {
 		fireEvent.click(filterButton());
 		expect(candidateRows()).toHaveLength(1);
 		expect(screen.getByText("전체 후보 3개")).toBeTruthy();
-		expect(screen.queryByRole("checkbox", { name: /추첨 포함$/ })).toBeNull();
+		expect(
+			screen.getAllByRole("checkbox", { name: /추첨 포함$/ }).length,
+		).toBeGreaterThan(0);
 		fireEvent.click(filterButton());
 		expect(
 			screen
@@ -3281,6 +3287,49 @@ describe("synchronized lunch room UI", () => {
 		);
 		expect(room.finalizeIntake).toHaveBeenCalledOnce();
 		expect(room.editRoom).toHaveBeenCalledOnce();
+		expect(room.updateGameFilter).not.toHaveBeenCalled();
+	});
+
+	it("groups intake with finalize and allows direct exclusion, removal and undo", () => {
+		room.self = { id: "host-client", isHost: true };
+		room.snapshot = snapshot({
+			status: "editing",
+			candidates: sampleLunchPlaces.slice(0, 3),
+		});
+		const original = structuredClone(room.snapshot);
+		render(<LunchRoomPage roomId={roomId} />);
+		const header = document.querySelector(
+			".room-simple-header-actions",
+		) as HTMLElement;
+		expect(
+			within(header).getByRole("switch", { name: "후보 추천받기" }),
+		).toBeTruthy();
+		expect(within(header).getByRole("button", { name: "마감" })).toBeTruthy();
+		const name = sampleLunchPlaces[0].name;
+		const included = screen.getByRole("checkbox", {
+			name: `${name} 추첨 포함`,
+		}) as HTMLInputElement;
+		fireEvent.click(included);
+		expect(included.checked).toBe(false);
+		expect(
+			screen.getByRole("button", { name: `${name} 이름 수정` }).textContent,
+		).toContain("제외");
+		fireEvent.click(screen.getByRole("button", { name: `${name} 후보 삭제` }));
+		expect(candidateRows()).toHaveLength(2);
+		expect(document.activeElement).toBe(
+			screen.getByRole("textbox", { name: "새 후보 이름" }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "되돌리기" }));
+		expect(candidateRows()).toHaveLength(3);
+		expect(
+			(
+				screen.getByRole("checkbox", {
+					name: `${name} 추첨 포함`,
+				}) as HTMLInputElement
+			).checked,
+		).toBe(false);
+		expect(room.snapshot).toEqual(original);
+		expect(room.editRoom).not.toHaveBeenCalled();
 		expect(room.updateGameFilter).not.toHaveBeenCalled();
 	});
 

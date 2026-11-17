@@ -408,7 +408,7 @@ describe("Storybook room page with the local transport adapter", () => {
 			screen.queryByRole("checkbox", {
 				name: `${sampleLunchPlaces[0].name} 추첨 포함`,
 			}),
-		).toBeNull();
+		).toBeTruthy();
 		fireEvent.change(candidateName(1), {
 			target: { value: "필터와 별개로 바꾼 이름" },
 		});
