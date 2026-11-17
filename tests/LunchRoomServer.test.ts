@@ -3349,6 +3349,73 @@ describe("LunchRoomServer game lifecycle", () => {
 		return structuredClone(draw);
 	}
 
+	it("adds the current result on enabling after reset, rejects guests and rolls back failed option saves", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const guest = await connect(server, context, "참가자");
+		const completed = await drawResult(
+			server,
+			context,
+			host,
+			"late-enable-result",
+		);
+		await send(server, host, {
+			type: "reset-exclusions",
+			id: "late-enable-reset",
+			expectedRevision: revision(host),
+		});
+		expect(storedSnapshot(context).excludedIds).toEqual([]);
+		await send(server, guest, {
+			type: "options",
+			id: "late-enable-guest",
+			expectedRevision: revision(host),
+			excludeDrawn: true,
+		});
+		expect(requestErrors(guest, "late-enable-guest")).toMatchObject([
+			{ code: "HOST_REQUIRED" },
+		]);
+		const command = {
+			type: "options",
+			id: "late-enable-host",
+			expectedRevision: revision(host),
+			excludeDrawn: true,
+		};
+		const put = vi
+			.spyOn(context.storage, "put")
+			.mockRejectedValueOnce(new Error("storage unavailable"));
+		await send(server, host, command);
+		expect(requestErrors(host, command.id)).toMatchObject([
+			{ code: "SAVE_FAILED" },
+		]);
+		expect(storedSnapshot(context)).toMatchObject({
+			excludeDrawn: false,
+			excludedIds: [],
+			exclusionRecords: [],
+			draw: completed,
+			drawCount: 1,
+		});
+		put.mockRestore();
+		await send(server, host, command);
+		const acceptedRevision = revision(host);
+		await send(server, host, command);
+		expect(revision(host)).toBe(acceptedRevision);
+		const winnerId = completed.candidates[completed.winnerIndex].id;
+		for (const socket of [host, guest]) {
+			const current = latestSnapshot(socket).snapshot;
+			expect(current.excludedIds).toEqual([winnerId]);
+			expect(current.exclusionRecords).toHaveLength(1);
+			expect(current.draw).toEqual(completed);
+			expect(
+				getEligibleRoomCandidates(current).some(
+					(candidate) => candidate.id === winnerId,
+				),
+			).toBe(false);
+		}
+		await returnToWaiting(server, host);
+		expect(latestSnapshot(guest).snapshot.history).toEqual([completed]);
+		expect(latestSnapshot(guest).snapshot.excludedIds).toEqual([winnerId]);
+	});
+
 	it("creates a room in editing and reaches the first roulette only after the host finalizes", async () => {
 		const { server, context } = await room(false);
 		expect(storedSnapshot(context)).toMatchObject({

@@ -346,8 +346,12 @@ describe("Storybook room page with the local transport adapter", () => {
 		).toBeTruthy();
 		expect(within(exclusions).getByText("0")).toBeTruthy();
 		expect(
-			within(exclusions).queryByRole("button", { name: "제외 목록 초기화" }),
-		).toBeNull();
+			(
+				within(exclusions).getByRole("button", {
+					name: "제외 목록 초기화",
+				}) as HTMLButtonElement
+			).disabled,
+		).toBe(true);
 		expect(screen.queryByRole("textbox", { name: "1번 후보 이름" })).toBeNull();
 		expect(document.querySelector(".room-game-filter")).toBeNull();
 		expect(screen.queryByRole("button", { name: "게임 필터" })).toBeNull();

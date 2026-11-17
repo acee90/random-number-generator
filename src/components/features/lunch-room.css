@@ -455,24 +455,9 @@
 	line-height: 1.4;
 	margin: 0 0 4px;
 }
-.room-history-actions {
-	display: grid;
-	grid-template-columns: repeat(2, minmax(100px, auto));
+.room-history-item:has(.room-history-details) {
+	grid-template-columns: minmax(0, 1fr) auto;
 	align-items: center;
-	justify-content: end;
-	gap: 8px;
-}
-@media (max-width: 360px) {
-	.room-history-actions {
-		grid-template-columns: minmax(0, 1fr);
-		justify-content: stretch;
-	}
-}
-.room-history-copy {
-	margin: 0;
-}
-.room-history-item > .room-history-copy {
-	justify-self: end;
 }
 .room-history-heading-actions {
 	display: flex;

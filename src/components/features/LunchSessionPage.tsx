@@ -2,6 +2,7 @@ import {
 	ArrowDown,
 	Check,
 	ChevronDown,
+	ChevronRight,
 	ChevronUp,
 	Copy,
 	Crown,
@@ -20,9 +21,7 @@ import CopyFallback from "@/components/features/CopyFallback";
 import { LunchWheel } from "@/components/features/LunchWheel";
 import { roomCandidateNumbers } from "@/components/features/RoomCandidateList";
 import RoomChatUnreadBadge from "@/components/features/RoomChatUnreadBadge";
-import RoomDrawDialog, {
-	roomDrawCopyText,
-} from "@/components/features/RoomDrawDialog";
+import RoomDrawDialog from "@/components/features/RoomDrawDialog";
 import RoomDrawResult from "@/components/features/RoomDrawResult";
 import RoomEntryGate from "@/components/features/RoomEntryGate";
 import RoomLifecyclePanel from "@/components/features/RoomLifecyclePanel";
@@ -54,7 +53,7 @@ import "./lunch-room.css";
 import "./lunch-room-mobile.css";
 
 type RoomView = "wheel" | "history";
-type CopyKind = "invite" | `history:${string}`;
+type CopyKind = "invite";
 const presenceLabels = {
 	online: "온라인",
 	away: "자리비움",
@@ -772,11 +771,7 @@ export default function LunchSessionPage({
 							>
 								{copyHelp && (
 									<section className="room-copy-panel" aria-label="직접 복사">
-										<h2>
-											{copyHelp.kind === "invite"
-												? "초대 링크 직접 복사"
-												: "기록 직접 복사"}
-										</h2>
+										<h2>초대 링크 직접 복사</h2>
 										<CopyFallback
 											text={copyHelp.text}
 											onRetry={() => void copy(copyHelp.text, copyHelp.kind)}
@@ -973,7 +968,6 @@ export default function LunchSessionPage({
 												<ol className="room-history-list">
 													{completedHistory.map((entry) => {
 														const place = entry.candidates[entry.winnerIndex];
-														const kind: CopyKind = `history:${entry.id}`;
 														return (
 															<li key={entry.id} className="room-history-item">
 																<div className="room-history-summary">
@@ -1016,54 +1010,29 @@ export default function LunchSessionPage({
 																		</span>
 																	)}
 																</div>
-																<div className="room-history-actions">
-																	<Button
-																		variant="outline"
-																		size="default"
-																		type="button"
-																		className="room-history-details"
-																		data-draw-id={entry.id}
-																		ref={(node) => {
-																			if (
-																				node &&
-																				entry.id ===
-																					historyRecordFocusRef.current
-																			)
-																				selectedDrawTriggerRef.current = node;
-																		}}
-																		aria-expanded={
-																			selectedDraw?.id === entry.id
-																		}
-																		aria-label={`${place.name} 상세 기록 열기`}
-																		aria-haspopup="dialog"
-																		onClick={(event) =>
-																			openRecord(entry, event.currentTarget)
-																		}
-																	>
-																		상세 보기
-																	</Button>
-																	<Button
-																		variant="outline"
-																		size="default"
-																		type="button"
-																		className="room-outline-button room-history-copy"
-																		aria-label={`${place.name} 기록 ${copied === kind ? "복사됨" : "복사"}`}
-																		onClick={(event) =>
-																			void copy(
-																				roomDrawCopyText(entry, solo),
-																				kind,
-																				event.currentTarget,
-																			)
-																		}
-																	>
-																		{copied === kind ? (
-																			<Check size={15} aria-hidden="true" />
-																		) : (
-																			<Copy size={15} aria-hidden="true" />
-																		)}
-																		{copied === kind ? "복사됨" : "복사"}
-																	</Button>
-																</div>
+																<Button
+																	variant="ghost"
+																	size="icon"
+																	type="button"
+																	className="room-history-details"
+																	title="상세 보기"
+																	data-draw-id={entry.id}
+																	ref={(node) => {
+																		if (
+																			node &&
+																			entry.id === historyRecordFocusRef.current
+																		)
+																			selectedDrawTriggerRef.current = node;
+																	}}
+																	aria-expanded={selectedDraw?.id === entry.id}
+																	aria-label={`${place.name} 상세 기록 열기`}
+																	aria-haspopup="dialog"
+																	onClick={(event) =>
+																		openRecord(entry, event.currentTarget)
+																	}
+																>
+																	<ChevronRight size={20} aria-hidden="true" />
+																</Button>
 															</li>
 														);
 													})}
@@ -1093,27 +1062,6 @@ export default function LunchSessionPage({
 																	)}
 																</time>
 															</div>
-															<Button
-																variant="outline"
-																className="room-history-copy"
-																aria-label={`${record.place.name} 기록 복사`}
-																onClick={(event) =>
-																	void copy(
-																		`음식점: ${record.place.name}\n분류: ${record.place.category}`,
-																		`history:${record.id}`,
-																		event.currentTarget,
-																	)
-																}
-															>
-																{copied === `history:${record.id}` ? (
-																	<Check size={15} aria-hidden="true" />
-																) : (
-																	<Copy size={15} aria-hidden="true" />
-																)}
-																{copied === `history:${record.id}`
-																	? "복사됨"
-																	: "복사"}
-															</Button>
 														</li>
 													))}
 												</ol>

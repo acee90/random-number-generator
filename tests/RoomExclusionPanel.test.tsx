@@ -150,4 +150,30 @@ describe("RoomExclusionPanel", () => {
 			true,
 		);
 	});
+	it("summarizes the visible current result and keeps reset beside the switch", () => {
+		const state = snapshot(2);
+		state.status = "result";
+		state.draw = {
+			id: "draw-2",
+			candidates: state.candidates,
+			winnerIndex: 1,
+			source: "csprng",
+			timestamp: 0,
+			startedAt: 0,
+			durationMs: 4000,
+			fromRotation: 0,
+			toRotation: 0,
+			listVersion: 1,
+		};
+		const view = render(<RoomExclusionPanel {...props(state)} showResult />);
+		expect(screen.queryByText("후보 2")).toBeNull();
+		expect(screen.getByText("후보 1")).toBeTruthy();
+		expect(screen.getByText("이번 당첨 포함")).toBeTruthy();
+		expect(screen.getAllByRole("listitem")).toHaveLength(1);
+		expect(
+			screen.getByRole("button", { name: "제외 목록 초기화" }).parentElement,
+		).toBe(screen.getByRole("switch").parentElement);
+		view.rerender(<RoomExclusionPanel {...props(state)} showResult={false} />);
+		expect(screen.getByText("후보 2")).toBeTruthy();
+	});
 });

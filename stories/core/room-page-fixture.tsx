@@ -25,6 +25,7 @@ import {
 	type RoomParticipant,
 	type RoomSnapshot,
 } from "@/lib/lunchRoom";
+import { setRoomExcludeDrawn } from "@/lib/roomDrawMetadata";
 import type { useLunchRoom as useServiceLunchRoom } from "../../src/hooks/useLunchRoom";
 import {
 	appendPreviewVote,
@@ -523,7 +524,11 @@ export function RoomPageFixtureProvider({
 		},
 		async updateRoomOptions(excludeDrawn, expectedRevision) {
 			if (!mutable() || !revisionMatches(expectedRevision)) return false;
-			applySnapshot((value) => ({ ...value, excludeDrawn }));
+			applySnapshot((value) => {
+				const next = { ...value };
+				setRoomExcludeDrawn(next, excludeDrawn);
+				return next;
+			});
 			return true;
 		},
 		async updateGameFilter(filter, expectedRevision) {

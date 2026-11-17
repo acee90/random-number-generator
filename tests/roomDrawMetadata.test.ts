@@ -10,6 +10,8 @@ import {
 	exclusionRecordFor,
 	hydrateRoomDrawMetadata,
 	recordRoomDrawMetadata,
+	setRoomExcludeDrawn,
+	visibleRoomExclusions,
 } from "../src/lib/roomDrawMetadata";
 
 const epoch = 1_800_000_000_000;
@@ -197,5 +199,72 @@ describe("round metadata protocol validation", () => {
 				drawCountIsExact: true,
 			}),
 		).toBeNull();
+	});
+});
+
+describe("result-time exclusion options", () => {
+	it("adds the current winner once when enabled after a reset and preserves draw/history metadata", () => {
+		const current = { ...draw(2), roundNumber: 2, excludeDrawn: false };
+		const previous = { ...draw(1), roundNumber: 1 };
+		const snapshot = room({
+			status: "result",
+			draw: current,
+			history: [previous],
+			drawCount: 2,
+			excludedIds: [candidates[0].id],
+			exclusionRecords: [exclusionRecordFor(previous)],
+		});
+		const original = structuredClone({
+			draw: snapshot.draw,
+			history: snapshot.history,
+		});
+		setRoomExcludeDrawn(snapshot, true);
+		setRoomExcludeDrawn(snapshot, true);
+		expect(snapshot.excludedIds).toEqual([candidates[0].id, candidates[1].id]);
+		expect(snapshot.exclusionRecords).toEqual([
+			exclusionRecordFor(previous),
+			exclusionRecordFor(current),
+		]);
+		expect({ draw: snapshot.draw, history: snapshot.history }).toEqual(
+			original,
+		);
+		expect(snapshot.drawCount).toBe(2);
+		setRoomExcludeDrawn(snapshot, false);
+		expect(snapshot.excludedIds).toEqual([candidates[0].id, candidates[1].id]);
+	});
+	it("does not restore past winners in waiting or candidates removed from the current list", () => {
+		const snapshot = room({ history: [draw(1)] });
+		setRoomExcludeDrawn(snapshot, true);
+		expect(snapshot.excludedIds).toEqual([]);
+		snapshot.status = "result";
+		snapshot.draw = draw(1);
+		snapshot.candidates = candidates.slice(1);
+		setRoomExcludeDrawn(snapshot, true);
+		expect(snapshot.excludedIds).toEqual([]);
+	});
+	it("publishes only prior exclusions while the next winner is still spinning", () => {
+		const current = {
+			...draw(2),
+			excludeDrawn: true,
+			excludedIdsBefore: [candidates[0].id],
+		};
+		const snapshot = room({
+			status: "drawing",
+			draw: current,
+			excludedIds: [candidates[0].id, candidates[1].id],
+			exclusionRecords: [
+				exclusionRecordFor(draw(1)),
+				exclusionRecordFor(current),
+			],
+		});
+		expect(visibleRoomExclusions(snapshot)).toEqual({
+			excludedIds: [candidates[0].id],
+			exclusionRecords: [exclusionRecordFor(draw(1))],
+		});
+		snapshot.status = "result";
+		expect(visibleRoomExclusions(snapshot).excludedIds).toEqual([
+			candidates[0].id,
+			candidates[1].id,
+		]);
 	});
 });

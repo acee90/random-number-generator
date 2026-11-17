@@ -29,6 +29,8 @@ import {
 import {
 	hydrateRoomDrawMetadata,
 	recordRoomDrawMetadata,
+	setRoomExcludeDrawn,
+	visibleRoomExclusions,
 } from "@/lib/roomDrawMetadata";
 import { consumeFromPool } from "@/services/seedPool";
 
@@ -875,7 +877,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 					}
 					break;
 				case "options":
-					snapshot.excludeDrawn = message.excludeDrawn;
+					setRoomExcludeDrawn(snapshot, message.excludeDrawn);
 					break;
 				case "game-filter":
 					snapshot.gameFilter = structuredClone(message.filter);
@@ -1696,20 +1698,11 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			connection.state.closing
 		)
 			return;
-		const excludedIds =
-			this.room.snapshot.status === "drawing" && this.room.snapshot.draw
-				? this.room.snapshot.draw.excludeDrawn
-					? (this.room.snapshot.draw.excludedIdsBefore ?? [])
-					: []
-				: (this.room.snapshot.excludedIds ?? []);
 		this.send(connection, {
 			type: "snapshot",
 			snapshot: {
 				...this.room.snapshot,
-				excludedIds,
-				exclusionRecords: this.room.snapshot.exclusionRecords?.filter((entry) =>
-					excludedIds.includes(entry.candidateId),
-				),
+				...visibleRoomExclusions(this.room.snapshot),
 				participants: this.participants(excludeSocketId),
 			},
 			serverTime: Date.now(),
