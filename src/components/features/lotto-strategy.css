@@ -18,7 +18,7 @@
 	padding: 0;
 	margin-bottom: 14px;
 	font-size: 16px;
-	font-weight: 800;
+	font-weight: 600;
 	color: var(--ink, #272b24);
 }
 
@@ -33,9 +33,8 @@
 	flex-direction: column;
 	gap: 12px;
 	min-width: 0;
-	padding: 19px;
+	padding: 16px;
 	border: 1px solid var(--section-line);
-	border-block-end-width: 4px;
 	border-radius: var(--panel-radius);
 	background: #fff;
 	cursor: pointer;
@@ -55,7 +54,7 @@
 	display: flex;
 	align-items: center;
 	gap: 9px;
-	font-size: 17px;
+	font-size: 15px;
 	line-height: 1.5;
 	color: var(--ink, #272b24);
 }
@@ -74,7 +73,7 @@
 }
 
 .lotto-mode-title strong {
-	font-weight: 800;
+	font-weight: 600;
 }
 
 .lotto-mode-description {
@@ -97,7 +96,7 @@
 }
 
 .lotto-strategy-summary strong {
-	font-weight: 800;
+	font-weight: 600;
 }
 
 .lotto-fixed-fieldset {
@@ -142,7 +141,7 @@
 
 .lotto-fixed-count {
 	font-size: 13px;
-	font-weight: 800;
+	font-weight: 600;
 	font-variant-numeric: tabular-nums;
 	color: #48672e;
 }
@@ -169,7 +168,7 @@
 	border-radius: var(--control-radius);
 	background: #edf4df;
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 600;
 	font-variant-numeric: tabular-nums;
 	color: #344b21;
 }
@@ -240,11 +239,10 @@
 	min-height: 48px;
 	padding: 9px 4px;
 	border: 1px solid var(--section-line);
-	border-block-end-width: 3px;
 	border-radius: var(--control-radius);
 	background: #fff;
 	font-size: 18px;
-	font-weight: 800;
+	font-weight: 600;
 	font-variant-numeric: tabular-nums;
 	color: #304426;
 }
@@ -341,7 +339,7 @@
 	align-items: center;
 	gap: 9px;
 	font-size: 16px;
-	font-weight: 800;
+	font-weight: 600;
 	color: #613f34;
 }
 
@@ -487,7 +485,7 @@
 
 	.lotto-number-choice {
 		min-height: 44px;
-		font-size: 17px;
+		font-size: 15px;
 	}
 }
 

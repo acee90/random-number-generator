@@ -906,8 +906,8 @@ export default function RandomGenerator({
 											>
 												{[1, 2, 3, 4, 5].map((value) => (
 													<Button
-														variant="plain"
-														size="auto"
+														variant="outline"
+														size="default"
 														type="button"
 														key={value}
 														aria-pressed={gameCount === value}
