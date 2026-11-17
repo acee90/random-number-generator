@@ -313,7 +313,7 @@ describe("Storybook room page with the local transport adapter", () => {
 		).toBe("true");
 		expect(
 			within(
-				screen.getByRole("region", { name: "이 메뉴, 어때요?" }),
+				screen.getByRole("region", { name: "실시간 투표 현황" }),
 			).getByRole("status").className,
 		).toBe("sr-only");
 		act(() => vi.advanceTimersByTime(140));
@@ -342,9 +342,9 @@ describe("Storybook room page with the local transport adapter", () => {
 			name: "후보 제외 목록",
 		});
 		expect(
-			within(exclusions).getByRole("heading", { name: "저장된 당첨 내역" }),
-		).toBeTruthy();
-		expect(within(exclusions).getByText("0")).toBeTruthy();
+			within(exclusions).queryByRole("heading", { name: "저장된 당첨 내역" }),
+		).toBeNull();
+		expect(within(exclusions).queryByRole("list")).toBeNull();
 		expect(
 			(
 				within(exclusions).getByRole("button", {

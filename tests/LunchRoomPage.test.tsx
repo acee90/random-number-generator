@@ -341,7 +341,9 @@ describe("current result feedback and frozen history", () => {
 		expect(room.vote).toHaveBeenCalledExactlyOnceWith(current.id, "up");
 		updateRoom(view, { votePendingDrawId: current.id });
 		expect(
-			screen.getByRole("button", { name: "싫어요 투표" }).matches(":disabled"),
+			screen
+				.getByRole("button", { name: "싫어요 투표" })
+				.getAttribute("aria-disabled") === "true",
 		).toBe(true);
 		updateRoom(view, {
 			votePendingDrawId: null,
@@ -366,7 +368,9 @@ describe("current result feedback and frozen history", () => {
 				.getAttribute("aria-pressed"),
 		).toBe("true");
 		expect(
-			screen.getByRole("button", { name: "싫어요 투표" }).matches(":disabled"),
+			screen
+				.getByRole("button", { name: "싫어요 투표" })
+				.getAttribute("aria-disabled") === "true",
 		).toBe(true);
 		fireEvent.click(screen.getByRole("button", { name: "싫어요 투표" }));
 		expect(room.vote).toHaveBeenCalledTimes(1);
@@ -384,7 +388,9 @@ describe("current result feedback and frozen history", () => {
 			}),
 		});
 		expect(
-			screen.getByRole("button", { name: "좋아요 투표" }).matches(":disabled"),
+			screen
+				.getByRole("button", { name: "좋아요 투표" })
+				.getAttribute("aria-disabled") === "true",
 		).toBe(false);
 		expect(
 			document.querySelector(".lunch-wheel-rotor text")?.textContent,
@@ -400,7 +406,9 @@ describe("current result feedback and frozen history", () => {
 		expect(screen.queryByRole("button", { name: "결과 복사" })).toBeNull();
 		expect(document.querySelector(".room-result-tools")).toBeNull();
 		expect(
-			screen.getByRole("button", { name: "좋아요 투표" }).matches(":disabled"),
+			screen
+				.getByRole("button", { name: "좋아요 투표" })
+				.getAttribute("aria-disabled") === "true",
 		).toBe(false);
 	});
 
@@ -413,7 +421,9 @@ describe("current result feedback and frozen history", () => {
 		});
 		render(<LunchRoomPage roomId={roomId} />);
 		expect(
-			screen.getByRole("button", { name: "좋아요 투표" }).matches(":disabled"),
+			screen
+				.getByRole("button", { name: "좋아요 투표" })
+				.getAttribute("aria-disabled") === "true",
 		).toBe(true);
 		expect(screen.getByText(/추첨 시작 후 입장해/)).toBeTruthy();
 		expect(
@@ -2117,6 +2127,13 @@ describe("synchronized lunch room UI", () => {
 			confirmReset: true,
 			expectedRevision: 2,
 		});
+		updateRoom(view, {
+			snapshot: snapshot({
+				revision: 2,
+				excludeDrawn: true,
+				excludedIds: [sampleLunchPlaces[0].id],
+			}),
+		});
 		fireEvent.click(screen.getByRole("button", { name: "제외 목록 초기화" }));
 		updateRoom(view, {
 			snapshot: snapshot({
@@ -2171,8 +2188,10 @@ describe("synchronized lunch room UI", () => {
 		});
 		expect(toggle.getAttribute("aria-checked")).toBe("false");
 		expect(
-			within(exclusionPanel).getByRole("heading", { name: "저장된 당첨 내역" }),
-		).toBeTruthy();
+			within(exclusionPanel).queryByRole("heading", {
+				name: "저장된 당첨 내역",
+			}),
+		).toBeNull();
 		expect(
 			document
 				.querySelector(".lunch-wheel")
@@ -2217,11 +2236,11 @@ describe("synchronized lunch room UI", () => {
 		).getAllByRole("listitem");
 		expect(rows).toHaveLength(2);
 		expect(rows[0].textContent).toContain(candidates[2].name);
-		expect(within(rows[0]).getByText("3회 추첨")).toBeTruthy();
+		expect(within(rows[0]).getByText("3회차 당첨")).toBeTruthy();
 		expect(rows[0].querySelector("time")?.dateTime).toBe(
 			new Date(latestDrawnAt).toISOString(),
 		);
-		expect(within(rows[1]).getByText("2회 추첨")).toBeTruthy();
+		expect(within(rows[1]).getByText("2회차 당첨")).toBeTruthy();
 		expect(rows[1].querySelector("time")?.dateTime).toBe(
 			new Date(firstDrawnAt).toISOString(),
 		);

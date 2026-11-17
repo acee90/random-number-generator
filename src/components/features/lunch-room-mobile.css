@@ -159,19 +159,6 @@
 		box-shadow: none;
 	}
 	.lunch-room.room-live .room-draw-status,
-	.lunch-room.room-live
-		.room-draw-feedback[data-mode="actions"]
-		.room-feedback-heading {
-		position: absolute;
-		inline-size: 1px;
-		block-size: 1px;
-		min-block-size: 0;
-		padding: 0;
-		margin: -1px;
-		clip-path: inset(50%);
-		overflow: hidden;
-		white-space: nowrap;
-	}
 	.lunch-room.room-live .room-result-layout {
 		min-block-size: clamp(460px, calc(100dvh - 210px), 620px);
 	}
@@ -185,34 +172,6 @@
 	}
 	.lunch-room.room-live .room-result-category {
 		font-size: 13px;
-	}
-	.lunch-room.room-live .room-draw-feedback[data-mode="actions"] {
-		margin-block-start: 8px;
-		padding-block-start: 8px;
-	}
-	.lunch-room.room-live
-		.room-draw-feedback[data-mode="actions"][data-own-choice] {
-		margin-block-start: 0;
-		padding-block-start: 0;
-		border-block-start-width: 0;
-	}
-	.lunch-room.room-live
-		.room-draw-feedback[data-mode="actions"]
-		.room-feedback-actions
-		button {
-		flex-direction: row;
-		gap: 6px;
-		min-block-size: 84px;
-		padding: 22px 10px 14px;
-		font-size: 18px;
-	}
-	.lunch-room.room-live .room-feedback-choice-icon {
-		inline-size: 24px;
-		block-size: 24px;
-	}
-	.lunch-room.room-live .room-feedback-selected-label {
-		inset-block-start: 4px;
-		font-size: 11px;
 	}
 	.lunch-room.room-live .room-result-actions {
 		margin: 0;

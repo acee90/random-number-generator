@@ -7,9 +7,7 @@ import {
 	Copy,
 	Crown,
 	Info,
-	Pause,
 	Pencil,
-	Play,
 	Send,
 	Users,
 	Wifi,
@@ -107,7 +105,6 @@ export default function LunchSessionPage({
 	);
 	const editingName = chatPopover === "profile";
 	const [connectionEvents, setConnectionEvents] = useState<ChatMessage[]>([]);
-	const [motionOff, setMotionOff] = useState(false);
 	const [reducedMotion, setReducedMotion] = useState(false);
 	const [unread, setUnread] = useState(0);
 	const [copied, setCopied] = useState<CopyKind | null>(null);
@@ -169,7 +166,7 @@ export default function LunchSessionPage({
 		displayedDraw,
 		room.clockOffset,
 		rotorRef,
-		motionOff || reducedMotion,
+		reducedMotion,
 	);
 	const showResult = Boolean(displayedDraw && finished);
 	const spinning = Boolean(displayedDraw && !finished);
@@ -872,22 +869,7 @@ export default function LunchSessionPage({
 											>
 												{status}
 											</output>
-											{spinning && !reducedMotion && (
-												<Button
-													variant="outline"
-													size="sm"
-													type="button"
-													className="room-motion-button"
-													onClick={() => setMotionOff((off) => !off)}
-												>
-													{motionOff ? (
-														<Play size={14} aria-hidden="true" />
-													) : (
-														<Pause size={14} aria-hidden="true" />
-													)}
-													{motionOff ? "애니메이션 켜기" : "애니메이션 끄기"}
-												</Button>
-											)}
+
 											{spinning && reducedMotion && (
 												<p className="room-motion-note">
 													동작 줄이기 설정을 적용했습니다. 추첨이 끝나면 결과를

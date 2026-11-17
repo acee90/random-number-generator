@@ -77,7 +77,7 @@ describe("completed room draw feedback", () => {
 		const current = props(draw([vote("myself", "down", 1500)]));
 		render(<RoomDrawFeedback {...current} />);
 		for (const button of screen.getAllByRole("button")) {
-			expect((button as HTMLButtonElement).disabled).toBe(true);
+			expect(button.getAttribute("aria-disabled")).toBe("true");
 			fireEvent.click(button);
 		}
 		expect(current.onVote).not.toHaveBeenCalled();
@@ -144,7 +144,9 @@ describe("completed room draw feedback", () => {
 			/>,
 		);
 		expect(
-			screen.getByRole("button", { name: "좋아요 투표" }).matches(":disabled"),
+			screen
+				.getByRole("button", { name: "좋아요 투표" })
+				.getAttribute("aria-disabled") === "true",
 		).toBe(true);
 	});
 
@@ -292,7 +294,7 @@ describe("completed room draw feedback", () => {
 			"투표를 보내고 있습니다…",
 		);
 		for (const button of screen.getAllByRole("button")) {
-			expect((button as HTMLButtonElement).disabled).toBe(true);
+			expect(button.getAttribute("aria-disabled")).toBe("true");
 			fireEvent.click(button);
 		}
 		expect(current.onVote).not.toHaveBeenCalled();
@@ -311,9 +313,10 @@ describe("completed room draw feedback", () => {
 			"참가 정보를 확인하고 있습니다.",
 		);
 		expect(
-			(screen.getByRole("button", { name: "좋아요 투표" }) as HTMLButtonElement)
-				.disabled,
-		).toBe(true);
+			screen
+				.getByRole("button", { name: "좋아요 투표" })
+				.getAttribute("aria-disabled"),
+		).toBe("true");
 		view.rerender(<RoomDrawFeedback {...current} />);
 		fireEvent.click(screen.getByRole("button", { name: "싫어요 투표" }));
 		expect(current.onVote).toHaveBeenCalledExactlyOnceWith(
@@ -430,9 +433,10 @@ describe("completed room draw feedback", () => {
 			<RoomDrawFeedback {...current} draw={draw([vote("myself")])} />,
 		);
 		expect(
-			(screen.getByRole("button", { name: "좋아요 투표" }) as HTMLButtonElement)
-				.disabled,
-		).toBe(true);
+			screen
+				.getByRole("button", { name: "좋아요 투표" })
+				.getAttribute("aria-disabled"),
+		).toBe("true");
 		view.rerender(
 			<RoomDrawFeedback {...current} draw={{ ...draw([]), id: "next-draw" }} />,
 		);
@@ -440,8 +444,9 @@ describe("completed room draw feedback", () => {
 			"투표를 보내지 못했습니다.",
 		);
 		expect(
-			(screen.getByRole("button", { name: "좋아요 투표" }) as HTMLButtonElement)
-				.disabled,
-		).toBe(false);
+			screen
+				.getByRole("button", { name: "좋아요 투표" })
+				.getAttribute("aria-disabled"),
+		).toBe("false");
 	});
 });

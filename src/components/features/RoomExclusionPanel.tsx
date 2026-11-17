@@ -113,7 +113,11 @@ export default function RoomExclusionPanel({
 							size="icon"
 							aria-label="제외 목록 초기화"
 							title="제외 목록 초기화"
-							disabled={disabled || (snapshot?.excludedIds?.length ?? 0) === 0}
+							disabled={
+								disabled ||
+								!excludeDrawn ||
+								(snapshot?.excludedIds?.length ?? 0) === 0
+							}
 							onClick={onReset}
 						>
 							<RotateCcw size={14} aria-hidden="true" />
@@ -126,56 +130,62 @@ export default function RoomExclusionPanel({
 					{note}
 				</p>
 			)}
-			<div className="room-draw-exclusion-heading">
-				<h3>{excludeDrawn ? "당첨 제외 내역" : "저장된 당첨 내역"}</h3>
-				<span className="room-draw-exclusion-count">
-					{allRows.length}
-					<span className="sr-only">개</span>
-				</span>
-			</div>
-			{currentEntry && (
-				<p className="room-draw-exclusion-note">이번 당첨 포함</p>
-			)}
-			{rows.length > 0 && (
+			{excludeDrawn && (
 				<>
-					<div className="room-draw-exclusion-order">
-						<span>최근 추첨순</span>
-						{overflowing && (
-							<span id={`${id}-scroll-note`}>
-								<ArrowDown size={12} aria-hidden="true" /> 스크롤
-							</span>
-						)}
+					<div className="room-draw-exclusion-heading">
+						<h3>{excludeDrawn ? "당첨 제외 내역" : "저장된 당첨 내역"}</h3>
+						<span className="room-draw-exclusion-count">
+							{allRows.length}
+							<span className="sr-only">개</span>
+						</span>
 					</div>
-					<section
-						className="room-draw-exclusion-scroll"
-						ref={scrollRef}
-						// biome-ignore lint/a11y/noNoninteractiveTabindex: The bounded ledger must be keyboard-scrollable.
-						tabIndex={0}
-						aria-label="당첨 제외 내역 스크롤"
-						aria-describedby={overflowing ? `${id}-scroll-note` : undefined}
-					>
-						<ol ref={listRef} aria-label="당첨 제외 내역">
-							{rows.map(({ candidate, record }) => (
-								<li key={candidate.id}>
-									<strong>{candidate.name}</strong>
-									<div className="room-draw-exclusion-meta">
-										<span>{roomExclusionRoundLabel(record)}</span>
-										{record ? (
-											<time dateTime={new Date(record.drawnAt).toISOString()}>
-												{dateTime.format(record.drawnAt)}
-											</time>
-										) : (
-											<span>시각 정보 없음</span>
-										)}
-									</div>
-								</li>
-							))}
-						</ol>
-					</section>
-					{partialNumbers && (
-						<p className="room-draw-exclusion-note">
-							‘기록’ 번호는 남아 있는 추첨 기록 기준입니다.
-						</p>
+					{currentEntry && (
+						<p className="room-draw-exclusion-note">이번 당첨 포함</p>
+					)}
+					{rows.length > 0 && (
+						<>
+							<div className="room-draw-exclusion-order">
+								<span>최근 추첨순</span>
+								{overflowing && (
+									<span id={`${id}-scroll-note`}>
+										<ArrowDown size={12} aria-hidden="true" /> 스크롤
+									</span>
+								)}
+							</div>
+							<section
+								className="room-draw-exclusion-scroll"
+								ref={scrollRef}
+								// biome-ignore lint/a11y/noNoninteractiveTabindex: The bounded ledger must be keyboard-scrollable.
+								tabIndex={0}
+								aria-label="당첨 제외 내역 스크롤"
+								aria-describedby={overflowing ? `${id}-scroll-note` : undefined}
+							>
+								<ol ref={listRef} aria-label="당첨 제외 내역">
+									{rows.map(({ candidate, record }) => (
+										<li key={candidate.id}>
+											<strong>{candidate.name}</strong>
+											<div className="room-draw-exclusion-meta">
+												<span>{roomExclusionRoundLabel(record)}</span>
+												{record ? (
+													<time
+														dateTime={new Date(record.drawnAt).toISOString()}
+													>
+														{dateTime.format(record.drawnAt)}
+													</time>
+												) : (
+													<span>시각 정보 없음</span>
+												)}
+											</div>
+										</li>
+									))}
+								</ol>
+							</section>
+							{partialNumbers && (
+								<p className="room-draw-exclusion-note">
+									‘기록’ 번호는 남아 있는 추첨 기록 기준입니다.
+								</p>
+							)}
+						</>
 					)}
 				</>
 			)}
