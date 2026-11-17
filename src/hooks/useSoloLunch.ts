@@ -14,6 +14,7 @@ import {
 	type RoomSnapshot,
 } from "@/lib/lunchRoom";
 import {
+	clearDisabledRoomExclusions,
 	recordRoomDrawMetadata,
 	setRoomExcludeDrawn,
 	visibleRoomExclusions,
@@ -209,25 +210,23 @@ export function useSoloLunch(places: readonly LunchPlace[] = emptyPlaces) {
 			state.status !== "result"
 		)
 			return false;
-		commit({
+		const next: RoomSnapshot = {
 			...state,
 			draw: null,
 			status: "waiting",
 			revision: (state.revision ?? 1) + 1,
-		});
+		};
+		clearDisabledRoomExclusions(next);
+		commit(next);
 		return true;
 	};
 	const startDraw: ReturnType<typeof useLunchRoom>["startDraw"] = ({
-		confirmReset,
 		expectedRevision,
 	} = {}) => {
 		const state = current.current;
 		if (!editable(expectedRevision) || state.status !== "waiting" || state.draw)
 			return false;
-		const reset = Boolean(confirmReset);
-		const candidates = structuredClone(
-			getEligibleRoomCandidates(reset ? { ...state, excludedIds: [] } : state),
-		);
+		const candidates = structuredClone(getEligibleRoomCandidates(state));
 		if (!candidates.length) {
 			setError(
 				"추첨할 후보가 없습니다. 후보나 당첨 제외 목록을 확인해 주세요.",
@@ -237,7 +236,9 @@ export function useSoloLunch(places: readonly LunchPlace[] = emptyPlaces) {
 		const request = ++attempt.current;
 		const requestedAt = Date.now();
 		setError("");
-		commit({ ...state, status: "fetching" });
+		const fetching: RoomSnapshot = { ...state, status: "fetching" };
+		clearDisabledRoomExclusions(fetching);
+		commit(fetching);
 		void (async () => {
 			try {
 				const response = await generateRandomNumbers({
@@ -275,23 +276,13 @@ export function useSoloLunch(places: readonly LunchPlace[] = emptyPlaces) {
 					listVersion: state.listVersion,
 					probabilities: candidates.map(() => 1 / candidates.length),
 					excludeDrawn: state.excludeDrawn,
-					excludedIdsBefore: reset ? [] : [...(state.excludedIds ?? [])],
+					excludedIdsBefore: state.excludeDrawn
+						? [...(state.excludedIds ?? [])]
+						: [],
 					gameFilter: structuredClone(state.gameFilter),
 				};
 				const next = structuredClone(current.current);
-				if (reset) {
-					next.excludedIds = [];
-					next.exclusionRecords = [];
-				}
 				recordRoomDrawMetadata(next, draw, Boolean(next.excludeDrawn));
-				next.excludedIds = next.excludeDrawn
-					? [
-							...new Set([
-								...(next.excludedIds ?? []),
-								candidates[draw.winnerIndex].id,
-							]),
-						]
-					: [candidates[draw.winnerIndex].id];
 				next.draw = draw;
 				next.status = "drawing";
 				commit(next);

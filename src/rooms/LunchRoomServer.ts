@@ -27,6 +27,7 @@ import {
 	roomEntryInfoPath,
 } from "@/lib/lunchRoomRequest.server";
 import {
+	clearDisabledRoomExclusions,
 	hydrateRoomDrawMetadata,
 	recordRoomDrawMetadata,
 	setRoomExcludeDrawn,
@@ -1291,6 +1292,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 				structuredClone(draw),
 				...this.room.snapshot.history,
 			].slice(0, lunchRoomLimits.maxHistory);
+		clearDisabledRoomExclusions(this.room.snapshot);
 		this.room.snapshot.draw = null;
 		this.room.snapshot.status = "waiting";
 		this.room.snapshot.revision =
@@ -1352,20 +1354,9 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			this.sendSnapshot(connection);
 			return;
 		}
-		const excludedBefore = [...(snapshot.excludedIds ?? [])];
-		if (
-			!snapshot.excludeDrawn &&
-			excludedBefore.length > 0 &&
-			(!message.confirmReset || message.expectedRevision === undefined)
-		) {
-			this.sendError(
-				connection,
-				"RESET_CONFIRMATION_REQUIRED",
-				"제외 목록을 초기화하고 돌릴지 확인해 주세요.",
-				requestId,
-			);
-			return;
-		}
+		const excludedBefore = snapshot.excludeDrawn
+			? [...(snapshot.excludedIds ?? [])]
+			: [];
 		const candidates = getEligibleRoomCandidates(snapshot).map((place) => ({
 			...place,
 		}));
@@ -1394,6 +1385,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			-maxProcessedStarts,
 		);
 		this.room.pendingStartId = requestId;
+		clearDisabledRoomExclusions(snapshot);
 		snapshot.status = "fetching";
 		snapshot.revision = (snapshot.revision ?? snapshot.listVersion) + 1;
 		this.recordActivity(connection);
@@ -1483,10 +1475,6 @@ export class LunchRoomServer extends Server<RoomEnv> {
 					metadata.excludeDrawn ?? false,
 				);
 				this.room.snapshot.draw = draw;
-				const winnerId = candidates[winnerIndex].id;
-				this.room.snapshot.excludedIds = metadata.excludeDrawn
-					? [...new Set([...(metadata.excludedIdsBefore ?? []), winnerId])]
-					: [winnerId];
 				this.room.pendingStartId = null;
 				this.room.snapshot.status = "drawing";
 				this.room.snapshot.revision =

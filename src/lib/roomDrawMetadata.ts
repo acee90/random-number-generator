@@ -15,6 +15,13 @@ function retainedDraws(snapshot: RoomSnapshot): RoomDraw[] {
 	return [...draws.values()];
 }
 
+/** Clear OFF exclusions at game boundaries; a current result keeps its ledger until next. */
+export function clearDisabledRoomExclusions(snapshot: RoomSnapshot): void {
+	if (snapshot.excludeDrawn) return;
+	snapshot.excludedIds = [];
+	snapshot.exclusionRecords = [];
+}
+
 /** Upgrade old storage without inventing missing lifetime round numbers or times. */
 export function hydrateRoomDrawMetadata(snapshot: RoomSnapshot): void {
 	const draws = retainedDraws(snapshot);
@@ -50,6 +57,7 @@ export function hydrateRoomDrawMetadata(snapshot: RoomSnapshot): void {
 		if (draw) records.set(candidateId, exclusionRecordFor(draw));
 	}
 	snapshot.exclusionRecords = [...records.values()];
+	if (!snapshot.draw) clearDisabledRoomExclusions(snapshot);
 }
 
 export function exclusionRecordFor(draw: RoomDraw): RoomExclusionRecord {
@@ -81,6 +89,9 @@ export function recordRoomDrawMetadata(
 	if (snapshot.drawCountIsExact === false) draw.roundNumberIsExact = false;
 	snapshot.drawCount = nextNumber;
 	const record = exclusionRecordFor(draw);
+	snapshot.excludedIds = excludeDrawn
+		? [...new Set([...(snapshot.excludedIds ?? []), record.candidateId])]
+		: [];
 	snapshot.exclusionRecords = excludeDrawn
 		? [
 				...(snapshot.exclusionRecords ?? []).filter(
@@ -88,7 +99,7 @@ export function recordRoomDrawMetadata(
 				),
 				record,
 			]
-		: [record];
+		: [];
 }
 
 /** Apply the live option without rewriting the immutable draw's original rules. */

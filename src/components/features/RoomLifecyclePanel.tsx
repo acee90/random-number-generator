@@ -49,8 +49,8 @@ import RoomExclusionPanel from "./RoomExclusionPanel";
 import "./room-lifecycle.css";
 
 type Room = ReturnType<typeof useLunchRoom>;
-type StartOptions = { confirmReset?: boolean; expectedRevision?: number };
-type Confirmation = { kind: "start" | "reset"; revision: number };
+type StartOptions = { expectedRevision?: number };
+type Confirmation = { revision: number };
 type StageAction = "open" | "close" | "finalize";
 
 function gameFilterFor(snapshot: RoomSnapshot | null): GameFilter {
@@ -338,10 +338,6 @@ export default function RoomLifecyclePanel({
 	}
 	function requestStart() {
 		setLocalError("");
-		if (!excludeDrawn && excludedIds.length > 0) {
-			setConfirmation({ kind: "start", revision });
-			return;
-		}
 		onStart({ expectedRevision: revision });
 	}
 	async function recommend() {
@@ -500,9 +496,7 @@ export default function RoomLifecyclePanel({
 			);
 			return;
 		}
-		if (action.kind === "start")
-			onStart({ confirmReset: true, expectedRevision: action.revision });
-		else await room.resetExclusions(action.revision);
+		await room.resetExclusions(action.revision);
 	}
 	function addDraftCandidate() {
 		const name = newName.trim();
@@ -1041,7 +1035,7 @@ export default function RoomLifecyclePanel({
 							}
 							onReset={() => {
 								setLocalError("");
-								setConfirmation({ kind: "reset", revision });
+								setConfirmation({ revision });
 							}}
 						/>
 					</div>
@@ -1198,21 +1192,16 @@ export default function RoomLifecyclePanel({
 			>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>
-							{confirmation?.kind === "start"
-								? "제외 목록을 초기화하고 돌릴까요?"
-								: "제외 목록을 초기화할까요?"}
-						</AlertDialogTitle>
+						<AlertDialogTitle>제외 목록을 초기화할까요?</AlertDialogTitle>
 						<AlertDialogDescription>
-							{confirmation?.kind === "start"
-								? "이전 당첨 제외 내역을 지우고 모든 포함 후보에서 추첨합니다. 이번 당첨 후보만 새 제외 내역에 저장됩니다."
-								: "당첨 제외 내역만 비웁니다. 후보 원본, 직접 제외, 지난 기록과 현재 결과는 유지됩니다."}
+							당첨 제외 내역만 비웁니다. 후보 원본, 직접 제외, 지난 기록과 현재
+							결과는 유지됩니다.
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
 						<AlertDialogCancel>취소</AlertDialogCancel>
 						<AlertDialogAction onClick={() => void confirm()}>
-							{confirmation?.kind === "start" ? "초기화하고 돌리기" : "초기화"}
+							초기화
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>
