@@ -847,8 +847,12 @@
 	text-align: start;
 	cursor: pointer;
 }
-.room-chat-toggle > svg {
-	flex-shrink: 0;
+.room-chat-header-toggle {
+	display: flex;
+	flex: 1;
+	justify-content: flex-end;
+	min-inline-size: 44px;
+	min-block-size: 44px;
 }
 .room-chat-unread {
 	display: inline-flex;
@@ -1203,7 +1207,7 @@
 }
 .room-profile-trigger {
 	display: flex;
-	flex: 1;
+	flex: 0 1 auto;
 	align-items: center;
 	gap: 7px;
 	min-inline-size: 0;
@@ -1224,14 +1228,6 @@
 	font-size: 12px;
 	font-weight: 650;
 }
-.room-profile-avatar .room-presence-dot {
-	position: absolute;
-	inset-inline-end: -2px;
-	inset-block-end: -1px;
-	inline-size: 10px;
-	block-size: 10px;
-	border: 2px solid #f4f6ee;
-}
 .room-profile-text {
 	display: flex;
 	flex-direction: column;
@@ -1246,15 +1242,6 @@
 	font-size: 12px;
 	line-height: 1.4;
 	font-weight: 600;
-}
-.room-profile-text small {
-	font-size: 9px;
-	line-height: 1.4;
-	color: #646b5e;
-}
-.room-profile-trigger > svg {
-	flex-shrink: 0;
-	color: #646b5e;
 }
 .room-profile-popover .room-name-form {
 	display: grid;

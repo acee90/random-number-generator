@@ -1207,6 +1207,35 @@ describe("synchronized lunch room UI", () => {
 		expect(room.sendChat).toHaveBeenCalledExactlyOnceWith(draft);
 	});
 
+	it("separates profile editing from the single header chevron and preserves drafts from either disclosure", () => {
+		render(<LunchRoomPage roomId={roomId} />);
+		const profile = screen.getByRole("button", { name: /^내 프로필:/ });
+		expect(profile.querySelector("svg")).toBeNull();
+		expect(profile.querySelector(".room-presence-dot")).toBeNull();
+		expect(profile.textContent).not.toContain("온라인");
+		const input = screen.getByRole("textbox", {
+			name: "메시지",
+		}) as HTMLTextAreaElement;
+		fireEvent.change(input, { target: { value: "접어도 남는 초안" } });
+		fireEvent.click(profile);
+		expect(screen.getByRole("dialog", { name: "내 프로필" })).toBeTruthy();
+		expect(
+			screen
+				.getByRole("button", { name: "채팅 접기" })
+				.getAttribute("aria-expanded"),
+		).toBe("true");
+		const header = screen.getByRole("button", { name: "채팅 접기 (헤더)" });
+		fireEvent.click(header);
+		expect(screen.queryByRole("dialog", { name: "내 프로필" })).toBeNull();
+		expect(header.getAttribute("aria-expanded")).toBe("false");
+		expect(
+			screen.getByRole("button", { name: "채팅 펼치기" }).querySelector("svg"),
+		).toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: "채팅 펼치기" }));
+		expect(input.value).toBe("접어도 남는 초안");
+		expect(header.getAttribute("aria-expanded")).toBe("true");
+	});
+
 	it("keeps receiving messages while chat is collapsed and reports their unread count in the header", () => {
 		const first = {
 			id: "already-read-message",
@@ -3980,7 +4009,7 @@ describe("synchronized lunch room UI", () => {
 			screen
 				.getByRole("button", { name: /^내 프로필:/ })
 				.getAttribute("aria-label"),
-		).toContain("재연결 중");
+		).not.toContain("재연결 중");
 	});
 
 	it("sends with the icon or Enter while preserving IME composition and Shift+Enter", () => {
