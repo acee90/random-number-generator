@@ -5,7 +5,6 @@ import {
 	lunchSpinDurationMs,
 	randomWheelLandingFraction,
 	resolveLunchWinner,
-	sampleLunchPlaces,
 } from "@/lib/lunch";
 import {
 	getEligibleRoomCandidates,
@@ -19,6 +18,7 @@ import { generateRandomNumbers } from "@/services/randomService";
 import type { useLunchRoom } from "./useLunchRoom";
 
 export const soloHistoryKey = "randomlab:solo-draws:v1";
+const emptyPlaces: readonly LunchPlace[] = [];
 const self = { id: "solo", name: "나", isHost: true };
 const unavailable = () => false;
 const unavailableAsync = async () => false;
@@ -38,7 +38,7 @@ function initialSnapshot(places: readonly LunchPlace[]): RoomSnapshot {
 		messages: [],
 		draw: null,
 		history: [],
-		status: "waiting",
+		status: places.length > 0 ? "waiting" : "editing",
 		excludeDrawn: false,
 		excludedIds: [],
 		exclusionRecords: [],
@@ -48,9 +48,7 @@ function initialSnapshot(places: readonly LunchPlace[]): RoomSnapshot {
 }
 
 /** Local transport for the same game screen used by connected rooms. */
-export function useSoloLunch(
-	places: readonly LunchPlace[] = sampleLunchPlaces,
-) {
+export function useSoloLunch(places: readonly LunchPlace[] = emptyPlaces) {
 	const [snapshot, setSnapshot] = useState(() => initialSnapshot(places));
 	const current = useRef(snapshot);
 	const [error, setError] = useState("");
