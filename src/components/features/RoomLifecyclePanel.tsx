@@ -81,9 +81,11 @@ export default function RoomLifecyclePanel({
 	onStart,
 	onHistory,
 	historyButtonRef,
+	solo = false,
 	children,
 }: {
 	room: Room;
+	solo?: boolean;
 	busy: boolean;
 	showResult: boolean;
 	onStart: (options?: StartOptions) => void;
@@ -886,27 +888,29 @@ export default function RoomLifecyclePanel({
 									</>
 								}
 							>
-								<div className="room-editor-stage-actions">
-									<label
-										className="room-intake-switch"
-										htmlFor={`${id}-intake-enabled`}
-									>
-										<Switch
-											id={`${id}-intake-enabled`}
-											aria-label="후보 추천받기"
-											checked={phase === "collecting"}
-											disabled={locked || !sameDraftStage}
-											aria-busy={
-												stagePending === "open" || stagePending === "close"
-											}
-											onCheckedChange={(checked) => {
-												if (checked === (phase === "collecting")) return;
-												void changeStage(checked ? "open" : "close");
-											}}
-										/>
-										<span>후보 추천받기</span>
-									</label>
-								</div>
+								{!solo && (
+									<div className="room-editor-stage-actions">
+										<label
+											className="room-intake-switch"
+											htmlFor={`${id}-intake-enabled`}
+										>
+											<Switch
+												id={`${id}-intake-enabled`}
+												aria-label="후보 추천받기"
+												checked={phase === "collecting"}
+												disabled={locked || !sameDraftStage}
+												aria-busy={
+													stagePending === "open" || stagePending === "close"
+												}
+												onCheckedChange={(checked) => {
+													if (checked === (phase === "collecting")) return;
+													void changeStage(checked ? "open" : "close");
+												}}
+											/>
+											<span>후보 추천받기</span>
+										</label>
+									</div>
+								)}
 							</RoomCandidateEditor>
 						)
 					) : (

@@ -1422,3 +1422,19 @@
 		min-block-size: 0;
 	}
 }
+
+/* Solo uses the room game surfaces with a single content column. */
+.lunch-solo .room-layout {
+	grid-template-columns: minmax(0, 1fr);
+}
+.lunch-solo .room-primary-column {
+	max-inline-size: 100%;
+}
+
+.room-result-layout[data-solo] {
+	grid-template-rows: minmax(0, 1fr) auto;
+	min-block-size: clamp(320px, calc(100dvh - 430px), 560px);
+}
+.room-result-layout[data-solo] > .room-result {
+	grid-template-rows: minmax(0, 1fr);
+}

@@ -2,7 +2,7 @@ import { LoaderCircle, Shuffle } from "lucide-react";
 import { memo, type RefObject } from "react";
 import { Button } from "@/components/ui/button";
 import type { LunchPlace } from "@/lib/lunch";
-import "./lunch-picker.css";
+import "./lunch-wheel.css";
 
 type Phase = "idle" | "fetching" | "spinning" | "done";
 

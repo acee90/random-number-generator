@@ -11,6 +11,7 @@ import "./lunch-room.css";
 
 export default function RoomDrawResult({
 	draw,
+	solo = false,
 	selfId,
 	isHost,
 	connected,
@@ -24,6 +25,7 @@ export default function RoomDrawResult({
 	titleId: providedTitleId,
 }: {
 	draw: RoomDraw;
+	solo?: boolean;
 	selfId?: string;
 	isHost: boolean;
 	connected: boolean;
@@ -137,6 +139,7 @@ export default function RoomDrawResult({
 	return (
 		<div
 			className="room-result-layout"
+			data-solo={solo || undefined}
 			ref={resultLayoutRef}
 			data-own-choice={ownChoice}
 		>
@@ -148,7 +151,7 @@ export default function RoomDrawResult({
 					</h3>
 					<p className="room-result-category">{winner.category}</p>
 				</div>
-				{!readOnly && (
+				{!solo && !readOnly && (
 					<RoomDrawFeedback
 						mode="actions"
 						draw={draw}
@@ -161,17 +164,19 @@ export default function RoomDrawResult({
 					/>
 				)}
 			</section>
-			<RoomDrawFeedback
-				mode="results"
-				draw={draw}
-				selfId={selfId}
-				isHost={isHost}
-				connected={connected}
-				pending={pending}
-				onVote={submitVote}
-				optimisticVote={activeOptimisticVote}
-				readOnly={readOnly}
-			/>
+			{!solo && (
+				<RoomDrawFeedback
+					mode="results"
+					draw={draw}
+					selfId={selfId}
+					isHost={isHost}
+					connected={connected}
+					pending={pending}
+					onVote={submitVote}
+					optimisticVote={activeOptimisticVote}
+					readOnly={readOnly}
+				/>
+			)}
 			{isHost && !readOnly && (
 				<div className="room-result-actions">
 					<Button
