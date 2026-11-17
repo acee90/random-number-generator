@@ -1,4 +1,8 @@
-import { getWheelRotation, sampleLunchPlaces } from "@/lib/lunch";
+import {
+	getWheelRotation,
+	lunchSpinDurationMs,
+	sampleLunchPlaces,
+} from "@/lib/lunch";
 import type { RoomDraw, RoomDrawVote, RoomParticipant } from "@/lib/lunchRoom";
 
 export const previewSelfId = "preview-self";
@@ -34,8 +38,9 @@ export function previewVote(
 		vote,
 		reactionMs,
 		timestamp:
-			(draw ? draw.startedAt + draw.durationMs : previewStart + 7200) +
-			reactionMs,
+			(draw
+				? draw.startedAt + draw.durationMs
+				: previewStart + lunchSpinDurationMs) + reactionMs,
 	};
 }
 export function previewVotes(
@@ -74,7 +79,7 @@ export function createPreviewDraw({
 		source: "csprng",
 		timestamp: previewStart - 1500,
 		startedAt: previewStart,
-		durationMs: 7200,
+		durationMs: lunchSpinDurationMs,
 		fromRotation: 0,
 		toRotation: getWheelRotation(0, winnerIndex, candidates.length),
 		listVersion: 1,

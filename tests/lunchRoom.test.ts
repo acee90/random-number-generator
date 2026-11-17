@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sampleLunchPlaces } from "../src/lib/lunch";
+import { getWheelRotation, sampleLunchPlaces } from "../src/lib/lunch";
 import {
 	type ChatMessage,
 	clampLunchRoomNickname,
@@ -724,6 +724,46 @@ describe("validated room snapshots and immutable round geometry", () => {
 	});
 
 	it.each([
+		0.1, 0.27, 0.5, 0.83, 0.9,
+	])("preserves a 4-second draw's landing fraction %s and exact rotation", (landingFraction) => {
+		for (const count of [1, 2, 68, 200]) {
+			const candidates = Array.from({ length: count }, (_, index) => ({
+				...sampleLunchPlaces[index % sampleLunchPlaces.length],
+				id: `offset-candidate-${index}`,
+			}));
+			for (const winnerIndex of new Set([0, count - 1])) {
+				const toRotation = getWheelRotation(
+					0,
+					winnerIndex,
+					count,
+					landingFraction,
+				);
+				const draw = makeDraw({
+					candidates,
+					winnerIndex,
+					durationMs: 4000,
+					toRotation,
+					landingFraction,
+				});
+				const parsed = parseRoomSnapshot(
+					makeRoom({ candidates, draw, status: "drawing" }),
+				);
+				expect(parsed?.draw).toEqual(draw);
+			}
+		}
+	});
+
+	it("retains legacy 7.2-second centered records alongside new draws", () => {
+		const oldDraw = makeDraw({ durationMs: 7200 });
+		const parsed = parseRoomSnapshot(
+			makeRoom({ draw: oldDraw, status: "drawing" }),
+		);
+		expect(parsed?.draw?.durationMs).toBe(7200);
+		expect(parsed?.draw?.toRotation).toBe(oldDraw.toRotation);
+		expect(parsed?.draw?.landingFraction).toBeUndefined();
+	});
+
+	it.each([
 		"quantum",
 		"atmospheric",
 		"csprng",
@@ -799,6 +839,10 @@ describe("validated room snapshots and immutable round geometry", () => {
 		{ toRotation: 2100 },
 		{ toRotation: Number.NaN },
 		{ durationMs: 7000 },
+		{ landingFraction: -0.1 },
+		{ landingFraction: 0.91 },
+		{ landingFraction: Number.NaN },
+		{ landingFraction: 0.2 },
 		{ startedAt: now + 499 },
 		{ listVersion: 2 },
 		{ candidates: [sampleLunchPlaces[0]] },

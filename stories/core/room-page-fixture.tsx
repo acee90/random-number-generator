@@ -7,7 +7,11 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { getWheelRotation, sampleLunchPlaces } from "@/lib/lunch";
+import {
+	getWheelRotation,
+	randomWheelLandingFraction,
+	sampleLunchPlaces,
+} from "@/lib/lunch";
 import {
 	type ChatMessage,
 	getEligibleRoomCandidates,
@@ -586,6 +590,7 @@ export function RoomPageFixtureProvider({
 				const state = current.current;
 				const candidates = eligible;
 				const winnerIndex = ++sequence.current % candidates.length;
+				const landingFraction = randomWheelLandingFraction();
 				const draw: RoomDraw = {
 					id: `page-draw-${sequence.current}`,
 					candidates,
@@ -596,7 +601,13 @@ export function RoomPageFixtureProvider({
 					startedAt: Date.now(),
 					durationMs: lunchRoomLimits.drawDurationMs,
 					fromRotation: 0,
-					toRotation: getWheelRotation(0, winnerIndex, candidates.length),
+					toRotation: getWheelRotation(
+						0,
+						winnerIndex,
+						candidates.length,
+						landingFraction,
+					),
+					landingFraction,
 					listVersion: state.snapshot.listVersion,
 					gameFilter: state.snapshot.gameFilter
 						? {

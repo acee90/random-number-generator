@@ -1,9 +1,14 @@
 import type { RandomSource } from "@/services/randomCore";
-import { getWheelRotation, type LunchPlace, sampleLunchPlaces } from "./lunch";
+import {
+	getWheelRotation,
+	type LunchPlace,
+	lunchSpinDurationMs,
+	sampleLunchPlaces,
+} from "./lunch";
 
 export const lunchRoomLimits = {
 	ttlMs: 24 * 60 * 60 * 1000,
-	drawDurationMs: 7200,
+	drawDurationMs: lunchSpinDurationMs,
 	maxNicknameLength: 12,
 	maxParticipants: 30,
 	maxMembers: 60,
@@ -81,9 +86,11 @@ export interface RoomDraw {
 	source: RandomSource;
 	timestamp: number;
 	startedAt: number;
-	durationMs: 7200;
+	durationMs: typeof lunchSpinDurationMs | 7200;
 	fromRotation: 0;
 	toRotation: number;
+	/** Position inside the winning slice; old centered draws omit this field. */
+	landingFraction?: number;
 	listVersion: number;
 	participants?: RoomParticipant[];
 	requestedAt?: number;
@@ -743,10 +750,16 @@ function parseDraw(value: unknown): RoomDraw | null {
 			(typeof value.roundNumberIsExact !== "boolean" ||
 				value.roundNumber === undefined)) ||
 		!isVersion(value.listVersion) ||
-		value.durationMs !== lunchRoomLimits.drawDurationMs ||
+		(value.durationMs !== lunchRoomLimits.drawDurationMs &&
+			value.durationMs !== 7200) ||
 		value.fromRotation !== 0 ||
 		typeof value.toRotation !== "number" ||
 		!Number.isFinite(value.toRotation) ||
+		(value.landingFraction !== undefined &&
+			(typeof value.landingFraction !== "number" ||
+				!Number.isFinite(value.landingFraction) ||
+				value.landingFraction < 0.1 ||
+				value.landingFraction > 0.9)) ||
 		!sources.some((source) => source === value.source)
 	)
 		return null;
@@ -759,7 +772,12 @@ function parseDraw(value: unknown): RoomDraw | null {
 		value.winnerIndex >= candidates.length
 	)
 		return null;
-	const toRotation = getWheelRotation(0, value.winnerIndex, candidates.length);
+	const toRotation = getWheelRotation(
+		0,
+		value.winnerIndex,
+		candidates.length,
+		value.landingFraction as number | undefined,
+	);
 	if (Math.abs(value.toRotation - toRotation) > 1e-7) return null;
 	const participants =
 		value.participants === undefined
@@ -797,9 +815,12 @@ function parseDraw(value: unknown): RoomDraw | null {
 		source: value.source as RandomSource,
 		timestamp: value.timestamp,
 		startedAt: value.startedAt,
-		durationMs: lunchRoomLimits.drawDurationMs,
+		durationMs: value.durationMs as RoomDraw["durationMs"],
 		fromRotation: 0,
 		toRotation,
+		...(value.landingFraction === undefined
+			? {}
+			: { landingFraction: value.landingFraction as number }),
 		listVersion: value.listVersion,
 		...(participants === undefined ? {} : { participants }),
 		...(value.requestedAt === undefined

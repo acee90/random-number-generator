@@ -1,5 +1,6 @@
 import type { Connection } from "partyserver";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as wheel from "../src/lib/lunch";
 import { sampleLunchPlaces } from "../src/lib/lunch";
 import {
 	getEligibleRoomCandidates,
@@ -520,7 +521,7 @@ describe("LunchRoomServer", () => {
 			id: "before-nickname-migration",
 		});
 		await context.drain();
-		vi.advanceTimersByTime(8700);
+		vi.advanceTimersByTime(1500 + lunchRoomLimits.drawDurationMs);
 		await server.onAlarm();
 		const hostName = "호".repeat(20);
 		const guestName = `${"가".repeat(11)}😀${"나".repeat(7)}`;
@@ -961,6 +962,40 @@ describe("LunchRoomServer", () => {
 		expect(systemEvents(second, "draw-started")).toHaveLength(1);
 	});
 
+	it("varies stops for repeated winners and restores the exact shared angle on wake", async () => {
+		vi.spyOn(wheel, "randomWheelLandingFraction")
+			.mockReturnValueOnce(0.15)
+			.mockReturnValueOnce(0.85);
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		await send(server, host, { type: "start", id: "offset-first" });
+		await context.drain();
+		const first = latestSnapshot(host).snapshot.draw;
+		if (!first) throw new Error("Expected a draw");
+		expect(first.durationMs).toBe(4000);
+		expect(first.landingFraction).toBe(0.15);
+		vi.setSystemTime(first.startedAt + first.durationMs);
+		await returnToWaiting(server, host);
+		await send(server, host, {
+			type: "start",
+			id: "offset-second",
+			expectedRevision: currentRevision(host),
+			confirmReset: true,
+		});
+		await context.drain();
+		const second = latestSnapshot(host).snapshot.draw;
+		if (!second) throw new Error("Expected a second draw");
+		expect(second.winnerIndex).toBe(first.winnerIndex);
+		expect(second.landingFraction).toBe(0.85);
+		expect(second.toRotation).not.toBe(first.toRotation);
+		expect(latestSnapshot(host).snapshot.history[0]).toEqual(first);
+		const restored = createServer(context);
+		await restored.onStart();
+		const late = await connect(restored, context, "새 참가자");
+		expect(latestSnapshot(late).snapshot.draw).toEqual(second);
+		expect(latestSnapshot(late).snapshot.history[0]).toEqual(first);
+	});
+
 	it("shares canonical timing and immutable candidates, then archives only on an explicit return to waiting", async () => {
 		const { server, context } = await room();
 		const host = await connect(server, context, "방장", hostToken);
@@ -969,13 +1004,22 @@ describe("LunchRoomServer", () => {
 		const draw = latestSnapshot(host).snapshot.draw;
 		expect(draw).not.toBeNull();
 		expect(draw?.startedAt).toBe(Date.now() + 1500);
-		expect(draw?.durationMs).toBe(7200);
+		expect(draw?.durationMs).toBe(4000);
 		expect(draw?.fromRotation).toBe(0);
-		expect(draw?.toRotation).toBe(1620);
+		expect(draw?.landingFraction).toBeGreaterThanOrEqual(0.1);
+		expect(draw?.landingFraction).toBeLessThanOrEqual(0.9);
+		expect(draw?.toRotation).toBe(
+			wheel.getWheelRotation(
+				0,
+				draw?.winnerIndex ?? 0,
+				draw?.candidates.length ?? 1,
+				draw?.landingFraction,
+			),
+		);
 		expect(latestSnapshot(host).snapshot.history).toEqual([]);
 		const late = await connect(server, context, "늦은 참가자");
 		expect(latestSnapshot(late).snapshot.draw).toEqual(draw);
-		vi.advanceTimersByTime(8699);
+		vi.advanceTimersByTime(1500 + lunchRoomLimits.drawDurationMs - 1);
 		await server.onAlarm();
 		expect(latestSnapshot(host).snapshot.history).toEqual([]);
 		vi.advanceTimersByTime(1);
@@ -1054,7 +1098,7 @@ describe("LunchRoomServer", () => {
 		expect(latestSnapshot(host).snapshot.participants).not.toEqual(
 			participants,
 		);
-		vi.advanceTimersByTime(8700);
+		vi.advanceTimersByTime(1500 + lunchRoomLimits.drawDurationMs);
 		await server.onAlarm();
 		const restored = createServer(context);
 		await restored.onStart();
@@ -1076,7 +1120,7 @@ describe("LunchRoomServer", () => {
 		const host = await connect(server, context, "현재 방장", hostToken);
 		await send(server, host, { type: "start", id: "legacy-draw" });
 		await context.drain();
-		vi.advanceTimersByTime(8700);
+		vi.advanceTimersByTime(1500 + lunchRoomLimits.drawDurationMs);
 		await server.onAlarm();
 		const stored = structuredClone(
 			context.storage.values.get("lunch-room:v1"),
@@ -1456,7 +1500,7 @@ describe("LunchRoomServer", () => {
 		const host = await connect(server, context, "방장", hostToken);
 		await send(server, host, { type: "start", id: "draw-0" });
 		await context.drain();
-		vi.advanceTimersByTime(8700);
+		vi.advanceTimersByTime(1500 + lunchRoomLimits.drawDurationMs);
 		const restored = createServer(context);
 		await restored.onStart();
 		expect(latestSnapshot(host).snapshot.history).toEqual([]);
@@ -1470,7 +1514,7 @@ describe("LunchRoomServer", () => {
 				confirmReset: true,
 			});
 			await context.drain();
-			vi.advanceTimersByTime(8700);
+			vi.advanceTimersByTime(1500 + lunchRoomLimits.drawDurationMs);
 			await restored.onAlarm();
 		}
 		const history = latestSnapshot(host).snapshot.history;
@@ -1902,7 +1946,7 @@ describe("LunchRoomServer irreversible current-result votes", () => {
 		await send(value.server, host, { type: "start", id: "vote-draw-1" });
 		await value.context.drain();
 		if (finished) {
-			vi.advanceTimersByTime(8700);
+			vi.advanceTimersByTime(1500 + lunchRoomLimits.drawDurationMs);
 			await value.server.onAlarm();
 		}
 		const draw = latestSnapshot(host).snapshot.draw;
@@ -1930,7 +1974,7 @@ describe("LunchRoomServer irreversible current-result votes", () => {
 			lateProof,
 		);
 		if (!finished) {
-			vi.advanceTimersByTime(8700);
+			vi.advanceTimersByTime(1500 + lunchRoomLimits.drawDurationMs);
 			await server.onAlarm();
 		}
 		await send(server, late, {
@@ -1981,7 +2025,7 @@ describe("LunchRoomServer irreversible current-result votes", () => {
 		expect(voteErrors(host, "early-next")).toMatchObject([
 			{ code: "VOTE_NOT_READY" },
 		]);
-		vi.advanceTimersByTime(8700);
+		vi.advanceTimersByTime(1500 + lunchRoomLimits.drawDurationMs);
 		await server.onAlarm();
 		await send(server, guest, {
 			type: "vote",
@@ -2125,7 +2169,7 @@ describe("LunchRoomServer irreversible current-result votes", () => {
 		expect(voteErrors(guest, "unknown-vote")).toMatchObject([
 			{ code: "VOTE_NOT_FOUND" },
 		]);
-		vi.advanceTimersByTime(8699);
+		vi.advanceTimersByTime(1500 + lunchRoomLimits.drawDurationMs - 1);
 		await send(server, guest, {
 			type: "vote",
 			id: "early-vote",
@@ -2325,7 +2369,7 @@ describe("LunchRoomServer irreversible current-result votes", () => {
 			{ code: "VOTE_CLOSED" },
 		]);
 		await context.drain();
-		vi.advanceTimersByTime(8700);
+		vi.advanceTimersByTime(1500 + lunchRoomLimits.drawDurationMs);
 		await server.onAlarm();
 		await send(server, guest, {
 			type: "vote",
@@ -3297,7 +3341,7 @@ describe("LunchRoomServer game lifecycle", () => {
 		});
 		await context.drain();
 		expect(latestSnapshot(host).snapshot.status).toBe("drawing");
-		vi.advanceTimersByTime(8700);
+		vi.advanceTimersByTime(1500 + lunchRoomLimits.drawDurationMs);
 		await server.onAlarm();
 		expect(latestSnapshot(host).snapshot.status).toBe("result");
 		const draw = latestSnapshot(host).snapshot.draw;
@@ -3856,7 +3900,7 @@ describe("LunchRoomServer game lifecycle", () => {
 				...previous,
 				`choice-${round}`,
 			]);
-			vi.advanceTimersByTime(8700);
+			vi.advanceTimersByTime(1500 + lunchRoomLimits.drawDurationMs);
 			await server.onAlarm();
 			records.push(record);
 			expect(latestSnapshot(host).snapshot.exclusionRecords).toEqual(records);
@@ -3912,7 +3956,7 @@ describe("LunchRoomServer game lifecycle", () => {
 			drawCount: 4,
 		});
 		expect(storedSnapshot(context).excludedIds).toEqual(["choice-4"]);
-		vi.advanceTimersByTime(8700);
+		vi.advanceTimersByTime(1500 + lunchRoomLimits.drawDurationMs);
 		await server.onAlarm();
 		const draw = latestSnapshot(host).snapshot.draw;
 		expect(draw).toMatchObject({
@@ -4200,7 +4244,8 @@ describe("LunchRoomServer game lifecycle", () => {
 			winnerIndex: 0,
 			probabilities: [1],
 			source: "csprng",
-			toRotation: 1620,
+			toRotation: expect.any(Number),
+			landingFraction: expect.any(Number),
 		});
 		expect(entropy).toHaveBeenCalledExactlyOnceWith(0, 0, 1);
 	});

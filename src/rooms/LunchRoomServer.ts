@@ -1,5 +1,5 @@
 import { type Connection, Server, type WSMessage } from "partyserver";
-import { getWheelRotation } from "@/lib/lunch";
+import { getWheelRotation, randomWheelLandingFraction } from "@/lib/lunch";
 import {
 	type ChatTrace,
 	type ClientMessage,
@@ -1443,7 +1443,13 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			)
 				throw new Error("Invalid entropy result");
 			const winnerIndex = result.numbers[0];
-			const toRotation = getWheelRotation(0, winnerIndex, candidates.length);
+			const landingFraction = randomWheelLandingFraction();
+			const toRotation = getWheelRotation(
+				0,
+				winnerIndex,
+				candidates.length,
+				landingFraction,
+			);
 			await this.exclusive(async () => {
 				if (
 					(await this.expireIfNeeded()) ||
@@ -1465,6 +1471,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 					durationMs: lunchRoomLimits.drawDurationMs,
 					fromRotation: 0,
 					toRotation,
+					landingFraction,
 					listVersion,
 					votes: [],
 				};

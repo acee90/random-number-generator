@@ -15,6 +15,7 @@ import {
 	type LunchPlace,
 	lunchCategories,
 	lunchSource,
+	lunchSpinDurationMs,
 	sampleLunchPlaces as realLunchPlaces,
 } from "../src/lib/lunch";
 import { lunchHistoryKey, readLunchHistory } from "../src/lib/lunchHistory";
@@ -321,9 +322,8 @@ describe("lunch draw prototype", () => {
 				.querySelector<HTMLElement>(".lunch-wheel-rotor")
 				?.style.transform.match(/[\d.]+/)?.[0],
 		);
-		expect(
-			(rotation + ((lastIndex + 0.5) * 360) / remainingCount) % 360,
-		).toBeCloseTo(0, 5);
+		const pointerAngle = ((-rotation % 360) + 360) % 360;
+		expect(Math.floor(pointerAngle / (360 / remainingCount))).toBe(lastIndex);
 	});
 
 	it("keeps shortened names unambiguous with source numbers in a small category pool", () => {
@@ -371,9 +371,10 @@ describe("lunch draw prototype", () => {
 		expect(within(result).getByText(/출처: quantum/)).toBeTruthy();
 		const rotor = document.querySelector<HTMLElement>(".lunch-wheel-rotor");
 		const rotation = Number(rotor?.style.transform.match(/[\d.]+/)?.[0]);
-		const pointerAngle =
-			(rotation + ((index + 0.5) * 360) / sampleLunchPlaces.length) % 360;
-		expect(Math.min(pointerAngle, 360 - pointerAngle)).toBeLessThan(0.0001);
+		const pointerAngle = ((-rotation % 360) + 360) % 360;
+		expect(Math.floor(pointerAngle / (360 / sampleLunchPlaces.length))).toBe(
+			index,
+		);
 	});
 
 	it("maps the returned index within a filtered and excluded snapshot", async () => {
@@ -701,11 +702,11 @@ describe("lunch draw prototype", () => {
 		sourceResult(1);
 		renderPicker();
 		await draw();
-		await act(async () => vi.advanceTimersByTime(4000));
+		await act(async () => vi.advanceTimersByTime(lunchSpinDurationMs));
 		expect(
 			screen.queryByRole("region", { name: sampleLunchPlaces[1].name }),
 		).toBeNull();
-		await act(async () => vi.advanceTimersByTime(3500));
+		await act(async () => vi.advanceTimersByTime(300));
 		expect(
 			screen.getByRole("region", { name: sampleLunchPlaces[1].name }),
 		).toBeTruthy();

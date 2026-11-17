@@ -1,3 +1,5 @@
+export const lunchSpinDurationMs = 4000;
+
 export const lunchCategories = [
 	"편의점",
 	"카페/베이커리/패스트푸드",
@@ -697,17 +699,31 @@ export function getWheelRotation(
 	previousRotation: number,
 	winnerIndex: number,
 	count: number,
+	landingFraction = 0.5,
 ): number {
 	validateIndex(winnerIndex, count);
 	if (!Number.isFinite(previousRotation) || previousRotation < 0) {
 		throw new RangeError("룰렛 회전값을 확인해 주세요.");
 	}
-	const winnerCenter = ((winnerIndex + 0.5) * 360) / count;
-	const target = (360 - winnerCenter) % 360;
+	if (
+		!Number.isFinite(landingFraction) ||
+		landingFraction < 0.1 ||
+		landingFraction > 0.9
+	) {
+		throw new RangeError("룰렛 정지 위치를 확인해 주세요.");
+	}
+	const winnerAngle = ((winnerIndex + landingFraction) * 360) / count;
+	const target = (360 - winnerAngle) % 360;
 	const correction = (target - (previousRotation % 360) + 360) % 360;
 	const rotation = previousRotation + 4 * 360 + correction;
 	if (!Number.isFinite(rotation) || rotation - previousRotation < 4 * 360) {
 		throw new RangeError("룰렛 회전값이 너무 큽니다.");
 	}
 	return rotation;
+}
+
+/** Cosmetic randomness never changes the independently chosen winner. */
+export function randomWheelLandingFraction(): number {
+	const [value] = crypto.getRandomValues(new Uint32Array(1));
+	return 0.1 + (value / 2 ** 32) * 0.8;
 }
