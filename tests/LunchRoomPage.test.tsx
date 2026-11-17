@@ -1533,6 +1533,39 @@ describe("synchronized lunch room UI", () => {
 		expect(candidateRows()).toHaveLength(2);
 	});
 
+	it.each([
+		"쌀\u200b국수",
+		"만\u0000두",
+		"김\ud800밥",
+	])("keeps an invalid bulk paste editable without changing the candidate draft: %s", (invalid) => {
+		room.self = { id: "host-client", isHost: true };
+		room.snapshot = snapshot({ status: "editing" });
+		render(<LunchRoomPage roomId={roomId} />);
+		listAction("여러 개 추가");
+		const dialog = screen.getByRole("dialog", { name: "여러 개 추가" });
+		const input = within(dialog).getByRole("textbox", {
+			name: "후보 이름 목록",
+		}) as HTMLTextAreaElement;
+		const paste = `만두\n${invalid}`;
+		fireEvent.change(input, { target: { value: paste } });
+		fireEvent.click(within(dialog).getByRole("button", { name: "후보 추가" }));
+		expect(input.value).toBe(paste);
+		expect(input.getAttribute("aria-invalid")).toBe("true");
+		expect(document.activeElement).toBe(input);
+		const errorId = input.getAttribute("aria-describedby");
+		expect(errorId && document.getElementById(errorId)?.textContent).toContain(
+			"2번째 줄",
+		);
+		expect(room.editRoom).not.toHaveBeenCalled();
+		fireEvent.change(input, { target: { value: "만두\n쌀국수🍜" } });
+		fireEvent.click(within(dialog).getByRole("button", { name: "후보 추가" }));
+		expect(screen.queryByRole("dialog", { name: "여러 개 추가" })).toBeNull();
+		expect(candidateRows()).toHaveLength(4);
+		expect(
+			screen.getByRole("button", { name: "쌀국수🍜 이름 수정" }),
+		).toBeTruthy();
+	});
+
 	it("appends multiple names without replacing existing IDs, ownership, categories or unfinished input", async () => {
 		const owned = {
 			...sampleLunchPlaces[0],

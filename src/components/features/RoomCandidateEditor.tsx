@@ -325,9 +325,20 @@ export default function RoomCandidateEditor({
 
 	function appendBulk() {
 		if (disabled) return;
-		const names = bulk.split(/\r?\n/).map(normalize).filter(Boolean);
+		const lines = bulk.split(/\r?\n/).map(normalize);
+		const names = lines.filter(Boolean);
 		if (names.length === 0) {
 			setBulkError("추가할 후보를 한 줄에 하나씩 입력해 주세요.");
+			bulkRef.current?.focus();
+			return;
+		}
+		const invalidLine = lines.findIndex((name) =>
+			/[\p{Cc}\p{Cf}\p{Cs}]/u.test(name),
+		);
+		if (invalidLine !== -1) {
+			setBulkError(
+				`${invalidLine + 1}번째 줄에 사용할 수 없는 문자가 있어요. 해당 후보 이름을 다시 입력해 주세요.`,
+			);
 			bulkRef.current?.focus();
 			return;
 		}

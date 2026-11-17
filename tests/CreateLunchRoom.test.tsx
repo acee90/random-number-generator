@@ -63,6 +63,7 @@ afterEach(() => {
 	cleanup();
 	vi.unstubAllGlobals();
 	vi.restoreAllMocks();
+	vi.useRealTimers();
 });
 
 describe("CreateLunchRoom", () => {
@@ -165,6 +166,68 @@ describe("CreateLunchRoom", () => {
 		expect(screen.getByRole("dialog")).toBeTruthy();
 		await act(async () => resolveFetch(response({ roomId, hostToken })));
 		expect(mocks.navigate).toHaveBeenCalledTimes(1);
+	});
+
+	it("unlocks a stalled creation after fifteen seconds and ignores its late response during a retry", async () => {
+		vi.useFakeTimers();
+		let resolveFirst!: (value: Response) => void;
+		let resolveRetry!: (value: Response) => void;
+		fetchMock.mockReturnValueOnce(
+			new Promise((resolve) => {
+				resolveFirst = resolve;
+			}),
+		);
+		fetchMock.mockReturnValueOnce(
+			new Promise((resolve) => {
+				resolveRetry = resolve;
+			}),
+		);
+		render(<CreateLunchRoom />);
+		openDialog();
+		fireEvent.change(screen.getByLabelText("방 이름"), {
+			target: { value: "느린 연결" },
+		});
+		await submit();
+		await act(async () => vi.advanceTimersByTime(15000));
+		expect(fetchMock.mock.calls[0][1]?.signal?.aborted).toBe(true);
+		expect(screen.getByRole("alert").textContent).toContain("응답이 늦어지고");
+		expect((screen.getByLabelText("방 이름") as HTMLInputElement).value).toBe(
+			"느린 연결",
+		);
+		expect(
+			(screen.getByRole("button", { name: "닫기" }) as HTMLButtonElement)
+				.disabled,
+		).toBe(false);
+		await submit();
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		await act(async () => resolveFirst(response({ roomId, hostToken })));
+		expect(mocks.saveHost).not.toHaveBeenCalled();
+		expect(mocks.navigate).not.toHaveBeenCalled();
+		expect(
+			(screen.getByLabelText("방 이름") as HTMLInputElement).disabled,
+		).toBe(true);
+		await act(async () => resolveRetry(response({ roomId, hostToken })));
+		expect(mocks.saveHost).toHaveBeenCalledExactlyOnceWith(roomId, hostToken);
+		expect(mocks.navigate).toHaveBeenCalledTimes(1);
+	});
+
+	it("bounds response decoding and clears its deadline when unmounted", async () => {
+		vi.useFakeTimers();
+		fetchMock.mockResolvedValueOnce({
+			json: () => new Promise(() => {}),
+		} as Response);
+		const view = render(<CreateLunchRoom inline />);
+		const inlineForm = view.container.querySelector("form");
+		if (!inlineForm) throw new Error("Expected inline form");
+		await act(async () => fireEvent.submit(inlineForm));
+		await act(async () => vi.advanceTimersByTime(15000));
+		expect(screen.getByRole("alert").textContent).toContain("응답이 늦어지고");
+		expect(mocks.saveHost).not.toHaveBeenCalled();
+		fetchMock.mockReturnValueOnce(new Promise(() => {}));
+		await act(async () => fireEvent.submit(inlineForm));
+		view.unmount();
+		expect(fetchMock.mock.calls[1][1]?.signal?.aborted).toBe(true);
+		expect(vi.getTimerCount()).toBe(0);
 	});
 
 	it("ignores a late response after unmount even when the fetch transport ignores cancellation", async () => {

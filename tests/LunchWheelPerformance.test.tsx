@@ -36,6 +36,25 @@ afterEach(() => {
 
 describe("static wheel face rendering", () => {
 	it.each([
+		["김치찌🍜개", "김치찌🍜개"],
+		["김치찌🍜개맛집", "김치찌🍜…"],
+		["🍜🍙🥟🍛🍲", "🍜🍙🥟🍛🍲"],
+		["김치찌개전문점", "김치찌개…"],
+	])("keeps Unicode characters intact in the label for %s", (name, label) => {
+		const view = render(
+			<LunchWheel
+				{...wheelProps(1, {
+					candidates: [{ id: "unicode", name, category: "한식" }],
+					candidateNumbers: [1],
+				})}
+			/>,
+		);
+		expect(view.container.querySelector("text")?.textContent).toBe(
+			`1 ${label}`,
+		);
+	});
+
+	it.each([
 		0, 2, 107,
 	])("reuses %i labels through new arrays, rotation, phase, permission and callback changes", (size) => {
 		const cos = vi.spyOn(Math, "cos");
