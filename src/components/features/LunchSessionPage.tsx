@@ -496,10 +496,7 @@ export default function LunchSessionPage({
 				: { votes: draw.votes.map((vote) => ({ ...vote })) }),
 		});
 	}
-	function start(options?: {
-		confirmReset?: boolean;
-		expectedRevision?: number;
-	}) {
+	function start(options?: { expectedRevision?: number }) {
 		if (!room.startDraw(options)) return;
 		copyAttemptRef.current++;
 		setCopyHelp(null);

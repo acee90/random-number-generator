@@ -420,9 +420,6 @@ async function run(config) {
 					type: "start",
 					id,
 					expectedRevision: host.snapshot.revision,
-					...(!host.snapshot.excludeDrawn && host.snapshot.excludedIds?.length
-						? { confirmReset: true }
-						: {}),
 				},
 				(snapshot) =>
 					snapshot.status === "fetching" || snapshot.draw?.id === id,
@@ -1065,8 +1062,9 @@ async function run(config) {
 			disableExclusion.type === "ack" &&
 				host.snapshot.status === "result" &&
 				JSON.stringify(host.snapshot.excludedIds) ===
-					JSON.stringify([firstWinnerId]),
-			"OFF_TOGGLE_RESET_LEDGER_OR_CLOSED_RESULT",
+					JSON.stringify([firstWinnerId]) &&
+				host.snapshot.exclusionRecords.length === 1,
+			"OFF_TOGGLE_CHANGED_LEDGER_BEFORE_NEXT",
 		);
 		const resultStart = await command(host, {
 			type: "start",
@@ -1074,9 +1072,7 @@ async function run(config) {
 			confirmReset: true,
 		});
 		ensure(resultStart.code === "DRAW_BUSY", "RESULT_DIRECT_REDRAW_ACCEPTED");
-		pass(
-			"between-round-options-preserve-result-ledger-and-require-explicit-next",
-		);
+		pass("off-options-preserve-result-ledger-until-explicit-next");
 		ensure(
 			JSON.stringify(host.snapshot.draw) === frozen,
 			"CURRENT_DRAW_METADATA_MUTATED",
@@ -1090,7 +1086,9 @@ async function run(config) {
 		const matchesClosed = (snapshot) =>
 			snapshot.status === "waiting" &&
 			snapshot.draw === null &&
-			snapshot.history.some((entry) => entry.id === first.id);
+			snapshot.history.some((entry) => entry.id === first.id) &&
+			snapshot.excludedIds.length === 0 &&
+			snapshot.exclusionRecords.length === 0;
 		const [closedReply] = await Promise.all([
 			request(
 				host,
@@ -1118,8 +1116,7 @@ async function run(config) {
 			clearFilter.type === "ack" &&
 				host.snapshot.status === "editing" &&
 				JSON.stringify(host.snapshot.candidates) === filterSource &&
-				JSON.stringify(host.snapshot.excludedIds) ===
-					JSON.stringify([firstWinnerId]) &&
+				host.snapshot.excludedIds.length === 0 &&
 				JSON.stringify(
 					host.snapshot.history.find((entry) => entry.id === first.id),
 				) === frozen,
@@ -1140,18 +1137,18 @@ async function run(config) {
 		pass(
 			"result-edit-rejected-and-next-waiting-edit-finalize-preserve-history",
 		);
-		const unconfirmedStart = await command(host, {
+		const staleStart = await command(host, {
 			type: "start",
-			expectedRevision: host.snapshot.revision,
+			expectedRevision: host.snapshot.revision - 1,
 		});
 		ensure(
-			unconfirmedStart.code === "RESET_CONFIRMATION_REQUIRED" &&
+			staleStart.code === "REVISION_CONFLICT" &&
 				host.snapshot.status === "waiting" &&
-				JSON.stringify(host.snapshot.excludedIds) ===
-					JSON.stringify([firstWinnerId]),
-			"OFF_START_BYPASSED_RESET_CONFIRMATION",
+				host.snapshot.excludedIds.length === 0 &&
+				host.snapshot.exclusionRecords.length === 0,
+			"OFF_NEXT_LEFT_EXCLUSIONS_OR_IGNORED_REVISION",
 		);
-		pass("off-draw-requires-current-revision-and-reset-confirmation");
+		pass("off-next-leaves-empty-exclusions-and-rejects-only-stale-starts");
 
 		const second = await start(host, guest);
 		const archived = second.snapshot.history.find(
@@ -1191,19 +1188,15 @@ async function run(config) {
 		const secondWinnerId =
 			secondCompleted.draw.candidates[secondCompleted.draw.winnerIndex].id;
 		ensure(
-			JSON.stringify(secondCompleted.excludedIds) ===
-				JSON.stringify([secondWinnerId]),
-			"OFF_DRAW_DID_NOT_REPLACE_WINNER_LEDGER",
+			secondCompleted.excludedIds.length === 0 &&
+				secondCompleted.exclusionRecords.length === 0,
+			"OFF_DRAW_STORED_WINNER_EXCLUSION",
 		);
 		ensure(
-			secondCompleted.drawCount === 2 &&
-				secondCompleted.draw.roundNumber === 2 &&
-				secondCompleted.exclusionRecords?.length === 1 &&
-				secondCompleted.exclusionRecords[0].candidateId === secondWinnerId &&
-				secondCompleted.exclusionRecords[0].drawId === second.id &&
-				secondCompleted.exclusionRecords[0].roundNumber === 2,
-			"OFF_DRAW_METADATA_DID_NOT_REPLACE_LEDGER_AND_KEEP_COUNT",
+			secondCompleted.drawCount === 2 && secondCompleted.draw.roundNumber === 2,
+			"OFF_DRAW_LOST_ROUND_COUNT",
 		);
+
 		const enableAgain = await command(host, {
 			type: "options",
 			excludeDrawn: true,
@@ -1215,7 +1208,7 @@ async function run(config) {
 					JSON.stringify([secondWinnerId]),
 			"REENABLE_EXCLUSION_CHANGED_LEDGER",
 		);
-		pass("on-accumulation-off-replacement-and-reenable-use-latest-winner");
+		pass("on-accumulation-off-empty-and-result-reenable-adds-current-winner");
 		const nowEligible = await vote(late, second.id, "down");
 		ensure(
 			nowEligible.type === "snapshot",

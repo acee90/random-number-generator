@@ -82,7 +82,7 @@ describe("RoomExclusionPanel", () => {
 		expect(input.onReset).toHaveBeenCalledOnce();
 	});
 
-	it("hides stored winners while disabled without mixing game-filter exclusions", () => {
+	it("keeps pending OFF exclusions visible until a game boundary without mixing game filters", () => {
 		const state = snapshot(2, {
 			excludeDrawn: false,
 			excludedIds: ["candidate-0"],
@@ -96,9 +96,9 @@ describe("RoomExclusionPanel", () => {
 			screen.queryByText("꺼짐 · 저장된 당첨 후보도 추첨에 포함됩니다."),
 		).toBeNull();
 		expect(
-			screen.getByRole("switch").getAttribute("aria-describedby"),
-		).toBeNull();
-		expect(screen.queryAllByRole("listitem")).toHaveLength(0);
+			screen.getByText("다음 추첨을 시작하면 제외 내역을 비워요."),
+		).toBeTruthy();
+		expect(screen.queryAllByRole("listitem")).toHaveLength(1);
 		expect(screen.queryByText("후보 2")).toBeNull();
 		expect(screen.queryByText(/직접 제외/)).toBeNull();
 	});
@@ -150,7 +150,7 @@ describe("RoomExclusionPanel", () => {
 			true,
 		);
 	});
-	it("summarizes the visible current result and keeps reset beside the switch", () => {
+	it("shows every exclusion including the current winner across result-time toggles and keeps reset beside the switch", () => {
 		const state = snapshot(2);
 		state.status = "result";
 		state.draw = {
@@ -166,10 +166,25 @@ describe("RoomExclusionPanel", () => {
 			listVersion: 1,
 		};
 		const view = render(<RoomExclusionPanel {...props(state)} showResult />);
-		expect(screen.queryByText("후보 2")).toBeNull();
+		expect(screen.getByText("후보 2")).toBeTruthy();
 		expect(screen.getByText("후보 1")).toBeTruthy();
-		expect(screen.getByText("이번 당첨 포함")).toBeTruthy();
-		expect(screen.getAllByRole("listitem")).toHaveLength(1);
+		expect(screen.getAllByRole("listitem")).toHaveLength(2);
+		expect(
+			screen.getByRole("heading", { name: "당첨 제외 내역" }).parentElement
+				?.textContent,
+		).toMatch(/2.*개/);
+		view.rerender(
+			<RoomExclusionPanel
+				{...props({ ...state, excludeDrawn: false })}
+				showResult
+			/>,
+		);
+		expect(screen.getAllByRole("listitem")).toHaveLength(2);
+		expect(
+			screen.getByText("다음 게임으로 넘어가면 제외 내역을 비워요."),
+		).toBeTruthy();
+		view.rerender(<RoomExclusionPanel {...props(state)} showResult />);
+		expect(screen.getAllByRole("listitem")).toHaveLength(2);
 		expect(
 			screen.getByRole("button", { name: "제외 목록 초기화" }).parentElement,
 		).toBe(screen.getByRole("switch").parentElement);

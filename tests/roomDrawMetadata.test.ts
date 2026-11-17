@@ -7,6 +7,7 @@ import {
 	type RoomSnapshot,
 } from "../src/lib/lunchRoom";
 import {
+	clearDisabledRoomExclusions,
 	exclusionRecordFor,
 	hydrateRoomDrawMetadata,
 	recordRoomDrawMetadata,
@@ -49,6 +50,7 @@ function room(overrides: Partial<RoomSnapshot> = {}): RoomSnapshot {
 		history: [],
 		status: "waiting",
 		excludedIds: [],
+		excludeDrawn: true,
 		...overrides,
 	};
 }
@@ -57,17 +59,14 @@ function commit(snapshot: RoomSnapshot, next: RoomDraw, excludeDrawn: boolean) {
 		snapshot.history = [snapshot.draw, ...snapshot.history].slice(0, 20);
 		snapshot.draw = null;
 	}
+	snapshot.excludeDrawn = excludeDrawn;
 	recordRoomDrawMetadata(snapshot, next, excludeDrawn);
 	snapshot.draw = next;
 	snapshot.status = "result";
-	const winner = next.candidates[next.winnerIndex].id;
-	snapshot.excludedIds = excludeDrawn
-		? [...new Set([...(snapshot.excludedIds ?? []), winner])]
-		: [winner];
 }
 
 describe("durable draw numbering and exclusion metadata", () => {
-	it("keeps room round numbers across OFF replacement and manual ledger resets", () => {
+	it("keeps room round numbers across OFF draws and manual ledger resets", () => {
 		const snapshot = room();
 		commit(snapshot, draw(1), true);
 		commit(snapshot, draw(2), true);
@@ -76,9 +75,8 @@ describe("durable draw numbering and exclusion metadata", () => {
 		).toEqual([1, 2]);
 		commit(snapshot, draw(3), false);
 		expect(snapshot.drawCount).toBe(3);
-		expect(snapshot.exclusionRecords).toEqual([
-			exclusionRecordFor(snapshot.draw as RoomDraw),
-		]);
+		expect(snapshot.exclusionRecords).toEqual([]);
+		expect(snapshot.excludedIds).toEqual([]);
 		snapshot.excludedIds = [];
 		snapshot.exclusionRecords = [];
 		commit(snapshot, draw(4), true);
@@ -105,6 +103,23 @@ describe("durable draw numbering and exclusion metadata", () => {
 		hydrateRoomDrawMetadata(restored as RoomSnapshot);
 		expect(restored?.drawCount).toBe(22);
 		expect(restored?.exclusionRecords).toEqual(snapshot.exclusionRecords);
+	});
+
+	it("clears legacy OFF exclusions on hydration without losing round counts or history", () => {
+		const first = { ...draw(1), roundNumber: 1 };
+		const snapshot = room({
+			excludeDrawn: false,
+			drawCount: 1,
+			history: [first],
+			excludedIds: [candidates[0].id],
+			exclusionRecords: [exclusionRecordFor(first)],
+		});
+		const history = structuredClone(snapshot.history);
+		hydrateRoomDrawMetadata(snapshot);
+		expect(snapshot.excludedIds).toEqual([]);
+		expect(snapshot.exclusionRecords).toEqual([]);
+		expect(snapshot.drawCount).toBe(1);
+		expect(snapshot.history).toEqual(history);
 	});
 
 	it("recovers exact old rounds when all history remains without inventing an exclusion", () => {
@@ -231,6 +246,19 @@ describe("result-time exclusion options", () => {
 		expect(snapshot.drawCount).toBe(2);
 		setRoomExcludeDrawn(snapshot, false);
 		expect(snapshot.excludedIds).toEqual([candidates[0].id, candidates[1].id]);
+		const records = structuredClone(snapshot.exclusionRecords);
+		hydrateRoomDrawMetadata(snapshot);
+		expect(snapshot.exclusionRecords).toEqual(records);
+		setRoomExcludeDrawn(snapshot, true);
+		expect(snapshot.excludedIds).toEqual([candidates[0].id, candidates[1].id]);
+		expect({ draw: snapshot.draw, history: snapshot.history }).toEqual(
+			original,
+		);
+		setRoomExcludeDrawn(snapshot, false);
+		snapshot.draw = null;
+		clearDisabledRoomExclusions(snapshot);
+		expect(snapshot.excludedIds).toEqual([]);
+		expect(snapshot.exclusionRecords).toEqual([]);
 	});
 	it("does not restore past winners in waiting or candidates removed from the current list", () => {
 		const snapshot = room({ history: [draw(1)] });

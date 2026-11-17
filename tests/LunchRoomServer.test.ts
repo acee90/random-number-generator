@@ -3349,6 +3349,138 @@ describe("LunchRoomServer game lifecycle", () => {
 		return structuredClone(draw);
 	}
 
+	it("runs two consecutive OFF games without reset approval and keeps host, guest and durable exclusions empty", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const guest = await connect(server, context, "참가자");
+		const initial = structuredClone(latestSnapshot(host).snapshot.candidates);
+		for (let round = 1; round <= 2; round++) {
+			const current = await drawResult(
+				server,
+				context,
+				host,
+				`consecutive-off-${round}`,
+			);
+			expect(current.excludeDrawn).toBe(false);
+			expect(current.candidates).toEqual(initial);
+			expect(current.roundNumber).toBe(round);
+			for (const state of [
+				latestSnapshot(host).snapshot,
+				latestSnapshot(guest).snapshot,
+				storedSnapshot(context),
+			]) {
+				expect(state.excludedIds).toEqual([]);
+				expect(state.exclusionRecords).toEqual([]);
+			}
+			await returnToWaiting(server, host);
+			expect(latestSnapshot(host).snapshot).toMatchObject({
+				status: "waiting",
+				draw: null,
+				excludedIds: [],
+				exclusionRecords: [],
+				drawCount: round,
+			});
+			expect(latestSnapshot(host).snapshot.history[0]).toEqual(current);
+		}
+		expect(entropy).toHaveBeenCalledTimes(2);
+	});
+	it("rolls back a failed OFF switch save, preserves two current exclusions through toggles and restart, and clears only on OFF next", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		await setExclusion(server, host, true, "on-for-off-save");
+		const first = await drawResult(
+			server,
+			context,
+			host,
+			"first-on-before-off-save",
+		);
+		await returnToWaiting(server, host);
+		const original = await drawResult(
+			server,
+			context,
+			host,
+			"off-save-original",
+		);
+		const before = structuredClone(storedSnapshot(context));
+		const command = {
+			type: "options",
+			id: "retry-disable",
+			excludeDrawn: false,
+			expectedRevision: revision(host),
+		};
+		vi.spyOn(context.storage, "put").mockRejectedValueOnce(
+			new Error("save failed"),
+		);
+		await send(server, host, command);
+		expect(requestErrors(host, "retry-disable")).toMatchObject([
+			{ code: "SAVE_FAILED" },
+		]);
+		expect(storedSnapshot(context)).toEqual(before);
+		expect(latestSnapshot(host).snapshot.excludedIds).toEqual(
+			before.excludedIds,
+		);
+		await send(server, host, command);
+		expect(acknowledgements(host, "retry-disable")).toHaveLength(1);
+		expect(storedSnapshot(context)).toMatchObject({
+			excludeDrawn: false,
+			excludedIds: before.excludedIds,
+			exclusionRecords: before.exclusionRecords,
+			draw: original,
+		});
+		expect(before.excludedIds).toHaveLength(2);
+		await setExclusion(server, host, true, "on-again-before-next");
+		expect(storedSnapshot(context).excludedIds).toEqual(before.excludedIds);
+		await setExclusion(server, host, false, "off-again-before-next");
+		expect(storedSnapshot(context).excludedIds).toEqual(before.excludedIds);
+		const restored = createServer(context);
+		await restored.onStart();
+		expect(storedSnapshot(context)).toMatchObject({
+			excludeDrawn: false,
+			draw: original,
+			excludedIds: before.excludedIds,
+			exclusionRecords: before.exclusionRecords,
+		});
+		await returnToWaiting(restored, host);
+		expect(storedSnapshot(context)).toMatchObject({
+			excludedIds: [],
+			exclusionRecords: [],
+			history: [original, first],
+		});
+	});
+	it("migrates a legacy OFF winner ledger to empty storage while retaining its result and round counter", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const original = await drawResult(
+			server,
+			context,
+			host,
+			"legacy-off-winner",
+		);
+		await returnToWaiting(server, host);
+		const saved = structuredClone(
+			context.storage.values.get("lunch-room:v1"),
+		) as { snapshot: RoomSnapshot };
+		saved.snapshot.excludedIds = [original.candidates[original.winnerIndex].id];
+		saved.snapshot.exclusionRecords = [
+			{
+				candidateId: saved.snapshot.excludedIds[0],
+				drawId: original.id,
+				drawnAt: original.startedAt + original.durationMs,
+				roundNumber: original.roundNumber,
+			},
+		];
+		context.storage.values.set("lunch-room:v1", saved);
+		const restored = createServer(context);
+		await restored.onStart();
+		expect(storedSnapshot(context)).toMatchObject({
+			excludeDrawn: false,
+			excludedIds: [],
+			exclusionRecords: [],
+			drawCount: 1,
+			history: [original],
+		});
+	});
+
 	it("adds the current result on enabling after reset, rejects guests and rolls back failed option saves", async () => {
 		const { server, context } = await room();
 		const host = await connect(server, context, "방장", hostToken);
@@ -3927,7 +4059,7 @@ describe("LunchRoomServer game lifecycle", () => {
 		});
 	});
 
-	it("accumulates ON winners, replaces them after a confirmed OFF success, and never publishes the new winner in the drawing ledger", async () => {
+	it("accumulates ON winners, keeps OFF exclusions empty, and permits an OFF draw without confirmation", async () => {
 		const { server, context } = await room();
 		const host = await connect(server, context, "방장", hostToken);
 		const guest = await connect(server, context, "손님");
@@ -3981,59 +4113,33 @@ describe("LunchRoomServer game lifecycle", () => {
 		await setExclusion(server, host, false, "off-between-games");
 		expect(latestSnapshot(host).snapshot).toMatchObject({
 			exclusionRecords: records,
+			excludedIds: records.map((record) => record.candidateId),
 			drawCount: 3,
 		});
-		expect(latestSnapshot(host).snapshot.excludedIds).toEqual([
-			"choice-1",
-			"choice-2",
-			"choice-3",
-		]);
-		const callsBeforeConfirmation = entropy.mock.calls.length;
-		await send(server, host, {
-			type: "start",
-			id: "off-without-confirmation",
-			expectedRevision: revision(host),
-		});
-		expect(requestErrors(host, "off-without-confirmation")).toHaveLength(1);
-		expect(entropy.mock.calls.length).toBe(callsBeforeConfirmation);
-		expect(latestSnapshot(host).snapshot.status).toBe("waiting");
-		expect(latestSnapshot(host).snapshot.exclusionRecords).toEqual(records);
-		expect(storedSnapshot(context).drawCount).toBe(3);
 		entropy.mockResolvedValueOnce({ numbers: [3], source: "quantum" });
+		const draw = await drawResult(server, context, host, "off-four");
 		const offRecord = {
 			candidateId: "choice-4",
-			drawId: "off-four",
-			drawnAt: Date.now() + 1500 + lunchRoomLimits.drawDurationMs,
+			drawId: draw.id,
+			drawnAt: draw.startedAt + draw.durationMs,
 			roundNumber: 4,
 		};
-		await send(server, host, {
-			type: "start",
-			id: "off-four",
-			expectedRevision: revision(host),
-			confirmReset: true,
-		});
-		await context.drain();
-		expect(latestSnapshot(host).snapshot.excludedIds).toEqual([]);
-		expect(latestSnapshot(guest).snapshot.excludedIds).toEqual([]);
-		expect(latestSnapshot(host).snapshot.exclusionRecords).toEqual([]);
-		expect(latestSnapshot(guest).snapshot.exclusionRecords).toEqual([]);
-		expect(latestSnapshot(host).snapshot.drawCount).toBe(4);
-		expect(storedSnapshot(context)).toMatchObject({
-			exclusionRecords: [offRecord],
-			drawCount: 4,
-		});
-		expect(storedSnapshot(context).excludedIds).toEqual(["choice-4"]);
-		vi.advanceTimersByTime(1500 + lunchRoomLimits.drawDurationMs);
-		await server.onAlarm();
-		const draw = latestSnapshot(host).snapshot.draw;
+		expect(requestErrors(host, "off-four")).toEqual([]);
 		expect(draw).toMatchObject({
 			excludeDrawn: false,
-			excludedIdsBefore: ["choice-1", "choice-2", "choice-3"],
+			excludedIdsBefore: [],
 			roundNumber: 4,
 		});
-		expect(latestSnapshot(guest).snapshot.exclusionRecords).toEqual([
-			offRecord,
-		]);
+		expect(storedSnapshot(context)).toMatchObject({
+			excludedIds: [],
+			exclusionRecords: [],
+			drawCount: 4,
+		});
+		expect(latestSnapshot(guest).snapshot).toMatchObject({
+			excludedIds: [],
+			exclusionRecords: [],
+			drawCount: 4,
+		});
 		await setExclusion(server, host, true, "on-after-four");
 		expect(latestSnapshot(host).snapshot).toMatchObject({
 			status: "result",
@@ -4068,6 +4174,7 @@ describe("LunchRoomServer game lifecycle", () => {
 				included: index !== 0,
 			})),
 		});
+		await setExclusion(server, host, true, "active-ledger-setup");
 		entropy.mockResolvedValueOnce({ numbers: [0], source: "quantum" });
 		const draw = await drawResult(server, context, host, "reset-result");
 		expect(latestSnapshot(host).snapshot.exclusionRecords).toEqual([
@@ -4130,14 +4237,14 @@ describe("LunchRoomServer game lifecycle", () => {
 		});
 	});
 
-	it("rejects stale reset approval and preserves the prior ledger when an OFF entropy request fails", async () => {
+	it("rejects stale OFF starts and preserves empty exclusions when entropy fails", async () => {
 		const { server, context } = await room();
 		const host = await connect(server, context, "방장", hostToken);
 		await drawResult(server, context, host, "before-failure");
 		await returnToWaiting(server, host);
 		const before = structuredClone(latestSnapshot(host).snapshot);
 		expect(before.drawCount).toBe(1);
-		expect(before.exclusionRecords).toHaveLength(1);
+		expect(before.exclusionRecords).toEqual([]);
 		await setExclusion(server, host, true, "conditions-change-on");
 		await setExclusion(server, host, false, "conditions-change-off");
 		await send(server, host, {
@@ -4206,6 +4313,7 @@ describe("LunchRoomServer game lifecycle", () => {
 	it("rolls back a failed result save before exposing a new winner or replacing the exclusion ledger", async () => {
 		const { server, context } = await room();
 		const host = await connect(server, context, "방장", hostToken);
+		await setExclusion(server, host, true, "save-failure-on");
 		await drawResult(server, context, host, "before-save-failure");
 		await returnToWaiting(server, host);
 		const before = structuredClone(latestSnapshot(host).snapshot);
@@ -4269,6 +4377,7 @@ describe("LunchRoomServer game lifecycle", () => {
 		expect(storedSnapshot(context)).toMatchObject({
 			drawCount: 2,
 			exclusionRecords: [
+				...(before.exclusionRecords ?? []),
 				{
 					candidateId: retry.candidates[retry.winnerIndex].id,
 					drawId: retry.id,
@@ -4449,6 +4558,7 @@ describe("LunchRoomServer game lifecycle", () => {
 	] as const)("acknowledges an evicted start ID retained by %s without drawing again", async (retainedBy) => {
 		const { server, context } = await room();
 		const host = await connect(server, context, "방장", hostToken);
+		await setExclusion(server, host, true, "active-ledger-setup");
 		const id = "evicted-successful-start";
 		await drawResult(server, context, host, id);
 		if (retainedBy !== "current-result") await returnToWaiting(server, host);
@@ -4553,7 +4663,7 @@ describe("LunchRoomServer game lifecycle", () => {
 		).toBe(false);
 	});
 
-	it("requires explicit waiting and editing before renaming an excluded candidate, then keeps only each latest OFF winner", async () => {
+	it("requires explicit waiting and editing before renaming an excluded candidate, then leaves consecutive OFF draws unexcluded", async () => {
 		const { server, context } = await room();
 		const host = await connect(server, context, "방장", hostToken);
 		await replaceList(server, host, 3, "rename-list");
@@ -4609,23 +4719,15 @@ describe("LunchRoomServer game lifecycle", () => {
 			context,
 			host,
 			"off-first-latest",
-			true,
 		);
 		expect(offFirst.candidates.map((candidate) => candidate.id)).toEqual([
 			"choice-1",
 			"choice-3",
 		]);
-		expect(latestSnapshot(host).snapshot.excludedIds).toEqual(["choice-3"]);
+		expect(latestSnapshot(host).snapshot.excludedIds).toEqual([]);
 		expect(latestSnapshot(host).snapshot).toMatchObject({
 			drawCount: 2,
-			exclusionRecords: [
-				{
-					candidateId: "choice-3",
-					drawId: offFirst.id,
-					drawnAt: offFirst.startedAt + offFirst.durationMs,
-					roundNumber: 2,
-				},
-			],
+			exclusionRecords: [],
 		});
 		await returnToWaiting(server, host);
 		entropy.mockResolvedValueOnce({ numbers: [0], source: "quantum" });
@@ -4634,20 +4736,13 @@ describe("LunchRoomServer game lifecycle", () => {
 			context,
 			host,
 			"off-second-latest",
-			true,
 		);
-		expect(latestSnapshot(host).snapshot.excludedIds).toEqual(["choice-1"]);
+		expect(latestSnapshot(host).snapshot.excludedIds).toEqual([]);
 		expect(storedSnapshot(context)).toMatchObject({
 			drawCount: 3,
-			exclusionRecords: [
-				{
-					candidateId: "choice-1",
-					drawId: offSecond.id,
-					drawnAt: offSecond.startedAt + offSecond.durationMs,
-					roundNumber: 3,
-				},
-			],
+			exclusionRecords: [],
 		});
+		expect(offSecond.roundNumber).toBe(3);
 		expect(latestSnapshot(host).snapshot.candidates[1].included).toBe(false);
 		expect(
 			latestSnapshot(host).snapshot.history.find(
@@ -4748,7 +4843,7 @@ describe("LunchRoomServer game lifecycle", () => {
 		});
 	});
 
-	it("restores an interrupted confirmed OFF fetch without consuming the previous ledger", async () => {
+	it("restores an interrupted OFF fetch without inventing an exclusion", async () => {
 		const { server, context } = await room();
 		const host = await connect(server, context, "방장", hostToken);
 		await drawResult(server, context, host, "before-interrupted-off");
@@ -4794,9 +4889,7 @@ describe("LunchRoomServer game lifecycle", () => {
 		expect(storedSnapshot(context)).toMatchObject({
 			drawCount: 2,
 			draw: { id: "fresh-after-interrupted-off", roundNumber: 2 },
-			exclusionRecords: [
-				{ drawId: "fresh-after-interrupted-off", roundNumber: 2 },
-			],
+			exclusionRecords: [],
 		});
 		expect(entropy).toHaveBeenCalledTimes(3);
 	});
@@ -4983,10 +5076,8 @@ describe("LunchRoomServer game lifecycle", () => {
 			true,
 		);
 		expect(fresh.id).toBe("fresh-after-double-save");
-		expect(latestSnapshot(host).snapshot.excludedIds).toEqual([
-			candidates[0].id,
-		]);
-		expect(storedSnapshot(context).excludedIds).toEqual([candidates[0].id]);
+		expect(latestSnapshot(host).snapshot.excludedIds).toEqual([]);
+		expect(storedSnapshot(context).excludedIds).toEqual([]);
 	});
 
 	it("rolls back a failed result-feedback save and lets the same identified vote retry without changing the round", async () => {

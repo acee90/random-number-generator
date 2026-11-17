@@ -2105,7 +2105,7 @@ describe("synchronized lunch room UI", () => {
 		expect(room.editRoom).not.toHaveBeenCalled();
 	});
 
-	it("confirms OFF draws and reset separately, rejecting a stale confirmation", () => {
+	it("starts OFF without confirmation even with a legacy ledger and still rejects stale manual reset approval", () => {
 		room.self = { id: "host-client", isHost: true };
 		room.snapshot = snapshot({
 			revision: 2,
@@ -2114,17 +2114,8 @@ describe("synchronized lunch room UI", () => {
 		});
 		const view = render(<LunchRoomPage roomId={roomId} />);
 		fireEvent.click(screen.getByRole("button", { name: "룰렛 돌리기" }));
-		expect(
-			screen.getByRole("alertdialog", {
-				name: "제외 목록을 초기화하고 돌릴까요?",
-			}),
-		).toBeTruthy();
-		fireEvent.click(screen.getByRole("button", { name: "취소" }));
-		expect(room.startDraw).not.toHaveBeenCalled();
-		fireEvent.click(screen.getByRole("button", { name: "룰렛 돌리기" }));
-		fireEvent.click(screen.getByRole("button", { name: "초기화하고 돌리기" }));
-		expect(room.startDraw).toHaveBeenCalledWith({
-			confirmReset: true,
+		expect(screen.queryByRole("alertdialog")).toBeNull();
+		expect(room.startDraw).toHaveBeenCalledExactlyOnceWith({
 			expectedRevision: 2,
 		});
 		updateRoom(view, {

@@ -62,7 +62,68 @@ describe("local game controller", () => {
 		expect(result.current.room.snapshot.draw?.candidates).toHaveLength(1);
 		expect(result.current.room.snapshot.draw?.roundNumber).toBe(2);
 		expect(result.current.room.snapshot.excludedIds).toEqual(["a", "b"]);
+		const second = result.current.room.snapshot.draw;
+		assert(second);
+		await act(async () => {
+			await result.current.room.updateRoomOptions(false);
+		});
+		expect(result.current.room.snapshot.excludedIds).toEqual(["a", "b"]);
+		await act(async () => {
+			await result.current.room.updateRoomOptions(true);
+		});
+		expect(result.current.room.snapshot.excludedIds).toEqual(["a", "b"]);
+		await act(async () => {
+			await result.current.room.updateRoomOptions(false);
+		});
+		act(() => {
+			result.current.room.nextRound(second.id);
+		});
+		expect(result.current.room.snapshot.excludedIds).toEqual([]);
+		expect(result.current.room.snapshot.exclusionRecords).toEqual([]);
 	});
+	it("keeps two consecutive OFF games empty without reset confirmation and supports enabling the current result", async () => {
+		const { result } = setup();
+		await spin(result);
+		const first = structuredClone(result.current.room.snapshot.draw);
+		assert(first);
+		expect(result.current.room.snapshot.excludedIds).toEqual([]);
+		expect(result.current.room.snapshot.exclusionRecords).toEqual([]);
+		act(() => {
+			expect(result.current.room.nextRound(first.id)).toBe(true);
+		});
+		expect(result.current.room.snapshot.excludedIds).toEqual([]);
+		await spin(result);
+		expect(generateRandomNumbers).toHaveBeenCalledTimes(2);
+		const second = structuredClone(result.current.room.snapshot.draw);
+		assert(second);
+		expect(second.candidates).toHaveLength(2);
+		expect(second.roundNumber).toBe(2);
+		expect(result.current.room.snapshot.excludedIds).toEqual([]);
+		expect(result.current.room.snapshot.exclusionRecords).toEqual([]);
+		await act(async () => {
+			await result.current.room.updateRoomOptions(true);
+		});
+		expect(result.current.room.snapshot.excludedIds).toEqual([
+			second.candidates[second.winnerIndex].id,
+		]);
+		await act(async () => {
+			await result.current.room.updateRoomOptions(false);
+		});
+		expect(result.current.room.snapshot.excludedIds).toEqual([
+			second.candidates[second.winnerIndex].id,
+		]);
+		expect(result.current.room.snapshot.exclusionRecords).toHaveLength(1);
+		expect(result.current.room.snapshot.draw).toEqual(second);
+		expect(
+			result.current.room.snapshot.history.find((x) => x.id === first.id),
+		).toEqual(first);
+		act(() => {
+			expect(result.current.room.nextRound(second.id)).toBe(true);
+		});
+		expect(result.current.room.snapshot.excludedIds).toEqual([]);
+		expect(result.current.room.snapshot.exclusionRecords).toEqual([]);
+	});
+
 	it("resets only automatic exclusions and keeps manual filters and history", async () => {
 		const { result } = setup();
 		await spin(result);
@@ -91,6 +152,9 @@ describe("local game controller", () => {
 	});
 	it("preserves stable IDs and previous result snapshots when editing names", async () => {
 		const { result } = setup();
+		await act(async () => {
+			await result.current.room.updateRoomOptions(true);
+		});
 		await spin(result);
 		const record = structuredClone(result.current.room.snapshot.history[0]);
 		act(() => {

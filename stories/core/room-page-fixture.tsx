@@ -25,7 +25,10 @@ import {
 	type RoomParticipant,
 	type RoomSnapshot,
 } from "@/lib/lunchRoom";
-import { setRoomExcludeDrawn } from "@/lib/roomDrawMetadata";
+import {
+	recordRoomDrawMetadata,
+	setRoomExcludeDrawn,
+} from "@/lib/roomDrawMetadata";
 import type { useLunchRoom as useServiceLunchRoom } from "../../src/hooks/useLunchRoom";
 import {
 	appendPreviewVote,
@@ -153,7 +156,7 @@ function initialState(
 					: null,
 			excludeDrawn: false,
 			gameFilter: { categories: null, excludedIds: [] },
-			excludedIds: current ? [current.candidates[current.winnerIndex].id] : [],
+			excludedIds: [],
 			candidates,
 			participants,
 			members: participants.map((participant, index) => ({
@@ -563,7 +566,7 @@ export function RoomPageFixtureProvider({
 			applySnapshot((value) => ({ ...value, excludedIds: [] }));
 			return true;
 		},
-		startDraw({ confirmReset, expectedRevision } = {}) {
+		startDraw({ expectedRevision } = {}) {
 			const value = current.current;
 			const eligible = getEligibleRoomCandidates(value.snapshot);
 			if (
@@ -571,10 +574,7 @@ export function RoomPageFixtureProvider({
 				!revisionMatches(expectedRevision) ||
 				value.snapshot.status !== "waiting" ||
 				value.snapshot.draw !== null ||
-				eligible.length === 0 ||
-				(!value.snapshot.excludeDrawn &&
-					Boolean(value.snapshot.excludedIds?.length) &&
-					!confirmReset)
+				eligible.length === 0
 			)
 				return false;
 			const requestedAt = Date.now();
@@ -583,7 +583,14 @@ export function RoomPageFixtureProvider({
 					{
 						...state,
 						startPending: true,
-						snapshot: { ...state.snapshot, status: "fetching", draw: null },
+						snapshot: {
+							...state.snapshot,
+							...(state.snapshot.excludeDrawn
+								? {}
+								: { excludedIds: [], exclusionRecords: [] }),
+							status: "fetching",
+							draw: null,
+						},
 					},
 					systemMessage(
 						`방장이 ${eligible.length}곳 중 추첨을 시작했습니다.`,
@@ -629,10 +636,10 @@ export function RoomPageFixtureProvider({
 					excludeDrawn: state.snapshot.excludeDrawn ?? false,
 					excludedIdsBefore: [...(state.snapshot.excludedIds ?? [])],
 				};
-				const winnerId = candidates[winnerIndex].id;
-				const excludedIds = draw.excludeDrawn
-					? [...new Set([...(state.snapshot.excludedIds ?? []), winnerId])]
-					: [winnerId];
+				const withMetadata = { ...state.snapshot };
+				recordRoomDrawMetadata(withMetadata, draw, Boolean(draw.excludeDrawn));
+				const { excludedIds, exclusionRecords, drawCount, drawCountIsExact } =
+					withMetadata;
 				commit((latest) => ({
 					...latest,
 					startPending: false,
@@ -654,6 +661,9 @@ export function RoomPageFixtureProvider({
 									...latest.snapshot,
 									status: "result",
 									excludedIds,
+									exclusionRecords,
+									drawCount,
+									drawCountIsExact,
 									revision: (latest.snapshot.revision ?? 1) + 1,
 								},
 							},
@@ -675,6 +685,9 @@ export function RoomPageFixtureProvider({
 				...value,
 				snapshot: {
 					...value.snapshot,
+					...(value.snapshot.excludeDrawn
+						? {}
+						: { excludedIds: [], exclusionRecords: [] }),
 					draw: null,
 					status: "waiting",
 					revision: (value.snapshot.revision ?? 1) + 1,

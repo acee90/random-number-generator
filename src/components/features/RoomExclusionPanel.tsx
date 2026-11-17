@@ -38,20 +38,7 @@ export default function RoomExclusionPanel({
 	const id = useId();
 	const phase = snapshot ? getRoomPhase(snapshot) : "waiting";
 	const excludeDrawn = snapshot?.excludeDrawn ?? false;
-	const allRows = getRoomExclusionHistory(snapshot);
-	const currentDraw = snapshot?.draw;
-	const currentEntry =
-		showResult && currentDraw
-			? allRows.find(
-					(entry) =>
-						entry.record?.drawId === currentDraw.id &&
-						entry.candidate.id ===
-							currentDraw.candidates[currentDraw.winnerIndex]?.id,
-				)
-			: undefined;
-	const rows = currentEntry
-		? allRows.filter((entry) => entry !== currentEntry)
-		: allRows;
+	const rows = getRoomExclusionHistory(snapshot);
 	const rowKey = rows
 		.map((entry) => `${entry.candidate.id}:${entry.record?.drawnAt ?? ""}`)
 		.join("|");
@@ -89,9 +76,13 @@ export default function RoomExclusionPanel({
 
 	const note = inProgress
 		? "추첨 후 변경할 수 있어요."
-		: showResult && !excludeDrawn
-			? "켜면 이번 당첨부터 제외해요."
-			: null;
+		: !excludeDrawn && rows.length > 0
+			? showResult
+				? "다음 게임으로 넘어가면 제외 내역을 비워요."
+				: "다음 추첨을 시작하면 제외 내역을 비워요."
+			: showResult && !excludeDrawn
+				? "켜면 이번 당첨부터 제외해요."
+				: null;
 
 	return (
 		<aside className="room-draw-exclusions" aria-label="후보 제외 목록">
@@ -113,11 +104,7 @@ export default function RoomExclusionPanel({
 							size="icon"
 							aria-label="제외 목록 초기화"
 							title="제외 목록 초기화"
-							disabled={
-								disabled ||
-								!excludeDrawn ||
-								(snapshot?.excludedIds?.length ?? 0) === 0
-							}
+							disabled={disabled || (snapshot?.excludedIds?.length ?? 0) === 0}
 							onClick={onReset}
 						>
 							<RotateCcw size={14} aria-hidden="true" />
@@ -130,18 +117,15 @@ export default function RoomExclusionPanel({
 					{note}
 				</p>
 			)}
-			{excludeDrawn && (
+			{(excludeDrawn || rows.length > 0) && (
 				<>
 					<div className="room-draw-exclusion-heading">
-						<h3>{excludeDrawn ? "당첨 제외 내역" : "저장된 당첨 내역"}</h3>
+						<h3>당첨 제외 내역</h3>
 						<span className="room-draw-exclusion-count">
-							{allRows.length}
+							{rows.length}
 							<span className="sr-only">개</span>
 						</span>
 					</div>
-					{currentEntry && (
-						<p className="room-draw-exclusion-note">이번 당첨 포함</p>
-					)}
 					{rows.length > 0 && (
 						<>
 							<div className="room-draw-exclusion-order">
