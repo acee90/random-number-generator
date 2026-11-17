@@ -93,8 +93,11 @@ describe("RoomExclusionPanel", () => {
 			screen.getByRole("heading", { name: "저장된 당첨 내역" }),
 		).toBeTruthy();
 		expect(
-			screen.getByText("꺼짐 · 저장된 당첨 후보도 추첨에 포함됩니다."),
-		).toBeTruthy();
+			screen.queryByText("꺼짐 · 저장된 당첨 후보도 추첨에 포함됩니다."),
+		).toBeNull();
+		expect(
+			screen.getByRole("switch").getAttribute("aria-describedby"),
+		).toBeNull();
 		expect(screen.getAllByRole("listitem")).toHaveLength(1);
 		expect(screen.queryByText("후보 2")).toBeNull();
 		expect(screen.queryByText(/직접 제외/)).toBeNull();

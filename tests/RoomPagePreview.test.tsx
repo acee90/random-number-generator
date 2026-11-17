@@ -344,9 +344,7 @@ describe("Storybook room page with the local transport adapter", () => {
 		expect(
 			within(exclusions).getByRole("heading", { name: "저장된 당첨 내역" }),
 		).toBeTruthy();
-		expect(
-			within(exclusions).getByText("당첨 제외 내역이 없습니다."),
-		).toBeTruthy();
+		expect(within(exclusions).getByText("0")).toBeTruthy();
 		expect(
 			within(exclusions).queryByRole("button", { name: "제외 목록 초기화" }),
 		).toBeNull();

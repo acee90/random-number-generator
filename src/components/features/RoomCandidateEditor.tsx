@@ -78,6 +78,7 @@ export type RoomCandidateEditorProps = {
 	contextKey: string;
 	sourceName?: string;
 	title: string;
+	headerActions?: ReactNode;
 	children?: ReactNode;
 	notices?: ReactNode;
 };
@@ -114,6 +115,7 @@ export default function RoomCandidateEditor({
 	contextKey,
 	sourceName = "후보 목록",
 	title,
+	headerActions,
 	children,
 	notices,
 }: RoomCandidateEditorProps) {
@@ -378,6 +380,7 @@ export default function RoomCandidateEditor({
 		<section className="room-simple-editor" aria-label="후보 편집">
 			<div className="room-simple-heading">
 				<h2>{title}</h2>
+				{headerActions}
 				<DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
 					<DropdownMenuTrigger asChild>
 						<Button

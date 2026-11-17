@@ -22,6 +22,8 @@
 	margin-block-end: 14px;
 }
 .room-simple-heading h2 {
+	flex: 1;
+	min-inline-size: 0;
 	margin: 0;
 	font-size: 20px;
 	line-height: 1.5;
@@ -81,8 +83,18 @@
 	box-shadow: none;
 }
 .room-simple-chips > button[aria-pressed="true"] {
-	background: var(--surface);
-	border-color: var(--ring);
+	background: var(--lime);
+	border-color: var(--ink);
+	color: var(--ink);
+}
+@media (hover: hover) and (pointer: fine) {
+	.room-simple-chips > button[aria-pressed="false"]:not(:disabled):hover {
+		background: var(--paper);
+		border-color: var(--muted);
+	}
+	.room-simple-chips > button[aria-pressed="true"]:not(:disabled):hover {
+		background: var(--primary-hover);
+	}
 }
 .room-simple-search {
 	display: flex;

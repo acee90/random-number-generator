@@ -74,31 +74,31 @@ export default function RoomExclusionPanel({
 		return () => observer.disconnect();
 	}, [rowKey]);
 
+	const note = inProgress
+		? "추첨 후 변경할 수 있어요."
+		: showResult
+			? "다음 추첨부터 적용돼요."
+			: null;
+
 	return (
 		<aside className="room-draw-exclusions" aria-label="후보 제외 목록">
 			<div className="room-draw-exclusion-toggle">
-				<Label htmlFor={`${id}-enabled`}>
-					중복 없이 추첨<small>뽑힌 후보 제외</small>
-				</Label>
+				<Label htmlFor={`${id}-enabled`}>중복 없이 추첨</Label>
 				<Switch
 					id={`${id}-enabled`}
 					className="room-draw-exclusion-switch"
 					aria-label="중복 없이 추첨 · 뽑힌 후보 제외"
-					aria-describedby={`${id}-note`}
+					aria-describedby={note ? `${id}-note` : undefined}
 					checked={excludeDrawn}
 					disabled={disabled}
 					onCheckedChange={onToggle}
 				/>
 			</div>
-			<p className="room-draw-exclusion-note" id={`${id}-note`}>
-				{inProgress
-					? "추첨이 끝난 뒤 변경할 수 있습니다."
-					: showResult
-						? "다음 추첨에 적용됩니다. 이번 결과는 유지됩니다."
-						: excludeDrawn
-							? "뽑힌 후보는 다음 추첨에서 빠집니다."
-							: "꺼짐 · 저장된 당첨 후보도 추첨에 포함됩니다."}
-			</p>
+			{note && (
+				<p className="room-draw-exclusion-note" id={`${id}-note`}>
+					{note}
+				</p>
+			)}
 			<div className="room-draw-exclusion-heading">
 				<h3>{excludeDrawn ? "당첨 제외 내역" : "저장된 당첨 내역"}</h3>
 				<span className="room-draw-exclusion-count">
@@ -106,7 +106,7 @@ export default function RoomExclusionPanel({
 					<span className="sr-only">개</span>
 				</span>
 			</div>
-			{rows.length > 0 ? (
+			{rows.length > 0 && (
 				<>
 					<div className="room-draw-exclusion-order">
 						<span>최근 추첨순</span>
@@ -148,8 +148,6 @@ export default function RoomExclusionPanel({
 						</p>
 					)}
 				</>
-			) : (
-				<p className="room-draw-exclusion-empty">당첨 제외 내역이 없습니다.</p>
 			)}
 			{isHost && (snapshot?.excludedIds?.length ?? 0) > 0 && (
 				<Button
