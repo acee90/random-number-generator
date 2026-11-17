@@ -15,6 +15,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
 	createSeoHead,
 	lunchPageSeo,
+	type RoomShareInfo,
 	siteOrigin,
 	socialImage,
 } from "../src/lib/seo";
@@ -25,8 +26,15 @@ import { Route as SoloRoute } from "../src/routes/solo";
 import { Route as ToolsRoute } from "../src/routes/tools";
 
 vi.mock("../src/styles.css?url", () => ({ default: "/styles.css" }));
+vi.mock("../src/services/roomShare", () => ({ getRoomShareInfo: vi.fn() }));
 
-async function renderedHead(path: "/" | "/solo" | "/lunch-room/$roomId") {
+const roomId = "28a5cbd4-051b-48f8-9e93-c052e4746b39";
+const inviteUrl = `${siteOrigin}/lunch-room/${roomId}`;
+
+async function renderedHead(
+	path: "/" | "/solo" | "/lunch-room/$roomId",
+	info: RoomShareInfo = { status: "unavailable" },
+) {
 	const root = createRootRoute({
 		head: async () => (await RootRoute.options.head?.({} as never)) ?? {},
 		component: HeadContent,
@@ -36,12 +44,14 @@ async function renderedHead(path: "/" | "/solo" | "/lunch-room/$roomId") {
 	const route = createRoute({
 		getParentRoute: () => root,
 		path,
-		head: async () => (await source.options.head?.({} as never)) ?? {},
+		loader: () => info,
+		head: async (context) =>
+			(await source.options.head?.(context as never)) ?? {},
 	});
 	const router = createRouter({
 		routeTree: root.addChildren([route]),
 		history: createMemoryHistory({
-			initialEntries: [path.replace("$roomId", "private-room-identifier")],
+			initialEntries: [path.replace("$roomId", roomId)],
 		}),
 		isServer: true,
 	});
@@ -94,17 +104,59 @@ describe("public lunch pages and private room metadata", () => {
 			);
 	});
 
-	it("does not inherit public indexing, canonical or private identifiers into a shared room head", async () => {
+	it("shares the invite URL without enabling indexing or a canonical", async () => {
 		const document = await renderedHead("/lunch-room/$roomId");
 		expect(
 			document.querySelector('meta[name="robots"]')?.getAttribute("content"),
 		).toBe("noindex, nofollow");
 		expect(document.querySelector('link[rel="canonical"]')).toBeNull();
-		expect(document.querySelector('meta[property="og:url"]')).toBeNull();
-		expect(document.documentElement.innerHTML).not.toContain(
-			"private-room-identifier",
-		);
+		expect(
+			document
+				.querySelector('meta[property="og:url"]')
+				?.getAttribute("content"),
+		).toBe(inviteUrl);
 		expect(document.title).toBe(lunchPageSeo.room.title);
+	});
+
+	it("renders the actual room title and URL in the initial share head, escaping user text", async () => {
+		const title = '개발팀 <점심> & "메뉴"';
+		const document = await renderedHead("/lunch-room/$roomId", {
+			status: "open",
+			title,
+		});
+		expect(document.querySelectorAll("title")).toHaveLength(1);
+		expect(document.title).toBe(`${title} · 점메추 방 초대`);
+		for (const selector of [
+			'meta[property="og:title"]',
+			'meta[name="twitter:title"]',
+		]) {
+			expect(document.querySelectorAll(selector)).toHaveLength(1);
+			expect(document.querySelector(selector)?.getAttribute("content")).toBe(
+				document.title,
+			);
+		}
+		for (const selector of [
+			'meta[property="og:description"]',
+			'meta[name="twitter:description"]',
+			'meta[property="og:url"]',
+		])
+			expect(document.querySelector(selector)?.getAttribute("content")).toBe(
+				inviteUrl,
+			);
+		expect(
+			document.querySelector('meta[name="robots"]')?.getAttribute("content"),
+		).toBe("noindex, nofollow");
+		expect(document.querySelector('link[rel="canonical"]')).toBeNull();
+		expect(document.querySelector("점심")).toBeNull();
+	});
+
+	it.each([
+		["closed", "종료된 추첨방 · 점메추"],
+		["expired", "만료된 추첨방 · 점메추"],
+		["missing", "찾을 수 없는 추첨방 · 점메추"],
+	] as const)("uses a safe %s room fallback", async (status, title) => {
+		const document = await renderedHead("/lunch-room/$roomId", { status });
+		expect(document.title).toBe(title);
 	});
 
 	it("keeps uncategorized and hidden tool metadata private by default", () => {
