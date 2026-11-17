@@ -33,7 +33,7 @@
 
 .room-draw-feedback[data-mode="results"] {
 	margin: 0;
-	padding: 24px 20px;
+	padding: 0 24px 16px;
 	border: 0;
 	border-radius: 0;
 	background: #fff;
@@ -43,18 +43,16 @@
 }
 .room-draw-feedback[data-mode="results"] .room-feedback-lists {
 	grid-template-columns: repeat(2, minmax(0, 1fr));
-	align-items: stretch;
-	gap: 0;
+	align-items: start;
+	gap: 16px;
 	margin-block-start: 12px;
-	border-block: 2px solid var(--ink);
 }
 .room-draw-feedback[data-mode="results"] .room-feedback-list {
 	display: flex;
 	flex-direction: column;
-	min-block-size: 146px;
 	--team-color: #4c742c;
 	--team-particle: var(--lime);
-	padding: 8px 10px 4px;
+	padding: 0;
 	border: 0;
 	border-radius: 0;
 	background: #fff;
@@ -63,7 +61,6 @@
 	.room-feedback-list[data-choice="down"] {
 	--team-color: #a35736;
 	--team-particle: #a35736;
-	border-inline-start: 1px solid var(--section-line, #68715e);
 }
 .room-feedback-tally-icon,
 .room-feedback-tally-number {
@@ -104,22 +101,22 @@
 	color: var(--ink);
 }
 .room-draw-feedback[data-mode="results"] .room-feedback-list ul {
-	flex: 1;
+	flex: none;
 	align-content: start;
 	max-block-size: 300px;
 	overflow-y: auto;
 	overscroll-behavior: contain;
 	scrollbar-width: thin;
-	margin-block-start: 0;
+	margin-block-start: 8px;
 	gap: 0;
 }
 .room-draw-feedback[data-mode="results"] .room-feedback-empty {
 	display: grid;
 	place-items: center;
-	flex: 1;
-	min-block-size: 48px;
-	margin: 0;
-	padding: 8px;
+	flex: none;
+	min-block-size: 36px;
+	margin: 8px 0 0;
+	padding: 8px 0;
 }
 .room-feedback-list[data-selected="true"] .room-feedback-tally {
 	background: color-mix(
@@ -334,6 +331,7 @@
 }
 .room-feedback-list ul {
 	display: grid;
+	grid-template-columns: minmax(0, 1fr);
 	gap: 5px;
 	margin: 7px 0 0;
 	padding: 0;
