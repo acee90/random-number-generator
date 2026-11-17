@@ -261,6 +261,7 @@
 	line-height: 1.6;
 }
 .room-history-dialog {
+	overscroll-behavior: contain;
 	inline-size: min(760px, calc(100vw - 24px));
 	max-inline-size: 760px;
 	max-block-size: calc(100dvh - 24px);

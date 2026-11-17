@@ -1033,6 +1033,11 @@ function parseList<T extends { id: string }>(
 	return list;
 }
 
+/** Validate completed draw archives independently of a live room's list version. */
+export function parseRoomDrawHistory(value: unknown): RoomDraw[] | null {
+	return parseList(value, lunchRoomLimits.maxHistory, parseDraw);
+}
+
 export function parseRoomSnapshot(value: unknown): RoomSnapshot | null {
 	if (
 		!isRecord(value) ||
@@ -1064,11 +1069,7 @@ export function parseRoomSnapshot(value: unknown): RoomSnapshot | null {
 		lunchRoomLimits.maxMessages,
 		parseChatMessage,
 	);
-	const history = parseList(
-		value.history,
-		lunchRoomLimits.maxHistory,
-		parseDraw,
-	);
+	const history = parseRoomDrawHistory(value.history);
 	const draw = value.draw === null ? null : parseDraw(value.draw);
 	const excludedIds =
 		value.excludedIds === undefined

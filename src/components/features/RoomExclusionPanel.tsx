@@ -86,7 +86,7 @@ export default function RoomExclusionPanel({
 				<Label htmlFor={`${id}-enabled`}>중복 없이 추첨</Label>
 				<Switch
 					id={`${id}-enabled`}
-					className="room-draw-exclusion-switch"
+					size="lg"
 					aria-label="중복 없이 추첨 · 뽑힌 후보 제외"
 					aria-describedby={note ? `${id}-note` : undefined}
 					checked={excludeDrawn}

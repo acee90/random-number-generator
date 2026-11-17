@@ -9,7 +9,7 @@ import {
 import {
 	getEligibleRoomCandidates,
 	lunchRoomLimits,
-	parseRoomSnapshot,
+	parseRoomDrawHistory,
 	type RoomDraw,
 	type RoomSnapshot,
 } from "@/lib/lunchRoom";
@@ -65,19 +65,19 @@ export function useSoloLunch(places: readonly LunchPlace[] = emptyPlaces) {
 		try {
 			const raw = localStorage.getItem(soloHistoryKey);
 			if (raw) {
-				// Validate persisted draws with the same parser as room snapshots.
-				const parsed = parseRoomSnapshot({
-					...initialSnapshot(places),
-					history: JSON.parse(raw),
-					drawCount: undefined,
-				});
-				if (parsed)
+				// History spans independent sessions and candidate list revisions.
+				const history = parseRoomDrawHistory(JSON.parse(raw));
+				if (history)
 					commit({
 						...current.current,
-						history: parsed.history,
+						history,
+						listVersion: Math.max(
+							current.current.listVersion,
+							...history.map((draw) => draw.listVersion),
+						),
 						drawCount: Math.max(
 							0,
-							...parsed.history.map((draw) => draw.roundNumber ?? 0),
+							...history.map((draw) => draw.roundNumber ?? 0),
 						),
 					});
 				else setStorageFailed(true);
@@ -90,7 +90,7 @@ export function useSoloLunch(places: readonly LunchPlace[] = emptyPlaces) {
 			attempt.current++;
 			clearTimeout(timer.current);
 		};
-	}, [places, commit]);
+	}, [commit]);
 	function persist(history: RoomDraw[]) {
 		try {
 			localStorage.setItem(soloHistoryKey, JSON.stringify(history));
