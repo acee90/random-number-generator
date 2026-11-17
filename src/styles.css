@@ -25,16 +25,16 @@
 	--radius-sm: var(--control-radius);
 	--radius-md: var(--control-radius);
 	--radius-lg: var(--panel-radius);
-	--radius-xl: 4px;
+	--radius-xl: var(--panel-radius);
 }
 :root {
 	--ink: #272b24;
 	--muted: #646b5e;
 	--line: #d8decd;
-	--section-line: #68715e;
+	--section-line: var(--line);
 	--surface: #edf2e3;
-	--control-radius: 2px;
-	--panel-radius: 2px;
+	--control-radius: 4px;
+	--panel-radius: 8px;
 	--lime: #d6f266;
 	--paper: #f7f7f2;
 	--background: var(--paper);
