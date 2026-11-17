@@ -282,7 +282,7 @@ describe("current result feedback and frozen history", () => {
 		room.snapshot = snapshot({ draw: current, status: "result" });
 		const view = render(<LunchRoomPage roomId={roomId} />);
 		const next = screen.getByRole("button", {
-			name: "다음 게임 대기 화면으로",
+			name: "다음 게임",
 		});
 		expect(next.matches(":disabled")).toBe(false);
 		expect(
@@ -428,7 +428,7 @@ describe("current result feedback and frozen history", () => {
 		expect(screen.getByText(/추첨 시작 후 입장해/)).toBeTruthy();
 		expect(
 			screen.queryByRole("button", {
-				name: /룰렛 다시 보기|다음 게임 대기 화면으로|한 번 더 추첨하기/,
+				name: /룰렛 다시 보기|다음 게임|한 번 더 추첨하기/,
 			}),
 		).toBeNull();
 		expect(
@@ -442,9 +442,7 @@ describe("current result feedback and frozen history", () => {
 		room.snapshot = snapshot({ draw: current });
 		const view = render(<LunchRoomPage roomId={roomId} />);
 		expect(screen.queryByRole("button", { name: "룰렛 다시 보기" })).toBeNull();
-		fireEvent.click(
-			screen.getByRole("button", { name: "다음 게임 대기 화면으로" }),
-		);
+		fireEvent.click(screen.getByRole("button", { name: "다음 게임" }));
 		expect(room.nextRound).toHaveBeenCalledExactlyOnceWith(current.id);
 		expect(room.startDraw).not.toHaveBeenCalled();
 		updateRoom(view, { nextPending: true });

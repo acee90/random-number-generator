@@ -175,10 +175,7 @@
 		margin: 0;
 		padding: 0 16px 16px;
 	}
-	.lunch-room.room-live .room-result-actions .room-next-round {
-		min-block-size: 48px;
-		padding: 8px;
-	}
+
 	.lunch-room.room-live .room-draw-feedback[data-mode="results"] {
 		padding: 0 16px 16px;
 	}

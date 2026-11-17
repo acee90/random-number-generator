@@ -142,14 +142,14 @@ export default function RoomDrawResult({
 			{isHost && !readOnly && (
 				<div className="room-result-actions">
 					<Button
-						variant="outline"
+						variant="default"
 						size="lg"
 						type="button"
 						className="room-next-round"
 						disabled={!canNext || nextPending || pending}
 						onClick={onNext}
 					>
-						{nextPending ? "대기 화면으로 이동 중…" : "다음 게임 대기 화면으로"}
+						{nextPending ? "대기 화면으로 이동 중…" : "다음 게임"}
 						<ArrowRight size={18} aria-hidden="true" />
 					</Button>
 				</div>

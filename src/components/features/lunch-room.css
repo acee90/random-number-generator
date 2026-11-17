@@ -371,8 +371,12 @@
 	padding: 0 24px 24px;
 }
 .room-result-actions .room-next-round {
+	min-inline-size: 160px;
+	min-block-size: 48px;
+	padding-inline: 24px;
+	border-radius: 999px;
+	font-size: 16px;
 	max-inline-size: 100%;
-	min-inline-size: 0;
 	flex-wrap: wrap;
 	margin: 0;
 	white-space: normal;
