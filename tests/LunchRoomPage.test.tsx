@@ -2162,7 +2162,7 @@ describe("synchronized lunch room UI", () => {
 		expect(within(popup).getAllByText("추첨 확률 0%")).toHaveLength(2);
 		fireEvent.click(within(popup).getAllByRole("button", { name: "닫기" })[0]);
 		const exclusionPanel = screen.getByRole("complementary", {
-			name: "후보 제외 목록",
+			name: /후보 제외 목록|다음 게임 준비/,
 		});
 		expect(
 			within(exclusionPanel).getByRole("heading", { name: "당첨 제외 내역" }),
@@ -2219,7 +2219,9 @@ describe("synchronized lunch room UI", () => {
 			],
 		});
 		render(<LunchRoomPage roomId={roomId} />);
-		const panel = screen.getByRole("complementary", { name: "후보 제외 목록" });
+		const panel = screen.getByRole("complementary", {
+			name: /후보 제외 목록|다음 게임 준비/,
+		});
 		expect(within(panel).queryByText(/직접 제외/)).toBeNull();
 		expect(within(panel).queryByText(candidates[0].name)).toBeNull();
 		const rows = within(
@@ -2294,7 +2296,7 @@ describe("synchronized lunch room UI", () => {
 				?.getAttribute("data-candidate-count"),
 		).toBe("0");
 		const options = screen.getByRole("complementary", {
-			name: "후보 제외 목록",
+			name: /후보 제외 목록|다음 게임 준비/,
 		});
 		const toggle = within(options).getByRole("switch", {
 			name: "중복 없이 추첨 · 뽑힌 후보 제외",
@@ -3471,6 +3473,26 @@ describe("synchronized lunch room UI", () => {
 		expect(room.updateRoomOptions).not.toHaveBeenCalled();
 	});
 
+	it("groups the next game with exclusion settings and keeps one host action", () => {
+		room.self = { id: "host-client", isHost: true };
+		room.snapshot = snapshot({ status: "result", draw: draw(baseTime - 8000) });
+		render(<LunchRoomPage roomId={roomId} />);
+		const preparation = screen.getByRole("complementary", {
+			name: "다음 게임 준비",
+		});
+		expect(
+			within(preparation).getByRole("switch", {
+				name: "중복 없이 추첨 · 뽑힌 후보 제외",
+			}),
+		).toBeTruthy();
+		const next = within(preparation).getByRole("button", { name: "다음 게임" });
+		expect(screen.getAllByRole("button", { name: "다음 게임" })).toHaveLength(
+			1,
+		);
+		fireEvent.click(next);
+		expect(room.nextRound).toHaveBeenCalledOnce();
+	});
+
 	it.each([
 		"waiting",
 		"result",
@@ -3486,7 +3508,7 @@ describe("synchronized lunch room UI", () => {
 		const before = structuredClone(room.snapshot);
 		const view = render(<LunchRoomPage roomId={roomId} />);
 		const options = screen.getByRole("complementary", {
-			name: "후보 제외 목록",
+			name: /후보 제외 목록|다음 게임 준비/,
 		});
 		expect(document.querySelector(".room-next-options")).toBeNull();
 		await act(async () =>
@@ -3513,7 +3535,7 @@ describe("synchronized lunch room UI", () => {
 	it("keeps the game option read-only for participants", () => {
 		render(<LunchRoomPage roomId={roomId} />);
 		const options = screen.getByRole("complementary", {
-			name: "후보 제외 목록",
+			name: /후보 제외 목록|다음 게임 준비/,
 		});
 		const toggle = within(options).getByRole("switch", {
 			name: "중복 없이 추첨 · 뽑힌 후보 제외",
@@ -3538,7 +3560,7 @@ describe("synchronized lunch room UI", () => {
 		});
 		render(<LunchRoomPage roomId={roomId} />);
 		const options = screen.getByRole("complementary", {
-			name: "후보 제외 목록",
+			name: /후보 제외 목록|다음 게임 준비/,
 		});
 		expect(
 			within(options)

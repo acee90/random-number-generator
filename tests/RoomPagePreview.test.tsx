@@ -337,7 +337,7 @@ describe("Storybook room page with the local transport adapter", () => {
 	it("keeps waiting view readonly and applies candidate edits only in the editing stage", async () => {
 		renderPage(true, "idle");
 		const exclusions = screen.getByRole("complementary", {
-			name: "후보 제외 목록",
+			name: /후보 제외 목록|다음 게임 준비/,
 		});
 		expect(
 			within(exclusions).queryByRole("heading", { name: "저장된 당첨 내역" }),
@@ -378,7 +378,11 @@ describe("Storybook room page with the local transport adapter", () => {
 			within(options).getAllByRole("button", { name: "닫기" })[0],
 		);
 		expect(
-			within(screen.getByRole("complementary", { name: "후보 제외 목록" }))
+			within(
+				screen.getByRole("complementary", {
+					name: /후보 제외 목록|다음 게임 준비/,
+				}),
+			)
 				.getByRole("switch", { name: "중복 없이 추첨 · 뽑힌 후보 제외" })
 				.matches(":disabled"),
 		).toBe(false);
@@ -521,7 +525,7 @@ describe("Storybook room page with the local transport adapter", () => {
 			within(settings).getAllByRole("button", { name: "닫기" })[0],
 		);
 		const options = screen.getByRole("complementary", {
-			name: "후보 제외 목록",
+			name: /후보 제외 목록|다음 게임 준비/,
 		});
 		await act(async () =>
 			fireEvent.click(
@@ -546,7 +550,9 @@ describe("Storybook room page with the local transport adapter", () => {
 		renderPage(true, "result", 1);
 		const switchForDrawn = () =>
 			within(
-				screen.getByRole("complementary", { name: "후보 제외 목록" }),
+				screen.getByRole("complementary", {
+					name: /후보 제외 목록|다음 게임 준비/,
+				}),
 			).getByRole("switch", { name: "중복 없이 추첨 · 뽑힌 후보 제외" });
 		await act(async () => fireEvent.click(switchForDrawn()));
 		await act(async () =>

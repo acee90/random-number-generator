@@ -1,12 +1,11 @@
-import { ArrowRight } from "lucide-react";
 import { type RefObject, useEffect, useId, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
 import {
 	isRoomDrawVoter,
 	type RoomDraw,
 	type RoomDrawVote,
 } from "@/lib/lunchRoom";
 import RoomDrawFeedback from "./RoomDrawFeedback";
+import RoomNextGameButton from "./RoomNextGameButton";
 import "./lunch-room.css";
 
 export default function RoomDrawResult({
@@ -19,6 +18,7 @@ export default function RoomDrawResult({
 	readOnly = false,
 	nextPending = false,
 	canNext = false,
+	showNextAction = true,
 	onNext,
 	onVote,
 	titleRef,
@@ -33,6 +33,7 @@ export default function RoomDrawResult({
 	readOnly?: boolean;
 	nextPending?: boolean;
 	canNext?: boolean;
+	showNextAction?: boolean;
 	onNext: () => void;
 	onVote: (drawId: string, vote: RoomDrawVote["vote"]) => boolean;
 	titleRef?: RefObject<HTMLHeadingElement | null>;
@@ -139,19 +140,13 @@ export default function RoomDrawResult({
 					readOnly={readOnly}
 				/>
 			)}
-			{isHost && !readOnly && (
+			{showNextAction && isHost && !readOnly && (
 				<div className="room-result-actions">
-					<Button
-						variant="default"
-						size="lg"
-						type="button"
-						className="room-next-round"
+					<RoomNextGameButton
 						disabled={!canNext || nextPending || pending}
+						pending={nextPending}
 						onClick={onNext}
-					>
-						{nextPending ? "대기 화면으로 이동 중…" : "다음 게임"}
-						<ArrowRight size={18} aria-hidden="true" />
-					</Button>
+					/>
 				</div>
 			)}
 		</div>

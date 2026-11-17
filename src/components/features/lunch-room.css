@@ -370,7 +370,7 @@
 	margin: 0;
 	padding: 0 24px 24px;
 }
-.room-result-actions .room-next-round {
+.room-next-round {
 	min-inline-size: 160px;
 	min-block-size: 48px;
 	padding-inline: 24px;

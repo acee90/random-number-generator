@@ -8,7 +8,8 @@
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	gap: 8px;
+	flex-wrap: wrap;
+	gap: 12px;
 	min-block-size: 44px;
 }
 .room-draw-exclusion-toggle label {
@@ -108,4 +109,25 @@
 	flex-shrink: 0;
 	align-items: center;
 	gap: 4px;
+}
+
+.room-draw-exclusion-setting {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	min-inline-size: 0;
+}
+.room-draw-exclusions[data-result="true"] .room-draw-exclusion-setting {
+	flex: 0 1 auto;
+	justify-content: flex-start;
+}
+.room-draw-exclusions[data-result="true"] .room-draw-exclusion-toggle label {
+	flex: none;
+}
+@media (max-width: 600px) {
+	.room-draw-exclusions[data-result="true"] .room-next-round {
+		inline-size: 100%;
+	}
 }

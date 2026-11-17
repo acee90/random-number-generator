@@ -1,5 +1,5 @@
 import { ArrowDown, RotateCcw } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -24,6 +24,7 @@ export default function RoomExclusionPanel({
 	locked,
 	busy,
 	showResult,
+	action,
 	onToggle,
 	onReset,
 }: {
@@ -32,6 +33,7 @@ export default function RoomExclusionPanel({
 	locked: boolean;
 	busy: boolean;
 	showResult: boolean;
+	action?: ReactNode;
 	onToggle: (checked: boolean) => void;
 	onReset: () => void;
 }) {
@@ -85,32 +87,41 @@ export default function RoomExclusionPanel({
 				: null;
 
 	return (
-		<aside className="room-draw-exclusions" aria-label="후보 제외 목록">
+		<aside
+			className="room-draw-exclusions"
+			data-result={showResult || undefined}
+			aria-label={showResult ? "다음 게임 준비" : "후보 제외 목록"}
+		>
 			<div className="room-draw-exclusion-toggle">
-				<Label htmlFor={`${id}-enabled`}>중복 없이 추첨</Label>
-				<div className="room-draw-exclusion-actions">
-					<Switch
-						id={`${id}-enabled`}
-						size="lg"
-						aria-label="중복 없이 추첨 · 뽑힌 후보 제외"
-						aria-describedby={note ? `${id}-note` : undefined}
-						checked={excludeDrawn}
-						disabled={disabled}
-						onCheckedChange={onToggle}
-					/>
-					{isHost && (
-						<Button
-							variant="ghost"
-							size="icon"
-							aria-label="제외 목록 초기화"
-							title="제외 목록 초기화"
-							disabled={disabled || (snapshot?.excludedIds?.length ?? 0) === 0}
-							onClick={onReset}
-						>
-							<RotateCcw size={14} aria-hidden="true" />
-						</Button>
-					)}
+				<div className="room-draw-exclusion-setting">
+					<Label htmlFor={`${id}-enabled`}>중복 없이 추첨</Label>
+					<div className="room-draw-exclusion-actions">
+						<Switch
+							id={`${id}-enabled`}
+							size="lg"
+							aria-label="중복 없이 추첨 · 뽑힌 후보 제외"
+							aria-describedby={note ? `${id}-note` : undefined}
+							checked={excludeDrawn}
+							disabled={disabled}
+							onCheckedChange={onToggle}
+						/>
+						{isHost && (
+							<Button
+								variant="ghost"
+								size="icon"
+								aria-label="제외 목록 초기화"
+								title="제외 목록 초기화"
+								disabled={
+									disabled || (snapshot?.excludedIds?.length ?? 0) === 0
+								}
+								onClick={onReset}
+							>
+								<RotateCcw size={14} aria-hidden="true" />
+							</Button>
+						)}
+					</div>
 				</div>
+				{action}
 			</div>
 			{note && (
 				<p className="room-draw-exclusion-note" id={`${id}-note`}>

@@ -91,14 +91,13 @@
 	grid-template-columns: minmax(0, 1fr) 208px;
 	min-inline-size: 0;
 }
-@container (max-width: 700px) {
-	.room-roulette-and-exclusions[data-result="true"] {
-		grid-template-columns: minmax(0, 1fr);
-	}
-	.room-roulette-and-exclusions[data-result="true"] > .room-draw-exclusions {
-		border-inline-start: 0;
-		border-block-start: 1px solid var(--line);
-	}
+.room-roulette-and-exclusions[data-result="true"] {
+	grid-template-columns: minmax(0, 1fr);
+}
+.room-roulette-and-exclusions[data-result="true"] > .room-draw-exclusions {
+	border-inline-start: 0;
+	border-block-start: 1px solid var(--line);
+	padding: 16px 24px;
 }
 .room-lifecycle-main {
 	min-inline-size: 0;

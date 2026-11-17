@@ -48,6 +48,7 @@ import {
 } from "@/lib/lunchRoom";
 import { getSourceDisplayName } from "@/services/randomService";
 import ClosedRoomHistory, { RoomTerminalActions } from "./ClosedRoomHistory";
+import RoomNextGameButton from "./RoomNextGameButton";
 import "./lunch-room.css";
 import "./lunch-room-mobile.css";
 
@@ -777,6 +778,21 @@ export default function LunchSessionPage({
 									historyButtonRef={historyTriggerRef}
 									busy={busy}
 									showResult={showResult}
+									resultAction={
+										showResult && isHost && !drawArchived ? (
+											<RoomNextGameButton
+												disabled={
+													!connected ||
+													busy ||
+													room.candidatesPending ||
+													room.nextPending ||
+													room.votePendingDrawId === displayedDraw?.id
+												}
+												pending={room.nextPending}
+												onClick={nextRound}
+											/>
+										) : undefined
+									}
 									onStart={start}
 									onHistory={() => changeView("history")}
 								>
@@ -836,6 +852,7 @@ export default function LunchSessionPage({
 													<div className="room-result-overlay">
 														<RoomDrawResult
 															key={displayedDraw.id}
+															showNextAction={false}
 															draw={displayedDraw}
 															solo={solo}
 															selfId={room.self?.id}

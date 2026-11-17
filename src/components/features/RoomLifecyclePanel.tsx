@@ -78,6 +78,7 @@ export default function RoomLifecyclePanel({
 	room,
 	busy,
 	showResult,
+	resultAction,
 	onStart,
 	onHistory,
 	historyButtonRef,
@@ -88,6 +89,7 @@ export default function RoomLifecyclePanel({
 	solo?: boolean;
 	busy: boolean;
 	showResult: boolean;
+	resultAction?: ReactNode;
 	onStart: (options?: StartOptions) => void;
 	onHistory: () => void;
 	historyButtonRef?: RefObject<HTMLButtonElement | null>;
@@ -1030,6 +1032,7 @@ export default function RoomLifecyclePanel({
 							locked={locked}
 							busy={busy}
 							showResult={showResult}
+							action={showResult ? resultAction : undefined}
 							onToggle={(checked) =>
 								void room.updateRoomOptions(checked, revision)
 							}
