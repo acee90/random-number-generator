@@ -95,6 +95,11 @@ export default function LunchSessionPage({
 	const [view, setView] = useState<RoomView>("wheel");
 	const [message, setMessage] = useState("");
 	const [chatCollapsed, setChatCollapsed] = useState(false);
+	const toggleChat = () => {
+		setChatPopover(null);
+		setChatCollapsed((value) => !value);
+	};
+
 	const [nameDraft, setNameDraft] = useState("");
 	const [nameError, setNameError] = useState("");
 	const [chatPopover, setChatPopover] = useState<"profile" | "members" | null>(
@@ -188,15 +193,6 @@ export default function LunchSessionPage({
 			...participant,
 			status: "online" as const,
 		}));
-	const selfPresence = connected
-		? (members.find((member) => member.id === room.self?.id)?.status ??
-			"online")
-		: "offline";
-	const selfPresenceLabel = connected
-		? presenceLabels[selfPresence]
-		: room.connection === "reconnecting"
-			? "재연결 중"
-			: "연결 중";
 	const serverMessages = snapshot?.messages;
 	const localMessages = room.localChatMessages ?? noLocalChatMessages;
 	const messages = useMemo((): DisplayChatMessage[] => {
@@ -1091,21 +1087,13 @@ export default function LunchSessionPage({
 												aria-describedby={
 													unread > 0 ? `${id}-chat-unread` : undefined
 												}
-												onClick={() => {
-													setChatPopover(null);
-													setChatCollapsed((value) => !value);
-												}}
+												onClick={toggleChat}
 											>
 												채팅{" "}
 												<RoomChatUnreadBadge
 													count={unread}
 													id={`${id}-chat-unread`}
 												/>
-												{chatCollapsed ? (
-													<ChevronUp size={17} aria-hidden="true" />
-												) : (
-													<ChevronDown size={17} aria-hidden="true" />
-												)}
 											</Button>
 										</h2>
 										<Button
@@ -1114,7 +1102,7 @@ export default function LunchSessionPage({
 											type="button"
 											ref={nicknameButtonRef}
 											className="room-profile-trigger"
-											aria-label={`내 프로필: ${room.nickname || "참가자"}, ${selfPresenceLabel}`}
+											aria-label={`내 프로필: ${room.nickname || "참가자"}`}
 											aria-expanded={editingName}
 											aria-controls={`${id}-profile-popover`}
 											onClick={() => {
@@ -1129,16 +1117,29 @@ export default function LunchSessionPage({
 										>
 											<span className="room-profile-avatar" aria-hidden="true">
 												{Array.from(room.nickname || "참가자")[0]}
-												<span
-													className="room-presence-dot"
-													data-status={selfPresence}
-												/>
 											</span>
 											<span className="room-profile-text">
 												<strong>{room.nickname || "참가자"}</strong>
-												<small>{selfPresenceLabel}</small>
 											</span>
-											<ChevronDown size={15} aria-hidden="true" />
+										</Button>
+										<Button
+											variant="ghost"
+											size="auto"
+											className="room-chat-header-toggle"
+											aria-label={
+												chatCollapsed
+													? "채팅 펼치기 (헤더)"
+													: "채팅 접기 (헤더)"
+											}
+											aria-expanded={!chatCollapsed}
+											aria-controls={`${id}-chat-content`}
+											onClick={toggleChat}
+										>
+											{chatCollapsed ? (
+												<ChevronUp size={17} aria-hidden="true" />
+											) : (
+												<ChevronDown size={17} aria-hidden="true" />
+											)}
 										</Button>
 										{editingName && (
 											<section
@@ -1244,9 +1245,6 @@ export default function LunchSessionPage({
 														</Button>
 													</div>
 												</form>
-												<p className="room-roster-note">
-													현재 상태: {selfPresenceLabel}
-												</p>
 											</section>
 										)}
 										<Button
