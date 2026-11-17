@@ -70,22 +70,29 @@
 	justify-content: center;
 	isolation: isolate;
 }
+.room-feedback-team-label {
+	color: var(--ink);
+}
+.room-draw-feedback[data-mode="results"] .room-feedback-tally-icon svg {
+	inline-size: 32px;
+	block-size: 32px;
+}
 .room-feedback-tally-number {
 	margin-inline-start: auto;
 }
 .room-draw-feedback[data-mode="results"] .room-feedback-tally {
 	display: grid;
-	grid-template-columns: 28px max-content max-content;
+	grid-template-columns: 32px max-content max-content;
 	justify-content: center;
 	align-items: center;
 	gap: 8px;
-	min-block-size: 64px;
+	min-block-size: 88px;
 	margin: 0;
-	padding: 10px 12px 24px;
+	padding: 12px 16px 24px;
 	border-radius: var(--control-radius);
 
 	color: var(--team-color);
-	font-size: 15px;
+	font-size: 18px;
 	background: color-mix(in srgb, var(--team-color) 8%, var(--background));
 }
 
@@ -93,7 +100,7 @@
 	margin: 0;
 }
 .room-draw-feedback[data-mode="results"] .room-feedback-tally strong {
-	font-size: 28px;
+	font-size: 40px;
 	letter-spacing: -0.04em;
 	line-height: 1.1;
 	font-weight: 700;
@@ -332,6 +339,7 @@
 
 .room-feedback-tally[aria-disabled="true"] {
 	cursor: default;
+	opacity: 1;
 }
 .room-feedback-list ul {
 	display: grid;
@@ -397,16 +405,30 @@
 
 @container room-feedback (max-width: 360px) {
 	.room-draw-feedback[data-mode="results"] .room-feedback-tally {
-		grid-template-columns: 24px max-content max-content;
+		grid-template-columns: 28px max-content;
 		gap: 4px;
-		font-size: 13px;
+		font-size: 15px;
 	}
-	.room-feedback-tally-icon svg {
-		inline-size: 24px;
-		block-size: 24px;
+	.room-feedback-team-label {
+		grid-row: 2;
+		grid-column: 1 / -1;
+		text-align: center;
+	}
+
+	.room-draw-feedback[data-mode="results"] .room-feedback-tally-number {
+		grid-row: 1;
+		grid-column: 2;
+	}
+	.room-draw-feedback[data-mode="results"] .room-feedback-tally-icon {
+		grid-row: 1;
+		grid-column: 1;
+	}
+	.room-draw-feedback[data-mode="results"] .room-feedback-tally-icon svg {
+		inline-size: 28px;
+		block-size: 28px;
 	}
 	.room-draw-feedback[data-mode="results"] .room-feedback-tally strong {
-		font-size: 24px;
+		font-size: 32px;
 	}
 	.room-feedback-list li {
 		gap: 4px;

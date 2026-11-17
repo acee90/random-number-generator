@@ -197,25 +197,7 @@
 		gap: 12px;
 		margin-block-start: 8px;
 	}
-	.lunch-room.room-live
-		.room-draw-feedback[data-mode="results"]
-		.room-feedback-tally {
-		display: grid;
-		justify-content: center;
-		align-items: center;
-		gap: 4px;
-		font-size: 14px;
-	}
-	.lunch-room.room-live .room-feedback-tally-icon svg {
-		inline-size: 24px;
-		block-size: 24px;
-	}
-	.lunch-room.room-live
-		.room-draw-feedback[data-mode="results"]
-		.room-feedback-tally
-		strong {
-		font-size: 24px;
-	}
+
 	.lunch-room.room-live
 		.room-draw-feedback[data-mode="results"]
 		.room-feedback-list
