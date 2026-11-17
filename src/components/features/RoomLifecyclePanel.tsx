@@ -736,7 +736,7 @@ export default function RoomLifecyclePanel({
 									requestAnimationFrame(() => newCandidateRef.current?.focus());
 								}}
 							>
-								<Plus size={36} aria-hidden="true" />
+								<Plus size={20} aria-hidden="true" />
 								<strong>새로 작성</strong>
 							</Button>
 							<Button
@@ -745,7 +745,7 @@ export default function RoomLifecyclePanel({
 								onClick={(event) => openLoader(event.currentTarget)}
 								aria-haspopup="dialog"
 							>
-								<FolderOpen size={36} aria-hidden="true" />
+								<FolderOpen size={20} aria-hidden="true" />
 								<strong>목록 불러오기</strong>
 							</Button>
 						</section>

@@ -136,7 +136,7 @@
 .candidate-editor-footer {
 	margin-block-start: 20px;
 	padding-block-start: 16px;
-	border-block-start: 2px solid var(--ink);
+	border-block-start: 1px solid var(--line);
 }
 .candidate-editor-footer > p {
 	margin: 0;
