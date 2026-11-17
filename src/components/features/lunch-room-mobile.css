@@ -161,11 +161,11 @@
 		min-block-size: clamp(460px, calc(100dvh - 210px), 620px);
 	}
 	.lunch-room.room-live .room-result-summary {
-		min-block-size: 156px;
+		min-block-size: 0;
 		padding: 24px 12px;
 	}
 	.lunch-room.room-live .room-result h3 {
-		font-size: clamp(38px, 8cqi, 60px);
+		font-size: clamp(28px, 5cqi, 48px);
 		line-height: 1.14;
 	}
 	.lunch-room.room-live .room-result-category {
@@ -214,7 +214,7 @@
 		.room-draw-feedback[data-mode="results"]
 		.room-feedback-tally
 		strong {
-		font-size: 36px;
+		font-size: 24px;
 	}
 	.lunch-room.room-live
 		.room-draw-feedback[data-mode="results"]
