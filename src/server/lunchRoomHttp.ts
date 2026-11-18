@@ -248,7 +248,10 @@ export async function handleLunchRoomRequest(
 			return json({ error: "JSON 형식이 필요합니다." }, 415);
 		let body: unknown;
 		try {
-			body = await readBoundedRoomJson(request);
+			body = await readBoundedRoomJson(
+				request,
+				lunchRoomLimits.maxEditMessageBytes,
+			);
 		} catch (error) {
 			return json(
 				{ error: "방 설정을 확인해 주세요." },
@@ -285,6 +288,7 @@ export async function handleLunchRoomRequest(
 				title: input.title,
 				hostTokenHash,
 				candidateIds: input.candidateIds,
+				...(input.candidates && { candidates: input.candidates }),
 				createdAt,
 			});
 			return json(

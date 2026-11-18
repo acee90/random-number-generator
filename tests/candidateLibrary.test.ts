@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+	CandidateListConflict,
 	candidateLibraryKey,
 	deleteCandidateList,
 	readCandidateLibrary,
 	saveCandidateList,
+	updateCandidateList,
 } from "../src/lib/candidateLibrary";
 import {
 	type CandidateListDraft,
@@ -44,6 +46,40 @@ describe("service candidate library", () => {
 		expect(input).toEqual(before);
 		first.items[0].name = "edited outside storage";
 		expect(readCandidateLibrary(target).lists[0].items[0].name).toBe("국밥집");
+	});
+
+	it("updates legacy copies in place and rejects stale edits and deletes", () => {
+		const legacy = { ...draft(), updatedAt: 0 };
+		const target = storage({
+			[candidateLibraryKey]: JSON.stringify({ version: 1, lists: [legacy] }),
+		});
+		const original = readCandidateLibrary(target).lists[0];
+		expect(original.revision).toBe(1);
+		const edited = updateCandidateList(
+			{ ...original, name: "edited" },
+			1,
+			target,
+		);
+		expect(edited).toMatchObject({
+			id: original.id,
+			items: original.items.map((item) => ({
+				...item,
+				name: item.name.trim(),
+			})),
+			revision: 2,
+		});
+		expect(() => updateCandidateList(original, 1, target)).toThrow(
+			CandidateListConflict,
+		);
+		expect(() => deleteCandidateList(original.id, target, 1)).toThrow(
+			CandidateListConflict,
+		);
+		expect(readCandidateLibrary(target).lists).toEqual([edited]);
+		expect(deleteCandidateList(edited.id, target, 2)).toBe(true);
+		expect(() => updateCandidateList(edited, 2, target)).toThrow(
+			CandidateListConflict,
+		);
+		expect(readCandidateLibrary(target).lists).toEqual([]);
 	});
 
 	it("uses its service namespace without touching Storybook or identity data", () => {

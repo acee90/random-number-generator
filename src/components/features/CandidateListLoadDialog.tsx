@@ -27,11 +27,13 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import {
+	CandidateListConflict,
 	candidateLibraryKey,
 	deleteCandidateList,
+	mutateCandidateLibrary,
 	readCandidateLibrary,
+	type VersionedCandidateList,
 } from "@/lib/candidateLibrary";
-import type { SavedCandidateList } from "@/lib/candidateListDraft";
 import {
 	type CandidateListUsage,
 	candidateListUsageKey,
@@ -130,24 +132,32 @@ export default function CandidateListLoadDialog({
 	open,
 	onOpenChange,
 	onSelect,
+	onEdit,
+	onCreate,
 	disabled = false,
+	preserveInclusion = false,
 	returnFocusRef,
 }: {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	// biome-ignore lint/suspicious/noConfusingVoidType: controlled consumers may return nothing; only false keeps the picker open.
 	onSelect: (selection: CandidateListSelection) => boolean | void;
+	onEdit?: (list: VersionedCandidateList) => void;
+	onCreate?: () => void;
 	disabled?: boolean;
+	preserveInclusion?: boolean;
 	returnFocusRef?: RefObject<HTMLButtonElement | null>;
 }) {
-	const [lists, setLists] = useState<SavedCandidateList[]>([]);
+	const [lists, setLists] = useState<VersionedCandidateList[]>([]);
 	const [usage, setUsage] = useState<CandidateListUsage>({
 		recentId: null,
 		loadedAt: {},
 	});
 	const [error, setError] = useState("");
-	const [deleting, setDeleting] = useState<SavedCandidateList | null>(null);
+	const [deleting, setDeleting] = useState<VersionedCandidateList | null>(null);
 	const [deleteError, setDeleteError] = useState("");
+	const [deletePending, setDeletePending] = useState(false);
+	const [deleteConflict, setDeleteConflict] = useState(false);
 	const deleteTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const baseChoiceRef = useRef<HTMLButtonElement | null>(null);
 	const refresh = useCallback(() => {
@@ -195,7 +205,8 @@ export default function CandidateListLoadDialog({
 					...candidate,
 					id: crypto.randomUUID(),
 					category: candidate.category.trim() || "미분류",
-					included: true,
+					menu: candidate.menu?.trim() || undefined,
+					included: !preserveInclusion || candidate.included !== false,
 				})),
 			});
 			if (accepted !== false) onOpenChange(false);
@@ -218,9 +229,13 @@ export default function CandidateListLoadDialog({
 					}}
 				>
 					<DialogHeader>
-						<DialogTitle>목록 불러오기</DialogTitle>
+						<DialogTitle>
+							{onEdit ? "내 후보 목록" : "목록 불러오기"}
+						</DialogTitle>
 						<DialogDescription>
-							목록을 선택하면 사본을 가져와 편집할 수 있어요.
+							{onEdit
+								? "이 브라우저에 저장한 목록을 관리합니다."
+								: "목록을 선택하면 사본을 가져와 편집할 수 있어요."}
 						</DialogDescription>
 					</DialogHeader>
 					<section className="candidate-load-section" aria-label="기본 목록">
@@ -241,7 +256,9 @@ export default function CandidateListLoadDialog({
 							<List size={20} aria-hidden="true" />
 							<ListDetails
 								name="기본 음식점 목록"
-								description="회사 주변 음식점"
+								description={
+									onEdit ? "기본 목록으로 새 목록 만들기" : "회사 주변 음식점"
+								}
 								items={sampleLunchPlaces}
 								sourceId={defaultCandidateListSourceId}
 								usage={usage}
@@ -263,8 +280,9 @@ export default function CandidateListLoadDialog({
 						)}
 						{!error && lists.length === 0 && (
 							<p className="candidate-load-empty">
-								저장한 목록이 없어요. 기본 목록을 불러오거나 취소 후 새로
-								작성하세요.
+								{onEdit
+									? "저장한 목록이 없어요."
+									: "저장한 목록이 없어요. 기본 목록을 불러오거나 취소 후 새로 작성하세요."}
 							</p>
 						)}
 						{lists.length > 0 && (
@@ -275,13 +293,15 @@ export default function CandidateListLoadDialog({
 											variant="outline"
 											className="candidate-load-choice"
 											disabled={disabled}
-											onClick={() =>
-												select(
-													savedCandidateListSourceId(list.id),
-													list.name,
-													list.items,
-												)
-											}
+											onClick={() => {
+												if (onEdit) onEdit(list);
+												else
+													select(
+														savedCandidateListSourceId(list.id),
+														list.name,
+														list.items,
+													);
+											}}
 										>
 											<FolderOpen size={20} aria-hidden="true" />
 											<ListDetails
@@ -301,6 +321,7 @@ export default function CandidateListLoadDialog({
 											onClick={(event) => {
 												deleteTriggerRef.current = event.currentTarget;
 												setDeleteError("");
+												setDeleteConflict(false);
 												setDeleting(list);
 											}}
 										>
@@ -318,15 +339,16 @@ export default function CandidateListLoadDialog({
 					)}
 					<DialogFooter>
 						<DialogClose asChild>
-							<Button variant="outline">취소</Button>
+							<Button variant="outline">{onEdit ? "닫기" : "취소"}</Button>
 						</DialogClose>
+						{onCreate && <Button onClick={onCreate}>새 목록 만들기</Button>}
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>
 			<AlertDialog
 				open={Boolean(deleting)}
 				onOpenChange={(next) => {
-					if (!next) setDeleting(null);
+					if (!next && !deletePending) setDeleting(null);
 				}}
 			>
 				<AlertDialogContent
@@ -353,30 +375,42 @@ export default function CandidateListLoadDialog({
 						</p>
 					)}
 					<AlertDialogFooter>
-						<AlertDialogCancel>취소</AlertDialogCancel>
+						<AlertDialogCancel disabled={deletePending}>
+							{deleteConflict ? "닫기" : "취소"}
+						</AlertDialogCancel>
 						<AlertDialogAction
 							data-variant="destructive"
-							disabled={disabled}
-							onClick={(event) => {
-								if (!deleting || disabled) {
-									event.preventDefault();
+							disabled={disabled || deletePending || deleteConflict}
+							onClick={async (event) => {
+								event.preventDefault();
+								if (!deleting || disabled || deletePending || deleteConflict)
 									return;
-								}
+								setDeletePending(true);
 								try {
-									deleteCandidateList(deleting.id);
+									const result = mutateCandidateLibrary(() =>
+										deleteCandidateList(
+											deleting.id,
+											undefined,
+											deleting.revision,
+										),
+									);
+									if (typeof result !== "boolean") await result;
 									setDeleting(null);
 									refresh();
 								} catch (cause) {
-									event.preventDefault();
+									setDeleteConflict(cause instanceof CandidateListConflict);
 									setDeleteError(
 										cause instanceof Error
 											? cause.message
-											: "목록을 삭제하지 못했어요. 다시 시도해 주세요.",
+											: "목록을 삭제하지 못했어요.",
 									);
+									if (cause instanceof CandidateListConflict) refresh();
+								} finally {
+									setDeletePending(false);
 								}
 							}}
 						>
-							저장 목록 삭제
+							{deletePending ? "삭제 중…" : "저장 목록 삭제"}
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>

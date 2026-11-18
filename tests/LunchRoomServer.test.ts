@@ -3041,6 +3041,29 @@ describe("empty setup and independent game filter service", () => {
 		});
 	};
 
+	it("restores a room created with the maximum custom list and its inclusion flags", async () => {
+		const { input } = await room(false);
+		const context = new HarnessContext();
+		const candidates = Array.from(
+			{ length: lunchRoomLimits.maxCandidates },
+			(_, index) => ({
+				id: `saved-${index}`,
+				name: "같은 이름",
+				category: "팀 메뉴",
+				included: index % 2 === 0,
+			}),
+		);
+		await createServer(context).initialize({
+			...input,
+			candidateIds: [],
+			candidates,
+		});
+		const restored = createServer(context);
+		await restored.onStart();
+		const host = await connect(restored, context, "방장", hostToken);
+		expect(latestSnapshot(host).snapshot.candidates).toEqual(candidates);
+	});
+
 	it("creates empty rooms, keeps empty preparation editable and captures custom classifications in a one-candidate draw", async () => {
 		const { input } = await room(false);
 		for (const selection of [undefined, []]) {

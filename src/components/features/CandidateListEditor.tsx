@@ -32,10 +32,11 @@ export type CandidateListEditorProps = {
 	onChange: (draft: CandidateListDraft) => void;
 	onCancel: () => void;
 	onSave: (draft: CandidateListDraft) => void;
-	onImportTemplate: () => void;
-	onImportExcel: () => void;
+	onImportTemplate?: () => void;
+	onImportExcel?: () => void;
 	onRestart?: () => void;
 	error?: string;
+	personalSave?: boolean;
 	submitLabel?: string;
 	pending?: boolean;
 	disabled?: boolean;
@@ -52,14 +53,22 @@ type ValidationFocus =
 	| { field: "name" | "items" }
 	| { field: "itemName" | "category"; itemId: string };
 
-function validateDraft(draft: CandidateListDraft): EditorErrors {
+function validateDraft(
+	draft: CandidateListDraft,
+	personalSave: boolean,
+): EditorErrors {
 	const errors: EditorErrors = { itemNames: new Map(), categories: new Map() };
 	if (!draft.name) errors.name = "목록 이름을 입력해 주세요.";
 	else if (draft.name.length > candidateDraftLimits.name)
 		errors.name = `목록 이름은 ${candidateDraftLimits.name}자까지 입력해 주세요.`;
 	if (draft.items.length > candidateDraftLimits.items)
 		errors.items = `후보는 ${candidateDraftLimits.items}개까지 넣을 수 있어요.`;
-	else if (draft.items.filter((item) => item.included).length < 2)
+	else if (personalSave && draft.items.length === 0)
+		errors.items = "저장할 후보를 1개 이상 추가해 주세요.";
+	else if (
+		!personalSave &&
+		draft.items.filter((item) => item.included).length < 2
+	)
 		errors.items = "추첨할 후보를 2개 이상 포함해 주세요.";
 	for (const item of draft.items) {
 		if (!item.name) errors.itemNames.set(item.id, "후보 이름을 입력해 주세요.");
@@ -86,6 +95,7 @@ export function CandidateListEditor({
 	onImportExcel,
 	onRestart,
 	error,
+	personalSave = false,
 	submitLabel = "저장하고 사용",
 	pending = false,
 	disabled = false,
@@ -106,7 +116,7 @@ export function CandidateListEditor({
 	const normalized = normalizeCandidateDraft(draft);
 	const errors: EditorErrors =
 		submitAttempt > 0
-			? validateDraft(normalized)
+			? validateDraft(normalized, personalSave)
 			: {
 					itemNames: new Map<string, string>(),
 					categories: new Map<string, string>(),
@@ -179,7 +189,7 @@ export function CandidateListEditor({
 	function submit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
 		if (pending || disabled) return;
-		const result = validateDraft(normalized);
+		const result = validateDraft(normalized, personalSave);
 		setSubmitAttempt((attempt) => attempt + 1);
 		if (result.name) {
 			validationFocus.current = { field: "name" };
@@ -246,14 +256,22 @@ export function CandidateListEditor({
 						후보 편집
 					</h2>
 					<div>
-						<Button type="button" variant="outline" onClick={onImportTemplate}>
-							<ListPlus size={18} aria-hidden="true" />
-							템플릿에서 추가
-						</Button>
-						<Button type="button" variant="outline" onClick={onImportExcel}>
-							<FileSpreadsheet size={18} aria-hidden="true" />
-							엑셀에서 추가
-						</Button>
+						{onImportTemplate && (
+							<Button
+								type="button"
+								variant="outline"
+								onClick={onImportTemplate}
+							>
+								<ListPlus size={18} aria-hidden="true" />
+								템플릿에서 추가
+							</Button>
+						)}
+						{onImportExcel && (
+							<Button type="button" variant="outline" onClick={onImportExcel}>
+								<FileSpreadsheet size={18} aria-hidden="true" />
+								엑셀에서 추가
+							</Button>
+						)}
 						<Button
 							type="button"
 							variant="ghost"

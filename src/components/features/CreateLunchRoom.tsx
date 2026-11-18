@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { recordCandidateListUse } from "@/lib/candidateListUsage";
 import {
 	clampLunchRoomNickname,
 	isLunchRoomId,
@@ -25,6 +26,9 @@ import {
 	saveLunchRoomName,
 } from "@/lib/lunchRoomClient";
 import { beginRoomTiming } from "@/lib/roomTimings";
+import CandidateListLoadDialog, {
+	type CandidateListSelection,
+} from "./CandidateListLoadDialog";
 import "./create-lunch-room.css";
 
 export default function CreateLunchRoom({
@@ -43,6 +47,11 @@ export default function CreateLunchRoom({
 	const [name, setName] = useState("방장");
 	const [pending, setPending] = useState(false);
 	const [error, setError] = useState("");
+	const [listOpen, setListOpen] = useState(false);
+	const [selection, setSelection] = useState<CandidateListSelection | null>(
+		null,
+	);
+	const listTrigger = useRef<HTMLButtonElement>(null);
 	const creating = useRef(false);
 	const requestRef = useRef<AbortController | null>(null);
 	const requestTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(
@@ -92,7 +101,9 @@ export default function CreateLunchRoom({
 					body: JSON.stringify({
 						title: title.trim(),
 						hostName,
-						candidateIds: [],
+						...(selection
+							? { candidates: selection.candidates }
+							: { candidateIds: [] }),
 					}),
 					signal: controller.signal,
 				});
@@ -126,6 +137,7 @@ export default function CreateLunchRoom({
 			) {
 				throw new Error("방 정보를 확인할 수 없습니다. 다시 시도해 주세요.");
 			}
+			if (selection) recordCandidateListUse(selection.sourceId);
 			saveLunchRoomHost(value.roomId, value.hostToken);
 			saveLunchRoomName(hostName);
 			prepareLunchRoomEntry(value.roomId, hostName);
@@ -184,10 +196,44 @@ export default function CreateLunchRoom({
 				최대 {lunchRoomLimits.maxNicknameLength}자 · {name.length}/
 				{lunchRoomLimits.maxNicknameLength}
 			</p>
-			<p>
-				방을 만든 뒤 후보를 준비합니다. 새로 작성하거나 목록을 불러올 수
-				있습니다.
-			</p>
+			{inline ? (
+				<>
+					<p aria-live="polite">
+						{selection
+							? `${selection.name} · 후보 ${selection.candidates.length}개`
+							: "방을 만든 뒤 후보를 준비할 수 있습니다."}
+					</p>
+					<Button
+						ref={listTrigger}
+						type="button"
+						variant="outline"
+						size="lg"
+						disabled={pending}
+						onClick={() => setListOpen(true)}
+					>
+						목록 불러오기
+					</Button>
+					{selection && (
+						<Button
+							type="button"
+							variant="ghost"
+							size="lg"
+							disabled={pending}
+							onClick={() => {
+								setSelection(null);
+								listTrigger.current?.focus();
+							}}
+						>
+							목록 선택 해제
+						</Button>
+					)}
+				</>
+			) : (
+				<p>
+					방을 만든 뒤 후보를 준비합니다. 새로 작성하거나 목록을 불러올 수
+					있습니다.
+				</p>
+			)}
 			{error && (
 				<p role="alert" className="lunch-create-error">
 					{error}
@@ -218,6 +264,14 @@ export default function CreateLunchRoom({
 			>
 				<h2 id={`${id}-create-title`}>새 추첨방</h2>
 				{fields}
+				<CandidateListLoadDialog
+					open={listOpen}
+					onOpenChange={setListOpen}
+					onSelect={setSelection}
+					preserveInclusion
+					disabled={pending}
+					returnFocusRef={listTrigger}
+				/>
 			</section>
 		);
 	return (

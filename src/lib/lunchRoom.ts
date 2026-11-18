@@ -176,6 +176,7 @@ export interface CreateRoomInput {
 	title: string;
 	hostName: string;
 	candidateIds: string[];
+	candidates?: RoomCandidate[];
 }
 
 export type ClientMessage =
@@ -456,9 +457,18 @@ export function validateCreateRoomInput(
 		value.candidateIds === undefined ? [] : value.candidateIds,
 		0,
 	);
-	return title && hostName && ids
-		? { title, hostName, candidateIds: ids }
-		: null;
+	if (!title || !hostName || !ids) return null;
+	if (value.candidates === undefined)
+		return { title, hostName, candidateIds: ids };
+
+	const candidates = parsePlaces(value.candidates);
+	if (
+		ids.length ||
+		!candidates ||
+		candidates.some((candidate) => candidate.ownerId || candidate.ownerName)
+	)
+		return null;
+	return { title, hostName, candidateIds: ids, candidates };
 }
 
 export function parseClientMessage(raw: unknown): ClientMessage | null {
@@ -763,7 +773,7 @@ function parseDraw(value: unknown): RoomDraw | null {
 		!sources.some((source) => source === value.source)
 	)
 		return null;
-	const candidates = parsePlaces(value.candidates, 1);
+	const candidates = parsePlaces(value.candidates);
 	if (
 		!candidates ||
 		typeof value.winnerIndex !== "number" ||

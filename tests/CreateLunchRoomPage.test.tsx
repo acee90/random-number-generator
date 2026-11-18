@@ -141,7 +141,7 @@ describe("Jeommechu room setup page", () => {
 	it("offers only the current room flow rather than future public, private, custom or voting controls", () => {
 		render(<CreateLunchRoomPage />);
 		const main = within(screen.getByRole("main"));
-		expect(main.getAllByRole("button")).toHaveLength(1);
+		expect(main.getByRole("button", { name: "목록 불러오기" })).toBeTruthy();
 		expect(
 			main.queryByRole("button", {
 				name: /공개|비공개|메뉴 추가|엑셀|투표|가중치|위치 검색/,
@@ -150,7 +150,9 @@ describe("Jeommechu room setup page", () => {
 		expect(main.queryByRole("checkbox")).toBeNull();
 		expect(main.queryByRole("radio")).toBeNull();
 		expect(main.queryByRole("combobox")).toBeNull();
-		expect(screen.getByText(/방을 만든 뒤 후보를 준비합니다/)).toBeTruthy();
+		expect(
+			screen.getByText(/방을 만든 뒤 후보를 준비할 수 있습니다/),
+		).toBeTruthy();
 		expect(
 			screen.getByText(/방을 만든 뒤 새로 작성하거나 기본·저장 목록/),
 		).toBeTruthy();
