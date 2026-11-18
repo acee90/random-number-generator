@@ -189,6 +189,15 @@
 	font-weight: 400;
 	line-height: 1.5;
 }
+.room-candidate-author {
+	align-self: flex-start;
+	max-inline-size: 100%;
+	min-inline-size: 0;
+	overflow-wrap: anywhere;
+}
+.room-simple-name-column > .room-candidate-author {
+	margin-inline-start: 8px;
+}
 .room-simple-state-badge > svg {
 	flex-shrink: 0;
 }
