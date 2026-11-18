@@ -43,6 +43,7 @@ interface InitializeRoom {
 	title: string;
 	hostTokenHash: string;
 	candidateIds?: string[];
+	candidates?: RoomSnapshot["candidates"];
 	createdAt: number;
 }
 
@@ -247,9 +248,11 @@ export class LunchRoomServer extends Server<RoomEnv> {
 				title: input.title,
 				hostName: "방장",
 				candidateIds: input.candidateIds,
+				candidates: input.candidates,
 			});
 			const candidates = validated
-				? resolveCandidateIds(validated.candidateIds, 0)
+				? (validated.candidates ??
+					resolveCandidateIds(validated.candidateIds, 0))
 				: null;
 			if (
 				!validated ||

@@ -49,6 +49,7 @@
 .lunch-create-form p {
 	font-size: 13px;
 	line-height: 1.7;
+	overflow-wrap: anywhere;
 	color: #56634a;
 	margin: 0;
 }

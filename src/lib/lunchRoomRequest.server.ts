@@ -5,11 +5,11 @@ export const nicknameCheckPath = "/_internal/lunch-room/nickname-availability";
 export const roomHistoryPath = "/_internal/lunch-room/history";
 export const roomEntryInfoPath = "/_internal/lunch-room/entry-info";
 
-export async function readBoundedRoomJson(request: Request): Promise<unknown> {
-	if (
-		Number(request.headers.get("Content-Length")) >
-		lunchRoomLimits.maxMessageBytes
-	)
+export async function readBoundedRoomJson(
+	request: Request,
+	maxBytes: number = lunchRoomLimits.maxMessageBytes,
+): Promise<unknown> {
+	if (Number(request.headers.get("Content-Length")) > maxBytes)
 		throw new RangeError("Request too large");
 	const reader = request.body?.getReader();
 	if (!reader) throw new SyntaxError("Empty body");
@@ -20,7 +20,7 @@ export async function readBoundedRoomJson(request: Request): Promise<unknown> {
 			const { done, value } = await reader.read();
 			if (done) break;
 			length += value.byteLength;
-			if (length > lunchRoomLimits.maxMessageBytes) {
+			if (length > maxBytes) {
 				await reader.cancel();
 				throw new RangeError("Request too large");
 			}

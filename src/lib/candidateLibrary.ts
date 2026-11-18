@@ -10,7 +10,19 @@ import {
 export const candidateLibraryKey = "jeommechu:candidate-lists:v1";
 
 type LibraryStorage = Pick<Storage, "getItem" | "setItem">;
-type Library = { version: 1; lists: SavedCandidateList[] };
+export type VersionedCandidateList = SavedCandidateList & { revision: number };
+type Library = { version: 1; lists: VersionedCandidateList[] };
+
+export class CandidateListConflict extends Error {
+	constructor() {
+		super("다른 탭에서 이 목록을 수정하거나 삭제했어요.");
+	}
+}
+
+export function mutateCandidateLibrary<T>(action: () => T): T | Promise<T> {
+	const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
+	return locks ? locks.request(candidateLibraryKey, action) : action();
+}
 const maximumLibraryBytes = 8 * 1024 * 1024;
 const invalidCharacters = /[\p{Cc}\p{Cf}\p{Cs}]/u;
 const opaqueId = /^[A-Za-z0-9_-]{1,80}$/;
@@ -59,7 +71,7 @@ function parseItem(value: unknown): CandidateListItem | null {
 	};
 }
 
-function parseList(value: unknown): SavedCandidateList | null {
+function parseList(value: unknown): VersionedCandidateList | null {
 	if (
 		!isRecord(value) ||
 		typeof value.id !== "string" ||
@@ -69,7 +81,11 @@ function parseList(value: unknown): SavedCandidateList | null {
 		value.items.length > candidateDraftLimits.items ||
 		typeof value.updatedAt !== "number" ||
 		!Number.isSafeInteger(value.updatedAt) ||
-		value.updatedAt < 0
+		value.updatedAt < 0 ||
+		(value.revision !== undefined &&
+			(typeof value.revision !== "number" ||
+				!Number.isSafeInteger(value.revision) ||
+				value.revision < 1))
 	)
 		return null;
 	const items: CandidateListItem[] = [];
@@ -85,6 +101,7 @@ function parseList(value: unknown): SavedCandidateList | null {
 		name: value.name,
 		items,
 		updatedAt: value.updatedAt,
+		revision: typeof value.revision === "number" ? value.revision : 1,
 	};
 }
 
@@ -102,7 +119,7 @@ function parseLibrary(raw: string): Library | null {
 		value.lists.length > candidateDraftLimits.savedLists
 	)
 		return null;
-	const lists: SavedCandidateList[] = [];
+	const lists: VersionedCandidateList[] = [];
 	const seen = new Set<string>();
 	for (const entry of value.lists) {
 		const list = parseList(entry);
@@ -115,7 +132,7 @@ function parseLibrary(raw: string): Library | null {
 
 /** Reads never repair or remove unreadable data. A later save must respect errors. */
 export function readCandidateLibrary(storage?: Pick<Storage, "getItem">): {
-	lists: SavedCandidateList[];
+	lists: VersionedCandidateList[];
 	error: string;
 } {
 	if (!storage && typeof window === "undefined")
@@ -144,45 +161,14 @@ export function readCandidateLibrary(storage?: Pick<Storage, "getItem">): {
 	};
 }
 
-/** Always appends a fresh copy; room changes never overwrite a personal original. */
-export function saveCandidateList(
-	draft: CandidateListDraft,
-	storage?: LibraryStorage,
-): SavedCandidateList {
-	const copy = parseList({
-		...draft,
-		id: crypto.randomUUID(),
-		updatedAt: Date.now(),
-	});
-	if (!copy)
-		throw new Error("목록 이름과 후보 입력을 확인한 뒤 다시 저장해 주세요.");
-	if (!copy.items.length)
-		throw new Error("저장할 후보를 1개 이상 추가해 주세요.");
-	const normalized = parseList({
-		...normalizeCandidateDraft(copy),
-		updatedAt: copy.updatedAt,
-	});
-	if (!normalized)
-		throw new Error("목록 이름과 후보 입력을 확인한 뒤 다시 저장해 주세요.");
-	let target: LibraryStorage;
-	try {
-		target = storage ?? window.localStorage;
-	} catch {
-		throw new Error("브라우저 저장소 권한을 확인한 뒤 다시 저장해 주세요.");
-	}
-	const current = readCandidateLibrary(target);
-	if (current.error) throw new Error(current.error);
-	if (current.lists.length >= candidateDraftLimits.savedLists)
-		throw new Error(
-			`저장한 목록이 ${candidateDraftLimits.savedLists}개입니다. 기존 저장 내용을 정리한 뒤 다시 저장해 주세요. 현재 후보는 유지됩니다.`,
-		);
-	const serialized = JSON.stringify({
-		version: 1,
-		lists: [...current.lists, normalized],
-	});
+function writeCandidateLibrary(
+	target: LibraryStorage,
+	lists: VersionedCandidateList[],
+) {
+	const serialized = JSON.stringify({ version: 1, lists });
 	if (new TextEncoder().encode(serialized).byteLength > maximumLibraryBytes)
 		throw new Error(
-			"저장할 목록의 용량이 큽니다. 후보나 메뉴 내용을 줄인 뒤 다시 저장해 주세요. 기존 저장 내용은 유지됩니다.",
+			"저장할 목록의 용량이 큽니다. 후보나 메뉴 내용을 줄인 뒤 다시 저장해 주세요.",
 		);
 	try {
 		target.setItem(candidateLibraryKey, serialized);
@@ -192,13 +178,76 @@ export function saveCandidateList(
 			{ cause },
 		);
 	}
-	return normalized;
+}
+
+/** Saving from a room always appends an independent browser copy. */
+export function saveCandidateList(
+	draft: CandidateListDraft,
+	storage?: LibraryStorage,
+): VersionedCandidateList {
+	return commitCandidateList(draft, storage);
+}
+
+export function updateCandidateList(
+	draft: CandidateListDraft,
+	expectedRevision: number,
+	storage?: LibraryStorage,
+): VersionedCandidateList {
+	return commitCandidateList(draft, storage, expectedRevision);
+}
+
+function commitCandidateList(
+	draft: CandidateListDraft,
+	storage?: LibraryStorage,
+	expectedRevision?: number,
+): VersionedCandidateList {
+	const validated = parseList({
+		...draft,
+		id: expectedRevision === undefined ? crypto.randomUUID() : draft.id,
+		updatedAt: Date.now(),
+		revision: expectedRevision === undefined ? 1 : expectedRevision + 1,
+	});
+	if (!validated)
+		throw new Error("목록 이름과 후보 입력을 확인한 뒤 다시 저장해 주세요.");
+	if (!validated.items.length)
+		throw new Error("저장할 후보를 1개 이상 추가해 주세요.");
+	const copy = parseList({
+		...validated,
+		...normalizeCandidateDraft(validated),
+	});
+	if (!copy)
+		throw new Error("목록 이름과 후보 입력을 확인한 뒤 다시 저장해 주세요.");
+	let target: LibraryStorage;
+	try {
+		target = storage ?? window.localStorage;
+	} catch {
+		throw new Error("브라우저 저장소 권한을 확인한 뒤 다시 저장해 주세요.");
+	}
+	const current = readCandidateLibrary(target);
+	if (current.error) throw new Error(current.error);
+	if (expectedRevision !== undefined) {
+		const previous = current.lists.find((list) => list.id === draft.id);
+		if (!previous || previous.revision !== expectedRevision)
+			throw new CandidateListConflict();
+		writeCandidateLibrary(
+			target,
+			current.lists.map((list) => (list.id === copy.id ? copy : list)),
+		);
+	} else {
+		if (current.lists.length >= candidateDraftLimits.savedLists)
+			throw new Error(
+				`저장한 목록이 ${candidateDraftLimits.savedLists}개입니다. 저장 목록을 정리한 뒤 다시 저장해 주세요.`,
+			);
+		writeCandidateLibrary(target, [...current.lists, copy]);
+	}
+	return copy;
 }
 
 /** Deletes only the saved browser copy, never an active room or editing draft. */
 export function deleteCandidateList(
 	id: string,
 	storage?: LibraryStorage,
+	expectedRevision?: number,
 ): boolean {
 	if (!opaqueId.test(id))
 		throw new Error("삭제할 저장 목록을 다시 선택해 주세요.");
@@ -210,7 +259,10 @@ export function deleteCandidateList(
 	}
 	const current = readCandidateLibrary(target);
 	if (current.error) throw new Error(current.error);
-	if (!current.lists.some((list) => list.id === id)) return false;
+	const previous = current.lists.find((list) => list.id === id);
+	if (expectedRevision !== undefined && previous?.revision !== expectedRevision)
+		throw new CandidateListConflict();
+	if (!previous) return false;
 	try {
 		target.setItem(
 			candidateLibraryKey,

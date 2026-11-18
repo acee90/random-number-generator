@@ -178,7 +178,7 @@ describe("lunch room HTTP creation", () => {
 		});
 	});
 
-	it("creates a room with an explicit107-candidate selection inside the4096-byte UTF-8 boundary", async () => {
+	it("creates a room with an explicit107-candidate selection inside the room creation UTF-8 boundary", async () => {
 		const candidateIds = sampleLunchPlaces.map((place) => place.id);
 		expect(candidateIds).toHaveLength(107);
 		const base = {
@@ -188,11 +188,13 @@ describe("lunch room HTTP creation", () => {
 			padding: "",
 		};
 		const remaining =
-			lunchRoomLimits.maxMessageBytes -
+			lunchRoomLimits.maxEditMessageBytes -
 			new TextEncoder().encode(JSON.stringify(base)).byteLength;
 		expect(remaining).toBeGreaterThanOrEqual(0);
 		const body = JSON.stringify({ ...base, padding: "x".repeat(remaining) });
-		expect(new TextEncoder().encode(body).byteLength).toBe(4096);
+		expect(new TextEncoder().encode(body).byteLength).toBe(
+			lunchRoomLimits.maxEditMessageBytes,
+		);
 		expect((await responseFor(createRequest(input, { body }))).status).toBe(
 			201,
 		);
@@ -305,13 +307,39 @@ describe("lunch room HTTP creation", () => {
 		expect(response.status).toBe(400);
 	});
 
+	it("passes custom candidates through to initialization with their inclusion state", async () => {
+		const candidates = [
+			{ id: "saved-a", name: "우동", category: "일식", included: false },
+			{ id: "saved-b", name: "우동", category: "일식", included: true },
+		];
+		const custom = { title: input.title, hostName: input.hostName, candidates };
+		expect((await responseFor(createRequest(custom))).status).toBe(201);
+		expect(party.initialize).toHaveBeenCalledWith(
+			expect.objectContaining({ candidates }),
+		);
+		expect(
+			(await responseFor(createRequest({ ...custom, candidateIds: ids })))
+				.status,
+		).toBe(400);
+		expect(
+			(
+				await responseFor(
+					createRequest({
+						...custom,
+						candidates: [{ ...candidates[0], ownerId: "forged-owner" }],
+					}),
+				)
+			).status,
+		).toBe(400);
+	});
+
 	it("rejects an advertised oversized body before initializing a room", async () => {
 		const response = await responseFor(
 			createRequest(input, {
 				headers: {
 					Origin: origin,
 					"Content-Type": "application/json",
-					"Content-Length": `${lunchRoomLimits.maxMessageBytes + 1}`,
+					"Content-Length": `${lunchRoomLimits.maxEditMessageBytes + 1}`,
 				},
 			}),
 		);
@@ -321,8 +349,11 @@ describe("lunch room HTTP creation", () => {
 	});
 
 	it("bounds actual UTF-8 bytes even without Content-Length", async () => {
-		const body = JSON.stringify({ ...input, padding: "한".repeat(1400) });
-		expect(body.length).toBeLessThan(lunchRoomLimits.maxMessageBytes);
+		const body = JSON.stringify({
+			...input,
+			padding: "한".repeat(Math.ceil(lunchRoomLimits.maxEditMessageBytes / 3)),
+		});
+		expect(body.length).toBeLessThan(lunchRoomLimits.maxEditMessageBytes);
 		const response = await responseFor(createRequest(input, { body }));
 		expect(response.status).toBe(413);
 		expect(party.initialize).not.toHaveBeenCalled();
@@ -346,7 +377,7 @@ describe("lunch room HTTP creation", () => {
 		const cancel = vi.fn();
 		let position = 0;
 		const chunks = [
-			new Uint8Array(4000),
+			new Uint8Array(lunchRoomLimits.maxEditMessageBytes),
 			new Uint8Array(100),
 			new Uint8Array(100),
 		];

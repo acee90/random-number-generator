@@ -10,7 +10,10 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { saveCandidateList } from "@/lib/candidateLibrary";
+import {
+	mutateCandidateLibrary,
+	saveCandidateList,
+} from "@/lib/candidateLibrary";
 import type { RoomCandidate } from "@/lib/lunchRoom";
 
 export default function CandidateListSaveDialog({
@@ -33,23 +36,28 @@ export default function CandidateListSaveDialog({
 	const [title, setTitle] = useState(name);
 	const [error, setError] = useState("");
 	const [saved, setSaved] = useState(false);
-	function save() {
-		if (disabled || saved) return;
+	const [pending, setPending] = useState(false);
+	async function save() {
+		if (disabled || saved || pending) return;
+		setPending(true);
 		try {
-			saveCandidateList({
-				id: crypto.randomUUID(),
-				name: title,
-				items: candidates.map((candidate) => ({
-					id: candidate.id,
-					name: candidate.name,
-					category: candidate.category === "미분류" ? "" : candidate.category,
-					included: true,
-					...(candidate.menu ? { menu: candidate.menu } : {}),
-					...(candidate.distanceMeters === undefined
-						? {}
-						: { distanceMeters: candidate.distanceMeters }),
-				})),
-			});
+			const result = mutateCandidateLibrary(() =>
+				saveCandidateList({
+					id: crypto.randomUUID(),
+					name: title,
+					items: candidates.map((candidate) => ({
+						id: candidate.id,
+						name: candidate.name,
+						category: candidate.category === "미분류" ? "" : candidate.category,
+						included: true,
+						...(candidate.menu ? { menu: candidate.menu } : {}),
+						...(candidate.distanceMeters === undefined
+							? {}
+							: { distanceMeters: candidate.distanceMeters }),
+					})),
+				}),
+			);
+			if (result instanceof Promise) await result;
 			setError("");
 			setSaved(true);
 		} catch (cause) {
@@ -58,10 +66,17 @@ export default function CandidateListSaveDialog({
 					? cause.message
 					: "목록을 저장하지 못했습니다. 다시 시도해 주세요.",
 			);
+		} finally {
+			setPending(false);
 		}
 	}
 	return (
-		<Dialog open={open} onOpenChange={onOpenChange}>
+		<Dialog
+			open={open}
+			onOpenChange={(next) => {
+				if (!pending) onOpenChange(next);
+			}}
+		>
 			<DialogContent
 				className="room-save-list-dialog"
 				onOpenAutoFocus={(event) => {
@@ -102,7 +117,7 @@ export default function CandidateListSaveDialog({
 							id={`${id}-name`}
 							value={title}
 							maxLength={40}
-							disabled={disabled}
+							disabled={disabled || pending}
 							onChange={(event) => setTitle(event.target.value)}
 							aria-invalid={Boolean(error)}
 							aria-describedby={error ? `${id}-error` : undefined}
@@ -120,11 +135,12 @@ export default function CandidateListSaveDialog({
 								type="button"
 								variant="outline"
 								onClick={() => onOpenChange(false)}
+								disabled={pending}
 							>
 								취소
 							</Button>
-							<Button type="submit" disabled={disabled}>
-								사본 저장
+							<Button type="submit" disabled={disabled || pending}>
+								{pending ? "저장 중…" : "사본 저장"}
 							</Button>
 						</DialogFooter>
 					</form>

@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import SiteHeader from "@/components/layout/SiteHeader";
 import { Button } from "@/components/ui/button";
+import HomeCandidateLibrary from "./HomeCandidateLibrary";
 import "./lunch-home.css";
 
 export default function LunchHome() {
@@ -62,6 +63,7 @@ export default function LunchHome() {
 						</div>
 					</div>
 					<div className="lunch-home-secondary">
+						<HomeCandidateLibrary />
 						<details className="lunch-home-details">
 							<summary>
 								식당 목록 · 이용 안내
