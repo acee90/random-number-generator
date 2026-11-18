@@ -187,6 +187,7 @@ export type ClientMessage =
 			guestToken?: string;
 			updateName?: boolean;
 			chatProtocol?: "delta-v1";
+			voteProtocol?: "delta-v1";
 	  }
 	| { type: "activity" }
 	| { type: "room-close"; id: string }
@@ -314,6 +315,13 @@ export type ServerMessage =
 			message: ChatMessage;
 			serverTime: number;
 			chatTrace?: ChatTrace;
+	  }
+	| {
+			type: "vote-recorded";
+			roomId: string;
+			drawId: string;
+			voteCount: number;
+			vote: RoomDrawVote;
 	  }
 	| { type: "ack"; requestId: string }
 	| {
@@ -501,6 +509,9 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
 				name,
 				...(value.chatProtocol === "delta-v1"
 					? { chatProtocol: "delta-v1" as const }
+					: {}),
+				...(value.voteProtocol === "delta-v1"
+					? { voteProtocol: "delta-v1" as const }
 					: {}),
 				...(value.updateName === undefined
 					? {}
@@ -898,6 +909,28 @@ function parseCandidateIdList(value: unknown): string[] | null {
 		: null;
 }
 
+function parseDrawVote(value: unknown): RoomDrawVote | null {
+	if (
+		!isRecord(value) ||
+		!isId(value.participantId) ||
+		(value.vote !== "up" && value.vote !== "down") ||
+		!isTime(value.timestamp) ||
+		typeof value.reactionMs !== "number" ||
+		!Number.isSafeInteger(value.reactionMs) ||
+		value.reactionMs < 0
+	)
+		return null;
+	const name = normalizeLunchRoomNickname(value.name);
+	if (!name) return null;
+	return {
+		participantId: value.participantId,
+		name,
+		vote: value.vote,
+		timestamp: value.timestamp,
+		reactionMs: value.reactionMs,
+	};
+}
+
 function parseDrawVotes(
 	value: unknown,
 	endedAt: number,
@@ -911,27 +944,15 @@ function parseDrawVotes(
 	const votes: RoomDrawVote[] = [];
 	const seen = new Set<string>();
 	for (const item of value) {
+		const vote = parseDrawVote(item);
 		if (
-			!isRecord(item) ||
-			!isId(item.participantId) ||
-			seen.has(item.participantId) ||
-			(item.vote !== "up" && item.vote !== "down") ||
-			!isTime(item.timestamp) ||
-			item.timestamp < endedAt ||
-			!Number.isSafeInteger(item.reactionMs) ||
-			item.reactionMs !== item.timestamp - endedAt
+			!vote ||
+			seen.has(vote.participantId) ||
+			vote.reactionMs !== vote.timestamp - endedAt
 		)
 			return null;
-		const name = normalizeLunchRoomNickname(item.name);
-		if (!name) return null;
-		seen.add(item.participantId);
-		votes.push({
-			participantId: item.participantId,
-			name,
-			vote: item.vote,
-			timestamp: item.timestamp,
-			reactionMs: item.reactionMs as number,
-		});
+		seen.add(vote.participantId);
+		votes.push(vote);
 	}
 	return votes;
 }
@@ -1209,6 +1230,24 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
 				message,
 				serverTime: value.serverTime,
 				...(chatTrace ? { chatTrace } : {}),
+			};
+		}
+		case "vote-recorded": {
+			const vote = parseDrawVote(value.vote);
+			if (
+				!isLunchRoomId(value.roomId) ||
+				!isId(value.drawId) ||
+				!isVersion(value.voteCount) ||
+				value.voteCount > lunchRoomLimits.maxMembers ||
+				!vote
+			)
+				return null;
+			return {
+				type: "vote-recorded",
+				roomId: value.roomId,
+				drawId: value.drawId,
+				voteCount: value.voteCount,
+				vote,
 			};
 		}
 		case "snapshot": {
