@@ -3919,6 +3919,54 @@ describe("LunchRoomServer game lifecycle", () => {
 		expect(entropy).not.toHaveBeenCalled();
 	});
 
+	it("keeps simultaneous same-name recommendations separate and deduplicates retries per participant", async () => {
+		const { server, context } = await room(false);
+		const host = await connect(server, context, "방장", hostToken);
+		const first = await connect(server, context, "참가자 A");
+		const second = await connect(server, context, "참가자 B");
+		await transition(server, host, "open", "shared-additions-open");
+		const recommendation = {
+			type: "recommend",
+			id: "same-request-key",
+			intakeId: latestSnapshot(host).snapshot.intakeId,
+			name: "라면",
+		};
+		await Promise.all([
+			send(server, first, recommendation),
+			send(server, second, recommendation),
+		]);
+		await send(server, first, recommendation);
+
+		const added = storedSnapshot(context).candidates.filter(
+			(candidate) => candidate.name === "라면",
+		);
+		expect(added).toHaveLength(2);
+		expect(added.map(({ ownerId }) => ownerId)).toEqual([
+			latestSnapshot(first).self?.id,
+			latestSnapshot(second).self?.id,
+		]);
+		expect(added.map(({ ownerName }) => ownerName)).toEqual([
+			"참가자 A",
+			"참가자 B",
+		]);
+		expect(added[0].id).not.toBe(added[1].id);
+		expect(acknowledgements(first, recommendation.id)).toHaveLength(2);
+		expect(acknowledgements(second, recommendation.id)).toHaveLength(1);
+
+		await send(server, first, {
+			type: "remove-candidate",
+			id: "remove-other-ramen",
+			intakeId: recommendation.intakeId,
+			candidateId: added[1].id,
+		});
+		expect(requestErrors(first, "remove-other-ramen")).toMatchObject([
+			{ code: "CANDIDATE_FORBIDDEN" },
+		]);
+		expect(
+			storedSnapshot(context).candidates.filter(({ name }) => name === "라면"),
+		).toEqual(added);
+	});
+
 	it("opens recommendations, closes on the same list, reopens with a fresh session and finalizes without drawing", async () => {
 		const { server, context } = await room();
 		const host = await connect(server, context, "방장", hostToken);

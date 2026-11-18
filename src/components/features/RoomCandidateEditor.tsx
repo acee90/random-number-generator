@@ -4,6 +4,7 @@ import {
 	Ellipsis,
 	FolderOpen,
 	ListPlus,
+	LoaderCircle,
 	Plus,
 	RotateCcw,
 	Save,
@@ -54,6 +55,7 @@ import {
 	type RoomCandidate,
 	type RoomGameFilter,
 } from "@/lib/lunchRoom";
+import RoomCandidateAuthor from "./RoomCandidateAuthor";
 import "./room-candidate-editor.css";
 
 export type RoomCandidateEditorProps = {
@@ -64,6 +66,8 @@ export type RoomCandidateEditorProps = {
 	newName: string;
 	onNewNameChange: (name: string) => void;
 	onAdd: () => void;
+	sharedAdd?: boolean;
+	sharedAddPending?: boolean;
 	onLoad: (trigger: HTMLButtonElement | null) => void;
 	onSave: (trigger: HTMLButtonElement | null) => void;
 	onDiscard: (trigger: HTMLButtonElement | null) => void;
@@ -101,6 +105,8 @@ export default function RoomCandidateEditor({
 	newName,
 	onNewNameChange,
 	onAdd,
+	sharedAdd = false,
+	sharedAddPending = false,
 	onLoad,
 	onSave,
 	onDiscard,
@@ -241,9 +247,11 @@ export default function RoomCandidateEditor({
 			!finishName()
 		)
 			return;
-		pendingAdditionIds.current = new Set(
-			candidates.map((candidate) => candidate.id),
-		);
+		if (!sharedAdd) {
+			pendingAdditionIds.current = new Set(
+				candidates.map((candidate) => candidate.id),
+			);
+		}
 		setQuery("");
 		onAdd();
 	}
@@ -594,7 +602,8 @@ export default function RoomCandidateEditor({
 				<Button
 					variant="outline"
 					size="icon"
-					aria-label="후보 추가"
+					aria-label={sharedAddPending ? "후보 추가 중" : "후보 추가"}
+					aria-busy={sharedAddPending}
 					disabled={
 						disabled ||
 						!newName.trim() ||
@@ -605,7 +614,15 @@ export default function RoomCandidateEditor({
 						newCandidateRef.current?.focus();
 					}}
 				>
-					<Plus size={18} aria-hidden="true" />
+					{sharedAddPending ? (
+						<LoaderCircle
+							size={18}
+							aria-hidden="true"
+							className="motion-safe:animate-spin"
+						/>
+					) : (
+						<Plus size={18} aria-hidden="true" />
+					)}
 				</Button>
 			</div>
 			{candidates.length >= lunchRoomLimits.maxCandidates && (
@@ -791,6 +808,9 @@ export default function RoomCandidateEditor({
 											</span>
 										)}
 									</Button>
+								)}
+								{candidate.ownerName && (
+									<RoomCandidateAuthor name={candidate.ownerName} />
 								)}
 								{editing?.id === candidate.id && nameError && (
 									<p

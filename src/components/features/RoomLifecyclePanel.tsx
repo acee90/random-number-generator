@@ -44,6 +44,7 @@ import CandidateListLoadDialog, {
 	type CandidateListSelection,
 } from "./CandidateListLoadDialog";
 import CandidateListSaveDialog from "./CandidateListSaveDialog";
+import RoomCandidateAuthor from "./RoomCandidateAuthor";
 import RoomCandidateEditor from "./RoomCandidateEditor";
 import RoomExclusionPanel from "./RoomExclusionPanel";
 import "./room-lifecycle.css";
@@ -101,6 +102,7 @@ export default function RoomLifecyclePanel({
 	liveSnapshot.current = snapshot;
 	const phase = snapshot ? getRoomPhase(snapshot) : "waiting";
 	const editPhase = ["editing", "collecting", "reviewing"].includes(phase);
+	const sharedAdd = !solo && phase === "collecting";
 	const listScreen = editPhase;
 	const connected = room.connection === "connected";
 	const isHost = room.self?.isHost === true;
@@ -300,6 +302,24 @@ export default function RoomLifecyclePanel({
 			setDraftCandidates(candidates.map((entry) => ({ ...entry })));
 			setOriginalCandidates(liveCandidates);
 			setDraftBaseVersion(snapshot.listVersion);
+		} else if (sharedAdd) {
+			// Recommendations append independent rows. Show them without resetting
+			// a host's inline edits or treating them as edits made by the host.
+			const baseLength = (JSON.parse(originalCandidates) as RoomCandidate[])
+				.length;
+			const additions = candidates.slice(baseLength);
+			if (
+				additions.length > 0 &&
+				additions.every((candidate) => candidate.ownerId) &&
+				JSON.stringify(candidates.slice(0, baseLength)) === originalCandidates
+			) {
+				setDraftCandidates((draft) => {
+					const ids = new Set(draft.map(({ id }) => id));
+					return [...draft, ...additions.filter(({ id }) => !ids.has(id))];
+				});
+				setOriginalCandidates(liveCandidates);
+				setDraftBaseVersion(snapshot.listVersion);
+			}
 		}
 	}, [
 		snapshot,
@@ -314,6 +334,8 @@ export default function RoomLifecyclePanel({
 		liveFilterKey,
 		candidates,
 		liveCandidates,
+		originalCandidates,
+		sharedAdd,
 	]);
 
 	function resetDraft() {
@@ -500,7 +522,7 @@ export default function RoomLifecyclePanel({
 		}
 		await room.resetExclusions(action.revision);
 	}
-	function addDraftCandidate() {
+	async function addCandidateFromEditor() {
 		const name = newName.trim();
 		if (
 			!name ||
@@ -508,6 +530,12 @@ export default function RoomLifecyclePanel({
 			draftCandidates.length >= lunchRoomLimits.maxCandidates
 		)
 			return;
+		if (sharedAdd) {
+			if (await room.addCandidate(name)) {
+				setNewName((value) => (value.trim() === name ? "" : value));
+			}
+			return;
+		}
 		setDraftCandidates((entries) => [
 			{
 				id: crypto.randomUUID(),
@@ -782,7 +810,11 @@ export default function RoomLifecyclePanel({
 								onFilterChange={setDraftFilter}
 								newName={newName}
 								onNewNameChange={setNewName}
-								onAdd={addDraftCandidate}
+								onAdd={() => void addCandidateFromEditor()}
+								sharedAdd={sharedAdd}
+								sharedAddPending={
+									sharedAdd && room.mutationPending === "candidate"
+								}
 								onLoad={openLoader}
 								onSave={openSave}
 								onDiscard={requestReset}
@@ -798,7 +830,7 @@ export default function RoomLifecyclePanel({
 									snapshot?.roomId,
 									phase,
 									snapshot?.intakeId,
-									draftBaseVersion,
+									sharedAdd ? null : draftBaseVersion,
 									sameDraftStage,
 									editorGeneration,
 								].join(":")}
@@ -980,14 +1012,16 @@ export default function RoomLifecyclePanel({
 									<li key={candidate.id}>
 										<div>
 											<strong>{candidate.name}</strong>
-											<small>
-												{candidate.ownerName
-													? `${candidate.ownerName} 추천`
-													: "방장 후보"}
-												{exclusionReason(candidate) === "추첨 포함"
-													? ""
-													: ` · ${exclusionReason(candidate)}`}
-											</small>
+											<div className="room-recommend-row-meta">
+												{candidate.ownerName ? (
+													<RoomCandidateAuthor name={candidate.ownerName} />
+												) : (
+													<small>방장 후보</small>
+												)}
+												{exclusionReason(candidate) !== "추첨 포함" && (
+													<small>{exclusionReason(candidate)}</small>
+												)}
+											</div>
 										</div>
 										<span className="room-recommend-row-category">
 											{candidate.category || "미분류"}

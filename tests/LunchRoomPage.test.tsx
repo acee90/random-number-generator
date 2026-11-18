@@ -3410,6 +3410,68 @@ describe("synchronized lunch room UI", () => {
 		expect(room.editRoom).not.toHaveBeenCalled();
 	});
 
+	it("shows same-name recommendations and their authors while retaining the host's inline draft", () => {
+		room.self = { id: "host-client", isHost: true };
+		const candidates = sampleLunchPlaces.slice(0, 2);
+		room.snapshot = snapshot({
+			status: "collecting",
+			intakeId: "intake-one",
+			candidates,
+		});
+		const view = render(<LunchRoomPage roomId={roomId} />);
+		const name = candidateName(1);
+		fireEvent.change(name, { target: { value: "방장 초안" } });
+		updateRoom(view, {
+			snapshot: snapshot({
+				status: "collecting",
+				intakeId: "intake-one",
+				listVersion: 3,
+				candidates: [
+					...candidates,
+					{
+						id: "r-a",
+						name: "라면",
+						category: "미분류",
+						ownerId: "a",
+						ownerName: "참가자 A",
+					},
+					{
+						id: "r-b",
+						name: "라면",
+						category: "미분류",
+						ownerId: "b",
+						ownerName: "참가자 B",
+					},
+				],
+			}),
+		});
+		expect(candidateName(1)).toBe(name);
+		expect(name.value).toBe("방장 초안");
+		expect(
+			screen.getAllByRole("button", { name: "라면 이름 수정" }),
+		).toHaveLength(2);
+		expect(within(candidateRows()[2]).getByText("참가자 A")).toBeTruthy();
+		expect(within(candidateRows()[3]).getByText("참가자 B")).toBeTruthy();
+		expect(room.editRoom).not.toHaveBeenCalled();
+	});
+
+	it("submits a host addition during intake as a shared recommendation", async () => {
+		room.self = { id: "host-client", isHost: true };
+		room.snapshot = snapshot({ status: "collecting", intakeId: "intake-one" });
+		vi.mocked(room.addCandidate).mockResolvedValue(true);
+		render(<LunchRoomPage roomId={roomId} />);
+		const name = screen.getByRole("textbox", {
+			name: "새 후보 이름",
+		}) as HTMLInputElement;
+		fireEvent.change(name, { target: { value: "라면" } });
+		await act(async () =>
+			fireEvent.click(screen.getByRole("button", { name: "후보 추가" })),
+		);
+		expect(room.addCandidate).toHaveBeenCalledExactlyOnceWith("라면");
+		expect(room.editRoom).not.toHaveBeenCalled();
+		expect(name.value).toBe("");
+	});
+
 	it("requires confirmation before replacing a conflicting inline candidate draft with the shared list", () => {
 		room.self = { id: "host-client", isHost: true };
 		room.snapshot = snapshot({ status: "collecting", intakeId: "intake-one" });
