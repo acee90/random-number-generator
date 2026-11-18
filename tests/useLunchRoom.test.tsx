@@ -266,6 +266,54 @@ describe("irreversible current-result feedback", () => {
 		expect(sent("vote")).toHaveLength(1);
 	});
 
+	it("applies one saved ballot at a time and recovers missing ballots through a full rejoin", () => {
+		mocks.readHost.mockReturnValue(undefined);
+		const base = feedbackDraw();
+		const draw = {
+			...base,
+			participants: [
+				...(base.participants ?? []),
+				{ id: "host-client", name: "방장", isHost: true },
+			],
+		};
+		const current = snapshot({ status: "result", draw });
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined(false, current);
+		act(() => expect(result.current.vote(draw.id, "up")).toBe(true));
+		const guest = {
+			participantId: "guest-client",
+			name: "민수",
+			vote: "up" as const,
+			timestamp: Date.now(),
+			reactionMs: Date.now() - draw.startedAt - draw.durationMs,
+		};
+		const host = { ...guest, participantId: "host-client", name: "방장" };
+		const delta = {
+			type: "vote-recorded" as const,
+			roomId,
+			drawId: draw.id,
+		};
+		receive({ ...delta, voteCount: 1, vote: host });
+		expect(result.current.snapshot?.draw?.votes).toEqual([host]);
+		expect(result.current.votePendingDrawId).toBe(draw.id);
+		receive({ ...delta, voteCount: 1, vote: host });
+		receive({ ...delta, voteCount: 2, vote: guest });
+		expect(result.current.snapshot?.draw?.votes).toEqual([host, guest]);
+		expect(result.current.votePendingDrawId).toBeNull();
+		expect(result.current.snapshot?.candidates).toEqual(current.candidates);
+
+		receive({ ...delta, drawId: "old-draw", voteCount: 1, vote: host });
+		expect(result.current.snapshot?.draw?.votes).toEqual([host, guest]);
+
+		receive({ type: "snapshot", snapshot: current, serverTime: Date.now() });
+		const reconnect = vi.spyOn(socket(), "reconnect");
+		receive({ ...delta, voteCount: 2, vote: guest });
+		expect(reconnect).toHaveBeenCalledOnce();
+		expect(result.current.snapshot?.draw?.votes).toEqual([]);
+		joined(false, { ...current, draw: { ...draw, votes: [host, guest] } });
+		expect(result.current.snapshot?.draw?.votes).toEqual([host, guest]);
+	});
+
 	it("refuses identities outside the draw roster, unfinished and archived results but has no short voting deadline", () => {
 		const draw = feedbackDraw();
 		const { result } = renderHook(() => useLunchRoom(roomId));
@@ -1450,6 +1498,7 @@ describe("explicit lunch room admission", () => {
 		expect(sent("join")[0]).toEqual({
 			type: "join",
 			chatProtocol: "delta-v1",
+			voteProtocol: "delta-v1",
 			name: "Strict 방장",
 			updateName: true,
 			hostToken: token,
@@ -1496,6 +1545,7 @@ describe("explicit lunch room admission", () => {
 		expect(sent("join")[0]).toEqual({
 			type: "join",
 			chatProtocol: "delta-v1",
+			voteProtocol: "delta-v1",
 			name: "다른 방장",
 			updateName: true,
 			hostToken: token,
@@ -1557,6 +1607,7 @@ describe("explicit lunch room admission", () => {
 			{
 				type: "join",
 				chatProtocol: "delta-v1",
+				voteProtocol: "delta-v1",
 				name: "Eric",
 				updateName: true,
 				hostToken: token,
@@ -1605,6 +1656,7 @@ describe("explicit lunch room admission", () => {
 			{
 				type: "join",
 				chatProtocol: "delta-v1",
+				voteProtocol: "delta-v1",
 				name: "지수",
 				updateName: true,
 				guestToken,
@@ -1636,6 +1688,7 @@ describe("explicit lunch room admission", () => {
 		expect(sent("join").at(-1)).toEqual({
 			type: "join",
 			chatProtocol: "delta-v1",
+			voteProtocol: "delta-v1",
 			name: "민수",
 			hostToken: token,
 		});
@@ -1738,6 +1791,7 @@ describe("lunch room connection lifecycle", () => {
 			{
 				type: "join",
 				chatProtocol: "delta-v1",
+				voteProtocol: "delta-v1",
 				name: "민수",
 				hostToken: token,
 			},
@@ -1759,6 +1813,7 @@ describe("lunch room connection lifecycle", () => {
 		expect(sent("join").at(-1)).toEqual({
 			type: "join",
 			chatProtocol: "delta-v1",
+			voteProtocol: "delta-v1",
 			name: "새 이름",
 			updateName: true,
 			hostToken: token,
@@ -1786,6 +1841,7 @@ describe("lunch room connection lifecycle", () => {
 			{
 				type: "join",
 				chatProtocol: "delta-v1",
+				voteProtocol: "delta-v1",
 				name: "민수",
 				hostToken: token,
 			},
@@ -1812,7 +1868,13 @@ describe("lunch room connection lifecycle", () => {
 		joined(false);
 		expect(mocks.readHost).toHaveBeenCalledWith(roomId);
 		expect(sent("join")).toEqual([
-			{ type: "join", chatProtocol: "delta-v1", name: "민수", guestToken },
+			{
+				type: "join",
+				chatProtocol: "delta-v1",
+				voteProtocol: "delta-v1",
+				name: "민수",
+				guestToken,
+			},
 		]);
 		expect(mocks.readGuestToken).toHaveBeenCalledExactlyOnceWith(roomId);
 		expect(result.current.self?.isHost).toBe(false);
@@ -1856,7 +1918,13 @@ describe("lunch room connection lifecycle", () => {
 		const { result } = renderHook(() => useLunchRoom(roomId));
 		joined(false);
 		expect(sent("join")).toEqual([
-			{ type: "join", chatProtocol: "delta-v1", name: "민수", guestToken },
+			{
+				type: "join",
+				chatProtocol: "delta-v1",
+				voteProtocol: "delta-v1",
+				name: "민수",
+				guestToken,
+			},
 		]);
 		expect(socket().options).not.toHaveProperty("query");
 		expect(JSON.stringify(socket().options)).not.toContain(guestToken);
@@ -1868,15 +1936,28 @@ describe("lunch room connection lifecycle", () => {
 		joined(false);
 		expect(mocks.readGuestToken).toHaveBeenCalledExactlyOnceWith(roomId);
 		expect(sent("join")).toEqual([
-			{ type: "join", chatProtocol: "delta-v1", name: "민수", guestToken },
 			{
 				type: "join",
 				chatProtocol: "delta-v1",
+				voteProtocol: "delta-v1",
+				name: "민수",
+				guestToken,
+			},
+			{
+				type: "join",
+				chatProtocol: "delta-v1",
+				voteProtocol: "delta-v1",
 				name: "새 손님",
 				guestToken,
 				updateName: true,
 			},
-			{ type: "join", chatProtocol: "delta-v1", name: "민수", guestToken },
+			{
+				type: "join",
+				chatProtocol: "delta-v1",
+				voteProtocol: "delta-v1",
+				name: "민수",
+				guestToken,
+			},
 		]);
 		expect(JSON.stringify(result.current)).not.toContain(guestToken);
 	});
@@ -1895,6 +1976,7 @@ describe("lunch room connection lifecycle", () => {
 			{
 				type: "join",
 				chatProtocol: "delta-v1",
+				voteProtocol: "delta-v1",
 				name: "다른 방에서 쓴 이름",
 				guestToken,
 			},
@@ -1917,6 +1999,7 @@ describe("lunch room connection lifecycle", () => {
 		expect(sent("join").at(-1)).toEqual({
 			type: "join",
 			chatProtocol: "delta-v1",
+			voteProtocol: "delta-v1",
 			name: "직접 고른 이름",
 			updateName: true,
 			guestToken,
@@ -2214,6 +2297,7 @@ describe("actual user activity and server presence", () => {
 			{
 				type: "join",
 				chatProtocol: "delta-v1",
+				voteProtocol: "delta-v1",
 				name: "민수",
 				guestToken: nextToken,
 			},

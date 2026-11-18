@@ -449,6 +449,7 @@ export function useLunchRoom(
 				JSON.stringify({
 					type: "join",
 					chatProtocol: "delta-v1",
+					voteProtocol: "delta-v1",
 					name: nicknameRef.current,
 					...(explicitNameRef.current ? { updateName: true } : {}),
 					...(hostTokenRef.current ? { hostToken: hostTokenRef.current } : {}),
@@ -479,7 +480,9 @@ export function useLunchRoom(
 			if (
 				!message ||
 				(message.type === "snapshot" && message.snapshot.roomId !== roomId) ||
-				((message.type === "chat-ack" || message.type === "chat-message") &&
+				((message.type === "chat-ack" ||
+					message.type === "chat-message" ||
+					message.type === "vote-recorded") &&
 					message.roomId !== roomId)
 			) {
 				setErrorState({
@@ -637,6 +640,54 @@ export function useLunchRoom(
 					localChatRequestsRef.current.delete(entry.id);
 					syncLocalChatMessages();
 				}
+				return;
+			}
+			if (message.type === "vote-recorded") {
+				const current = snapshotRef.current;
+				const draw = current?.draw;
+				if (
+					!joinedRef.current ||
+					!current ||
+					!draw ||
+					draw.id !== message.drawId
+				)
+					return;
+
+				const votes = draw.votes ?? [];
+				const vote = message.vote;
+				if (votes.some((entry) => entry.participantId === vote.participantId))
+					return;
+				if (
+					message.voteCount !== votes.length + 1 ||
+					vote.reactionMs !==
+						vote.timestamp - (draw.startedAt + draw.durationMs) ||
+					!isRoomDrawVoter(draw, vote.participantId)
+				) {
+					// The join response restores the authoritative vote list.
+					socket.reconnect();
+					return;
+				}
+				const next = {
+					...current,
+					draw: { ...draw, votes: [...votes, vote] },
+					members: current.members?.map((member) =>
+						member.id === vote.participantId
+							? {
+									...member,
+									status: "online" as const,
+									lastActiveAt: Math.max(member.lastActiveAt, vote.timestamp),
+									lastSeenAt: Math.max(member.lastSeenAt, vote.timestamp),
+								}
+							: member,
+					),
+				};
+				snapshotRef.current = next;
+				setSnapshot(next);
+				if (
+					vote.participantId === selfRef.current?.id &&
+					voteRequestRef.current?.drawId === draw.id
+				)
+					clearVotePending();
 				return;
 			}
 			if (message.type !== "snapshot") return;
@@ -922,6 +973,7 @@ export function useLunchRoom(
 			!send({
 				type: "join",
 				chatProtocol: "delta-v1",
+				voteProtocol: "delta-v1",
 				name,
 				updateName: true,
 				...(hostTokenRef.current ? { hostToken: hostTokenRef.current } : {}),

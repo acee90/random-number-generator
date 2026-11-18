@@ -13,6 +13,7 @@ import {
 	parseClientMessage,
 	parseRoomSnapshot,
 	type RoomDraw,
+	type RoomDrawVote,
 	type RoomMember,
 	type RoomParticipant,
 	type RoomSnapshot,
@@ -81,6 +82,7 @@ interface SocketState {
 	lastActiveAt?: number;
 	closing?: boolean;
 	chatProtocol?: "delta-v1";
+	voteProtocol?: "delta-v1";
 }
 
 interface NicknameAvailabilityResult {
@@ -1076,6 +1078,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			...state,
 			lastActiveAt: Date.now(),
 			chatProtocol: message.chatProtocol,
+			voteProtocol: message.voteProtocol,
 			participant: {
 				id: participantId,
 				name,
@@ -1289,19 +1292,14 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			return;
 		}
 		const before = structuredClone(this.room);
-		this.room.snapshot.draw = {
-			...draw,
-			votes: [
-				...votes,
-				{
-					participantId: participant.id,
-					name: normalizeLunchRoomNickname(participant.name) ?? "참가자",
-					vote: message.vote,
-					timestamp: now,
-					reactionMs: now - endedAt,
-				},
-			],
+		const vote: RoomDrawVote = {
+			participantId: participant.id,
+			name: normalizeLunchRoomNickname(participant.name) ?? "참가자",
+			vote: message.vote,
+			timestamp: now,
+			reactionMs: now - endedAt,
 		};
+		this.room.snapshot.draw = { ...draw, votes: [...votes, vote] };
 		this.recordActivity(connection);
 		try {
 			await this.save();
@@ -1317,7 +1315,21 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			return;
 		}
 		await this.scheduleAlarm();
-		this.publish();
+		for (const peer of this.getConnections<SocketState>()) {
+			const state = peer.state;
+			if (!state?.participant || state.closing) continue;
+			if (state.voteProtocol !== "delta-v1") {
+				this.sendSnapshot(peer);
+				continue;
+			}
+			this.send(peer, {
+				type: "vote-recorded",
+				roomId: this.room.snapshot.roomId,
+				drawId: draw.id,
+				voteCount: votes.length + 1,
+				vote,
+			});
+		}
 	}
 
 	private async nextRound(

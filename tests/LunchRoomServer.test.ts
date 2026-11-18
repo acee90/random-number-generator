@@ -37,6 +37,7 @@ interface TestSocketState {
 	lastActiveAt?: number;
 	closing?: boolean;
 	chatProtocol?: "delta-v1";
+	voteProtocol?: "delta-v1";
 }
 
 class TestSocket {
@@ -2315,6 +2316,59 @@ describe("LunchRoomServer irreversible current-result votes", () => {
 		expect(latestSnapshot(returned).snapshot.history[0].votes).toEqual(
 			expected,
 		);
+	});
+
+	it("sends only persisted vote deltas to opted-in sockets and full results to legacy and reconnecting sockets", async () => {
+		const { server, context, host, guest, draw } = await votingRoom();
+		const peer = await connect(server, context);
+		await send(server, peer, {
+			type: "join",
+			name: "관찰",
+			voteProtocol: "delta-v1",
+		});
+		expect(peer.state?.voteProtocol).toBe("delta-v1");
+		host.setState({ ...host.state, voteProtocol: "delta-v1" });
+		const ballot = {
+			type: "vote",
+			id: "delta-ballot",
+			drawId: draw.id,
+			vote: "up",
+		};
+		const peerBefore = messages(peer).length;
+		vi.spyOn(context.storage, "put").mockRejectedValueOnce(
+			new Error("vote write failed"),
+		);
+		await send(server, host, ballot);
+		expect(messages(peer)).toHaveLength(peerBefore);
+		expect(voteErrors(host, ballot.id)).toMatchObject([
+			{ code: "SAVE_FAILED" },
+		]);
+		const hostBefore = messages(host).length;
+		await send(server, host, ballot);
+		const recorded = storedSnapshot(context).draw?.votes?.[0];
+		for (const [socket, offset] of [
+			[host, hostBefore],
+			[peer, peerBefore],
+		] as const) {
+			expect(messages(socket).slice(offset)).toEqual([
+				{
+					type: "vote-recorded",
+					roomId: context.id.name,
+					drawId: draw.id,
+					voteCount: 1,
+					vote: recorded,
+				},
+			]);
+		}
+		expect(latestSnapshot(guest).snapshot.draw?.votes).toEqual([recorded]);
+		const returned = await connect(server, context);
+		await send(server, returned, {
+			type: "join",
+			name: "방장",
+			hostToken,
+			voteProtocol: "delta-v1",
+		});
+		expect(latestSnapshot(returned).snapshot.draw?.votes).toEqual([recorded]);
 	});
 
 	it("lets only the first opposite vote win across same-identity tabs, renaming and a persisted reconnect", async () => {
