@@ -677,7 +677,7 @@ export function RoomPageFixtureProvider({
 			}, 350);
 			return true;
 		},
-		nextRound(drawId) {
+		nextRound(drawId, editCandidates) {
 			const draw = current.current.snapshot.draw;
 			if (!options.isHost || !draw || draw.id !== drawId || !drawFinished(draw))
 				return false;
@@ -689,7 +689,8 @@ export function RoomPageFixtureProvider({
 						? {}
 						: { excludedIds: [], exclusionRecords: [] }),
 					draw: null,
-					status: "waiting",
+					status: editCandidates ? "editing" : "waiting",
+					...(editCandidates ? { intakeId: null } : {}),
 					revision: (value.snapshot.revision ?? 1) + 1,
 					history: value.snapshot.history.some((entry) => entry.id === drawId)
 						? value.snapshot.history

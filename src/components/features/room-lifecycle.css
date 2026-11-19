@@ -87,7 +87,12 @@
 .room-lifecycle-tools {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 6px;
+	gap: 4px;
+}
+@container (max-width: 340px) {
+	.room-lifecycle-tools > button {
+		padding-inline: 8px;
+	}
 }
 .room-lifecycle-panel .room-draw-panel {
 	border: 0;

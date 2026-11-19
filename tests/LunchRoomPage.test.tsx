@@ -294,6 +294,9 @@ describe("current result feedback and frozen history", () => {
 		fireEvent.click(screen.getByRole("button", { name: "싫어요 투표" }));
 		expect(room.vote).toHaveBeenCalledOnce();
 		expect(next.matches(":disabled")).toBe(true);
+		expect(
+			screen.getByRole("button", { name: "후보 편집" }).matches(":disabled"),
+		).toBe(true);
 		fireEvent.click(next);
 		expect(room.nextRound).not.toHaveBeenCalled();
 		updateRoom(view, {
@@ -1370,7 +1373,7 @@ describe("synchronized lunch room UI", () => {
 		});
 		render(<LunchRoomPage roomId={roomId} />);
 		fireEvent.click(screen.getByRole("button", { name: "지난 기록" }));
-		const history = screen.getByRole("region", { name: "방 추첨 기록" });
+		const history = screen.getByRole("region", { name: "추첨 기록" });
 		expect(
 			within(history).getAllByRole("button", { name: / 상세 기록 열기$/ }),
 		).toHaveLength(1);
@@ -2510,13 +2513,17 @@ describe("synchronized lunch room UI", () => {
 		expect(room.editRoom).not.toHaveBeenCalled();
 	});
 
-	it("keeps results read-only until the host explicitly returns to waiting", () => {
+	it("keeps the candidate viewer read-only on the result screen", () => {
 		room.self = { id: "host-client", isHost: true };
 		room.snapshot = snapshot({ status: "result", draw: draw(baseTime - 8000) });
 		render(<LunchRoomPage roomId={roomId} />);
-		expect(screen.queryByRole("button", { name: "후보 편집" })).toBeNull();
 		expect(screen.queryByRole("button", { name: "편집하기" })).toBeNull();
 		fireEvent.click(screen.getByRole("button", { name: "후보 보기" }));
+		expect(
+			within(screen.getByRole("dialog")).queryByRole("button", {
+				name: "후보 편집",
+			}),
+		).toBeNull();
 		expect(screen.queryByRole("textbox", { name: "방 이름" })).toBeNull();
 		expect(screen.queryByRole("button", { name: "변경 적용" })).toBeNull();
 		expect(room.enterEditing).not.toHaveBeenCalled();
@@ -3555,6 +3562,32 @@ describe("synchronized lunch room UI", () => {
 		expect(room.nextRound).toHaveBeenCalledOnce();
 	});
 
+	it("takes the host from the result to candidate editing and moves keyboard focus into the editor", () => {
+		const current = draw(baseTime - 8000);
+		room.self = { id: "host-client", isHost: true };
+		room.snapshot = snapshot({ status: "result", draw: current });
+		const view = render(<LunchRoomPage roomId={roomId} />);
+		const edit = screen.getByRole("button", { name: "후보 편집" });
+		fireEvent.click(edit);
+		expect(room.nextRound).toHaveBeenCalledExactlyOnceWith(current.id, true);
+		updateRoom(view, { nextPending: true });
+		expect(edit).toHaveProperty("disabled", true);
+		expect(edit.getAttribute("aria-busy")).toBe("true");
+		expect(screen.getByRole("button", { name: "다음 게임" })).toHaveProperty(
+			"disabled",
+			true,
+		);
+		updateRoom(view, {
+			nextPending: false,
+			snapshot: snapshot({ status: "editing", history: [current] }),
+		});
+		expect(document.activeElement).toBe(
+			screen.getByRole("heading", { name: "후보 편집" }),
+		);
+		expect(room.enterEditing).not.toHaveBeenCalled();
+		expect(room.startDraw).not.toHaveBeenCalled();
+	});
+
 	it.each([
 		"waiting",
 		"result",
@@ -3980,7 +4013,7 @@ describe("synchronized lunch room UI", () => {
 			).queryByText("상세 기록"),
 		).toBeNull();
 		fireEvent.click(screen.getByRole("button", { name: "지난 기록" }));
-		const history = screen.getByRole("region", { name: "방 추첨 기록" });
+		const history = screen.getByRole("region", { name: "추첨 기록" });
 		fireEvent.click(
 			within(history).getByRole("button", {
 				name: `${sampleLunchPlaces[1].name} 상세 기록 열기`,
@@ -4048,7 +4081,7 @@ describe("synchronized lunch room UI", () => {
 		await act(async () => vi.advanceTimersByTime(0));
 		expect(screen.queryByRole("dialog", { name: / 상세 기록$/ })).toBeNull();
 		expect(document.activeElement).toBe(
-			screen.getByRole("heading", { name: "방 추첨 기록" }),
+			screen.getByRole("heading", { name: "추첨 기록" }),
 		);
 	});
 
@@ -4061,7 +4094,7 @@ describe("synchronized lunch room UI", () => {
 		});
 		render(<LunchRoomPage roomId={roomId} />);
 		fireEvent.click(screen.getByRole("button", { name: "지난 기록" }));
-		const history = screen.getByRole("region", { name: "방 추첨 기록" });
+		const history = screen.getByRole("region", { name: "추첨 기록" });
 		fireEvent.click(
 			within(history).getByRole("button", {
 				name: `${sampleLunchPlaces[1].name} 상세 기록 열기`,

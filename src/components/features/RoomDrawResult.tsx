@@ -113,11 +113,7 @@ export default function RoomDrawResult({
 		return true;
 	}
 	return (
-		<div
-			className="room-result-layout"
-			data-solo={solo || undefined}
-			data-own-choice={ownChoice}
-		>
+		<div className="room-result-layout" data-own-choice={ownChoice}>
 			<section className="room-result" aria-labelledby={titleId}>
 				<div className="room-result-summary">
 					<p className="room-result-eyebrow">당첨 메뉴</p>

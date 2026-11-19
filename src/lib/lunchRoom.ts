@@ -198,7 +198,7 @@ export type ClientMessage =
 			expectedRevision?: number;
 			confirmReset?: boolean;
 	  }
-	| { type: "next"; id: string; drawId: string }
+	| { type: "next"; id: string; drawId: string; editCandidates?: boolean }
 	| { type: "vote"; id: string; drawId: string; vote: "up" | "down" }
 	| { type: "candidates"; ids: string[] }
 	| {
@@ -557,8 +557,16 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
 					}
 				: null;
 		case "next":
-			return isId(value.id) && isId(value.drawId)
-				? { type: "next", id: value.id, drawId: value.drawId }
+			return isId(value.id) &&
+				isId(value.drawId) &&
+				(value.editCandidates === undefined ||
+					typeof value.editCandidates === "boolean")
+				? {
+						type: "next",
+						id: value.id,
+						drawId: value.drawId,
+						...(value.editCandidates ? { editCandidates: true } : {}),
+					}
 				: null;
 		case "vote":
 			return isId(value.id) &&

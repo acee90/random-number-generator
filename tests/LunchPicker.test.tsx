@@ -113,6 +113,28 @@ describe("shared solo game screen", () => {
 		);
 		expect(generateRandomNumbers).toHaveBeenCalledTimes(1);
 	});
+	it("edits candidates straight from a completed game and keeps that game's record", async () => {
+		render(<LunchPicker places={places} />);
+		await draw();
+		const firstRecord = localStorage.getItem(soloHistoryKey);
+		fireEvent.click(screen.getByRole("button", { name: "후보 편집" }));
+		expect(document.activeElement).toBe(
+			screen.getByRole("heading", { name: "후보 편집" }),
+		);
+		const name = screen.getByRole("textbox", { name: "새 후보 이름" });
+		fireEvent.change(name, { target: { value: "분식집" } });
+		fireEvent.keyDown(name, { key: "Enter" });
+		await act(async () =>
+			fireEvent.click(screen.getByRole("button", { name: "마감" })),
+		);
+		expect(localStorage.getItem(soloHistoryKey)).toBe(firstRecord);
+		expect(generateRandomNumbers).toHaveBeenCalledTimes(1);
+		await draw();
+		expect(generateRandomNumbers).toHaveBeenLastCalledWith({
+			data: { min: 0, max: 2, count: 1, unique: false },
+		});
+		expect(screen.getByRole("heading", { name: "분식집" })).toBeTruthy();
+	});
 	it("locks duplicate draws and candidate edits until the timeline completes", async () => {
 		let resolve!: (value: { numbers: number[]; source: "csprng" }) => void;
 		vi.mocked(generateRandomNumbers).mockReturnValueOnce(

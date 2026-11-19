@@ -137,6 +137,7 @@ function VoteTally({
 export default function RoomDrawFeedback({
 	draw,
 	selfId,
+	isHost,
 	connected,
 	pending,
 	optimisticVote,
@@ -339,6 +340,11 @@ export default function RoomDrawFeedback({
 					);
 				})}
 			</fieldset>
+			{mode === "results" && isHost && !readOnly && (
+				<p className="room-feedback-timing-note">
+					후보 편집이나 다음 게임으로 이동하면 투표가 마감돼요.
+				</p>
+			)}
 		</section>
 	);
 }

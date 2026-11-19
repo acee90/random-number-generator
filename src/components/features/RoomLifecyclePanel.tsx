@@ -1,4 +1,4 @@
-import { FolderOpen, Pencil, Plus, Trash2 } from "lucide-react";
+import { FolderOpen, LoaderCircle, Pencil, Plus, Trash2 } from "lucide-react";
 import {
 	type ReactNode,
 	type RefObject,
@@ -80,6 +80,7 @@ export default function RoomLifecyclePanel({
 	busy,
 	showResult,
 	resultAction,
+	onEditResult,
 	onStart,
 	onHistory,
 	historyButtonRef,
@@ -91,6 +92,7 @@ export default function RoomLifecyclePanel({
 	busy: boolean;
 	showResult: boolean;
 	resultAction?: ReactNode;
+	onEditResult?: () => boolean;
 	onStart: (options?: StartOptions) => void;
 	onHistory: () => void;
 	historyButtonRef?: RefObject<HTMLButtonElement | null>;
@@ -141,6 +143,16 @@ export default function RoomLifecyclePanel({
 	const [candidateViewOpen, setCandidateViewOpen] = useState(false);
 	const candidateViewTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const panelRef = useRef<HTMLElement | null>(null);
+	const phaseTitleRef = useRef<HTMLHeadingElement>(null);
+	const editorTitleRef = useRef<HTMLHeadingElement>(null);
+	const focusEditorRef = useRef(false);
+	const editPending = (room.nextPending || pending) && focusEditorRef.current;
+	useEffect(() => {
+		if (!focusEditorRef.current || locked) return;
+		focusEditorRef.current = false;
+		if (phase === "editing")
+			(editorTitleRef.current ?? phaseTitleRef.current)?.focus();
+	}, [locked, phase]);
 	useEffect(() => {
 		if (candidates.length === 0) setCandidateViewOpen(false);
 	}, [candidates.length]);
@@ -510,6 +522,16 @@ export default function RoomLifecyclePanel({
 			setStagePending(null);
 		}
 	}
+	function openEditor() {
+		if (onEditResult) {
+			focusEditorRef.current = onEditResult();
+			return;
+		}
+		focusEditorRef.current = true;
+		void room.enterEditing(revision).then((accepted) => {
+			if (!accepted) focusEditorRef.current = false;
+		});
+	}
 	async function confirm() {
 		const action = confirmation;
 		setConfirmation(null);
@@ -621,7 +643,9 @@ export default function RoomLifecyclePanel({
 				hidden={isHost && listScreen && !showSetupChoice}
 			>
 				<div>
-					<h2>{phaseLabel}</h2>
+					<h2 ref={phaseTitleRef} tabIndex={-1}>
+						{phaseLabel}
+					</h2>
 				</div>
 				<div className="room-lifecycle-tools">
 					{candidates.length > 0 && (
@@ -703,18 +727,26 @@ export default function RoomLifecyclePanel({
 					)}
 					{isHost &&
 						snapshot &&
-						phase === "waiting" &&
-						!showResult &&
-						!busy && (
+						(onEditResult || (phase === "waiting" && !showResult && !busy)) && (
 							<Button
 								variant="outline"
-								size="icon"
-								title="후보 편집"
-								aria-label="후보 편집"
-								disabled={locked}
-								onClick={() => void room.enterEditing()}
+								size="sm"
+								disabled={
+									locked || room.votePendingDrawId === snapshot.draw?.id
+								}
+								aria-busy={editPending || undefined}
+								onClick={openEditor}
 							>
-								<Pencil size={18} aria-hidden="true" />
+								{editPending ? (
+									<LoaderCircle
+										size={16}
+										className="motion-safe:animate-spin"
+										aria-hidden="true"
+									/>
+								) : (
+									<Pencil size={16} aria-hidden="true" />
+								)}
+								후보 편집
 							</Button>
 						)}
 					<Button
@@ -783,6 +815,7 @@ export default function RoomLifecyclePanel({
 					{isHost ? (
 						!showSetupChoice && (
 							<RoomCandidateEditor
+								titleRef={editorTitleRef}
 								title={
 									phase === "collecting"
 										? "후보 추천 접수 중"

@@ -133,6 +133,9 @@
 	align-items: start;
 	min-inline-size: 0;
 }
+.room-layout:not([data-chat-collapsed]) {
+	grid-template-columns: minmax(0, 1fr);
+}
 .room-primary-column {
 	min-inline-size: 0;
 }
@@ -1370,21 +1373,4 @@
 	.lunch-room .room-wheel-stage:has(> .room-result-overlay) {
 		min-block-size: 0;
 	}
-}
-
-/* Solo uses the room game surfaces with a single content column. */
-.lunch-solo .room-layout {
-	grid-template-columns: minmax(0, 1fr);
-}
-.lunch-solo .room-primary-column {
-	max-inline-size: 100%;
-}
-
-.room-result-layout[data-solo] {
-	grid-template-rows: minmax(0, 1fr) auto;
-	min-block-size: 0;
-}
-.room-result-layout[data-solo] > .room-result {
-	display: grid;
-	grid-template-rows: minmax(0, 1fr);
 }

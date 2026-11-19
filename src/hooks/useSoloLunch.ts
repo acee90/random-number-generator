@@ -201,7 +201,10 @@ export function useSoloLunch(places: readonly LunchPlace[] = emptyPlaces) {
 			next.exclusionRecords = [];
 			return true;
 		}, revision);
-	const nextRound: ReturnType<typeof useLunchRoom>["nextRound"] = (drawId) => {
+	const nextRound: ReturnType<typeof useLunchRoom>["nextRound"] = (
+		drawId,
+		editCandidates,
+	) => {
 		const state = current.current;
 		if (
 			!state.draw ||
@@ -213,7 +216,7 @@ export function useSoloLunch(places: readonly LunchPlace[] = emptyPlaces) {
 		const next: RoomSnapshot = {
 			...state,
 			draw: null,
-			status: "waiting",
+			status: editCandidates ? "editing" : "waiting",
 			revision: (state.revision ?? 1) + 1,
 		};
 		clearDisabledRoomExclusions(next);
