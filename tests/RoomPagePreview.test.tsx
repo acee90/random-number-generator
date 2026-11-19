@@ -507,12 +507,14 @@ describe("Storybook room page with the local transport adapter", () => {
 		).toBeTruthy();
 		expect(screen.getByText("실시간 투표 현황")).toBeTruthy();
 		expect(screen.getByRole("button", { name: "다음 게임" })).toBeTruthy();
-		expect(screen.queryByRole("button", { name: "후보 편집" })).toBeNull();
 		expect(
 			document
 				.querySelector(".lunch-wheel")
 				?.getAttribute("data-candidate-count"),
 		).toBe("12");
+		fireEvent.click(screen.getByRole("button", { name: "후보 편집" }));
+		expect(screen.getByRole("heading", { name: "후보 편집" })).toBeTruthy();
+		expect(screen.queryByText("실시간 투표 현황")).toBeNull();
 	});
 
 	it("changes next-game duplicate exclusion beside the stored excluded candidates", async () => {

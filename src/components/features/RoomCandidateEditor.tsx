@@ -82,6 +82,7 @@ export type RoomCandidateEditorProps = {
 	contextKey: string;
 	sourceName?: string;
 	title: string;
+	titleRef?: RefObject<HTMLHeadingElement | null>;
 	headerActions?: ReactNode;
 	children?: ReactNode;
 	notices?: ReactNode;
@@ -121,6 +122,7 @@ export default function RoomCandidateEditor({
 	contextKey,
 	sourceName = "후보 목록",
 	title,
+	titleRef,
 	headerActions,
 	children,
 	notices,
@@ -387,7 +389,9 @@ export default function RoomCandidateEditor({
 	return (
 		<section className="room-simple-editor" aria-label="후보 편집">
 			<div className="room-simple-heading">
-				<h2>{title}</h2>
+				<h2 ref={titleRef} tabIndex={titleRef ? -1 : undefined}>
+					{title}
+				</h2>
 				<div className="room-simple-header-actions">
 					{children}
 					{headerActions}

@@ -111,10 +111,18 @@ describe("room draw vote protocol", () => {
 		expect(
 			client({ type: "next", id: "next-1", drawId: "draw-1", winnerIndex: 3 }),
 		).toEqual({ type: "next", id: "next-1", drawId: "draw-1" });
+		const edit = {
+			type: "next",
+			id: "next-1",
+			drawId: "draw-1",
+			editCandidates: true,
+		};
+		expect(client(edit)).toEqual(edit);
 		for (const invalid of [
 			{ type: "next", id: "next-1" },
 			{ type: "next", drawId: "draw-1" },
 			{ type: "next", id: "next-1", drawId: "../draw" },
+			{ ...edit, editCandidates: "true" },
 		])
 			expect(client(invalid)).toBeNull();
 	});

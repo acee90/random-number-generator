@@ -1325,7 +1325,7 @@ export function useLunchRoom(
 		markPending();
 		return true;
 	}
-	function nextRound(drawId: string) {
+	function nextRound(drawId: string, editCandidates = false) {
 		const current = snapshotRef.current;
 		const draw = current?.draw;
 		if (
@@ -1340,11 +1340,20 @@ export function useLunchRoom(
 			startRequestRef.current ||
 			nextRequestRef.current ||
 			candidatesRequestRef.current !== null ||
-			mutationRequestRef.current
+			mutationRequestRef.current ||
+			voteRequestRef.current?.drawId === drawId
 		)
 			return false;
 		const id = actionId();
-		if (!send({ type: "next", id, drawId })) return false;
+		if (
+			!send({
+				type: "next",
+				id,
+				drawId,
+				...(editCandidates ? { editCandidates } : {}),
+			})
+		)
+			return false;
 		nextRequestRef.current = { id, drawId };
 		setNextPending(true);
 		markPending();

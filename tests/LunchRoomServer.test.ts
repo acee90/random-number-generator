@@ -2063,12 +2063,16 @@ describe("LunchRoomServer irreversible current-result votes", () => {
 			{ code: "VOTE_NOT_ELIGIBLE" },
 		]);
 	});
-	it("only lets the host close completed voting, persists it for all clients, and ignores stale repeats", async () => {
+	it.each([
+		false,
+		true,
+	])("only lets the host close completed voting, persists it for all clients, and ignores stale repeats (edit candidates: %s)", async (editCandidates) => {
 		const { server, context, host, guest, draw } = await votingRoom(false);
 		await send(server, guest, {
 			type: "next",
 			id: "forged-next",
 			drawId: draw.id,
+			editCandidates,
 		});
 		expect(voteErrors(guest, "forged-next")).toMatchObject([
 			{ code: "HOST_REQUIRED" },
@@ -2077,6 +2081,7 @@ describe("LunchRoomServer irreversible current-result votes", () => {
 			type: "next",
 			id: "early-next",
 			drawId: draw.id,
+			editCandidates,
 		});
 		expect(voteErrors(host, "early-next")).toMatchObject([
 			{ code: "VOTE_NOT_READY" },
@@ -2094,11 +2099,12 @@ describe("LunchRoomServer irreversible current-result votes", () => {
 			type: "next",
 			id: "close-voting",
 			drawId: draw.id,
+			editCandidates,
 		});
 		for (const client of [host, guest])
 			expect(latestSnapshot(client).snapshot).toMatchObject({
 				draw: null,
-				status: "waiting",
+				status: editCandidates ? "editing" : "waiting",
 				history: [frozen],
 			});
 		await send(server, guest, {
@@ -2112,6 +2118,14 @@ describe("LunchRoomServer irreversible current-result votes", () => {
 		]);
 		const restored = createServer(context);
 		await restored.onStart();
+		if (editCandidates) {
+			await send(restored, host, {
+				type: "intake",
+				id: "finish-editing",
+				action: "finalize",
+				expectedRevision: currentRevision(host),
+			});
+		}
 		await send(restored, host, {
 			type: "start",
 			id: "new-after-close",
@@ -2123,6 +2137,7 @@ describe("LunchRoomServer irreversible current-result votes", () => {
 			type: "next",
 			id: "close-voting",
 			drawId: draw.id,
+			editCandidates,
 		});
 		expect(latestSnapshot(host).snapshot.draw?.id).toBe("new-after-close");
 		expect(latestSnapshot(host).snapshot.history).toEqual([frozen]);

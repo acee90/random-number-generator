@@ -1369,7 +1369,8 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			].slice(0, lunchRoomLimits.maxHistory);
 		clearDisabledRoomExclusions(this.room.snapshot);
 		this.room.snapshot.draw = null;
-		this.room.snapshot.status = "waiting";
+		this.room.snapshot.status = message.editCandidates ? "editing" : "waiting";
+		if (message.editCandidates) this.room.snapshot.intakeId = null;
 		this.room.snapshot.revision =
 			(this.room.snapshot.revision ?? this.room.snapshot.listVersion) + 1;
 		this.recordActivity(connection);
@@ -1380,7 +1381,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			this.sendError(
 				connection,
 				"SAVE_FAILED",
-				"대기 전환을 저장하지 못했습니다. 다시 시도해 주세요.",
+				"다음 게임으로 전환하지 못했습니다. 다시 시도해 주세요.",
 				message.id,
 			);
 			return;
