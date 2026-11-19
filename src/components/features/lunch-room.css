@@ -2,6 +2,9 @@
 	min-block-size: 100dvh;
 	padding-block-end: 40px;
 }
+.lunch-room[data-draw-focused="true"] > .site-header {
+	display: none;
+}
 .room-main {
 	min-inline-size: 0;
 	padding-block-start: 24px;

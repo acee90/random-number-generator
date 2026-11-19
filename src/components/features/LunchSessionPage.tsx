@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import CopyFallback from "@/components/features/CopyFallback";
+import DrawPresentationMenu from "@/components/features/DrawPresentationMenu";
 import { LunchWheel } from "@/components/features/LunchWheel";
 import { roomCandidateNumbers } from "@/components/features/RoomCandidateList";
 import RoomChatUnreadBadge from "@/components/features/RoomChatUnreadBadge";
@@ -36,6 +37,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useDrawFullscreen, useDrawSound } from "@/hooks/useDrawPresentation";
 import type { LocalChatMessage, useLunchRoom } from "@/hooks/useLunchRoom";
 import { useRoomTimeline } from "@/hooks/useRoomTimeline";
 import type { LunchHistoryRecord } from "@/lib/lunchHistory";
@@ -117,6 +119,7 @@ export default function LunchSessionPage({
 	const [inviteUrl, setInviteUrl] = useState("");
 	const [selectedDraw, setSelectedDraw] = useState<RoomDraw | null>(null);
 	const roomViewportRef = useRef<HTMLDivElement>(null);
+	const presentationTriggerRef = useRef<HTMLButtonElement>(null);
 	const primaryColumnRef = useRef<HTMLDivElement>(null);
 	const selectedDrawTriggerRef = useRef<HTMLButtonElement>(null);
 	const rotorRef = useRef<HTMLDivElement>(null);
@@ -216,6 +219,25 @@ export default function LunchSessionPage({
 		.filter((entry) => room.serverNow() >= entry.startedAt + entry.durationMs)
 		.slice(0, lunchRoomLimits.maxHistory);
 	const closed = room.connection === "closed";
+	const awaitingEntry =
+		!closed && (room.entryLoading || room.waitingForEntry || room.entryPending);
+	const presentationScope = closed || awaitingEntry ? null : roomId;
+	const fullscreen = useDrawFullscreen(
+		presentationScope,
+		presentationTriggerRef,
+	);
+	const sound = useDrawSound(
+		presentationScope,
+		connected && view === "wheel",
+		displayedDraw?.id,
+		showResult
+			? "result"
+			: spinning &&
+					displayedDraw &&
+					room.serverNow() < displayedDraw.startedAt + displayedDraw.durationMs
+				? "spinning"
+				: null,
+	);
 	useEffect(() => {
 		const root = roomViewportRef.current;
 		const viewport = window.visualViewport;
@@ -574,10 +596,15 @@ export default function LunchSessionPage({
 										? "방장이 추첨을 시작하면 함께 룰렛을 봅니다."
 										: "방장이 오프라인입니다. 방장이 돌아오면 추첨을 시작할 수 있습니다.";
 
-	if (
-		!closed &&
-		(room.entryLoading || room.waitingForEntry || room.entryPending)
-	)
+	const presentationMenu = !closed && (
+		<DrawPresentationMenu
+			fullscreen={fullscreen}
+			sound={sound}
+			triggerRef={presentationTriggerRef}
+		/>
+	);
+
+	if (awaitingEntry)
 		return (
 			<div className="random-lab lunch-room">
 				<SiteHeader active="lunch" />
@@ -599,6 +626,7 @@ export default function LunchSessionPage({
 	return (
 		<div
 			ref={roomViewportRef}
+			data-draw-focused={fullscreen.active || undefined}
 			className={`random-lab lunch-room${closed || solo ? "" : " room-live"}${solo ? " lunch-solo" : ""}`}
 		>
 			<SiteHeader active="lunch" />
@@ -711,8 +739,10 @@ export default function LunchSessionPage({
 								</details>
 							)}
 							<RoomSettingsDialog room={room} busy={busy} />
+							{presentationMenu}
 						</div>
 					)}
+					{solo && presentationMenu}
 				</div>
 				{closed ? (
 					<section className="room-terminal" aria-labelledby={`${id}-terminal`}>
@@ -743,6 +773,9 @@ export default function LunchSessionPage({
 						>
 							{room.error}
 						</p>
+						<output className={sound.error ? "room-error" : "sr-only"}>
+							{sound.error}
+						</output>
 						<div
 							className="room-layout"
 							data-chat-collapsed={solo || chatCollapsed}
