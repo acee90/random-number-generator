@@ -1,8 +1,6 @@
 .home-showcase,
 .home-how {
 	min-inline-size: 0;
-	padding: 32px;
-	border-block-start: 1px solid var(--line);
 }
 .home-showcase-heading {
 	display: flex;
@@ -36,7 +34,7 @@
 	border: 1px solid var(--line);
 	border-radius: var(--panel-radius);
 	overflow: hidden;
-	background: var(--paper);
+	background: var(--card);
 }
 .home-browser-bar {
 	display: grid;
@@ -388,22 +386,12 @@
 		scroll-snap-align: start;
 	}
 }
-@media (max-width: 720px) {
-	.home-showcase,
-	.home-how {
-		padding: 24px;
-	}
-}
 @media (max-width: 640px) {
 	.home-browser img {
 		aspect-ratio: 420 / 640;
 	}
 }
 @media (max-width: 400px) {
-	.home-showcase,
-	.home-how {
-		padding: 20px 16px;
-	}
 	.home-how-steps {
 		grid-template-columns: minmax(0, 1fr);
 	}
