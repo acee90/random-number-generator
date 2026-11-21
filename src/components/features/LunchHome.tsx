@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import SiteHeader from "@/components/layout/SiteHeader";
 import { Button } from "@/components/ui/button";
-import HomeCandidateLibrary from "./HomeCandidateLibrary";
 import HomeHowItWorks from "./home-showcase/HomeHowItWorks";
 import HomeRoomShowcase from "./home-showcase/HomeRoomShowcase";
 import "./lunch-home.css";
@@ -27,7 +26,7 @@ export default function LunchHome() {
 						<h1 id="lunch-home-title">
 							오늘 점심,
 							<br />
-							같이 정해요.
+							룰렛으로 정해요.
 						</h1>
 						<p>원하는 후보를 모아 룰렛으로 하나 뽑아요.</p>
 					</div>
@@ -47,7 +46,6 @@ export default function LunchHome() {
 								<ArrowRight size={18} aria-hidden="true" />
 							</a>
 						</Button>
-						<HomeCandidateLibrary />
 						<ol
 							className="lunch-home-steps"
 							aria-label="추첨방에서 할 수 있는 일"

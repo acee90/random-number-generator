@@ -166,6 +166,9 @@ export default function RoomCandidateEditor({
 	const observedContext = useRef(contextKey);
 	const categories = [...new Set(candidates.map(categoryOf))];
 	const selectedCategories = filter.categories ?? categories;
+	const allCategoriesSelected =
+		categories.length > 0 &&
+		categories.every((category) => selectedCategories.includes(category));
 	const manual = new Set(filter.excludedIds);
 	const filterActive =
 		categories.some((category) => !selectedCategories.includes(category)) ||
@@ -500,10 +503,15 @@ export default function RoomCandidateEditor({
 					legend="이번 추첨에 넣을 분류"
 					options={categories.map((value) => ({ value }))}
 					selected={selectedCategories}
-					allSelected={categories.every((value) =>
-						selectedCategories.includes(value),
-					)}
+					allSelected={allCategoriesSelected}
 					disabled={disabled}
+					onToggleAll={() => {
+						setRecentAdditionId(null);
+						onFilterChange({
+							...filter,
+							categories: allCategoriesSelected ? [] : null,
+						});
+					}}
 					onSelect={(value) => {
 						setRecentAdditionId(null);
 						const next =

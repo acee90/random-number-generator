@@ -20,12 +20,29 @@
 	word-break: keep-all;
 }
 .home-view-picker {
-	display: flex;
+	display: inline-flex;
 	flex-wrap: wrap;
-	gap: 4px;
+	gap: 2px;
+	max-inline-size: 100%;
+	min-inline-size: 0;
+	padding: 3px;
+	border: 1px solid var(--line);
+	border-radius: var(--control-radius);
+	background: var(--surface);
 }
-.home-view-picker [aria-pressed="true"] {
+.home-view-picker > .ui-button {
+	border-color: transparent;
+	background: transparent;
+}
+.home-view-picker > .ui-button[aria-pressed="true"] {
 	border-color: var(--input);
+	background: var(--card);
+}
+.home-view-picker > .ui-button[aria-pressed="false"]:hover {
+	background: var(--card);
+}
+.home-view-picker > .ui-button[aria-pressed="true"]:hover {
+	background: var(--card);
 }
 .home-room-figure {
 	margin: 0;
@@ -76,7 +93,6 @@
 	block-size: auto;
 	aspect-ratio: 1080 / 640;
 }
-.home-room-figure figcaption,
 .how-copy p {
 	color: var(--muted);
 	font-size: 14px;
@@ -84,12 +100,9 @@
 	word-break: keep-all;
 	overflow-wrap: anywhere;
 }
-.home-room-figure figcaption {
-	margin: 10px 0 0;
-}
 .home-how-steps {
 	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
+	grid-template-columns: repeat(4, minmax(0, 1fr));
 	gap: 12px;
 	padding: 0;
 	margin: 18px 0 0;
@@ -223,6 +236,39 @@
 .how-draw {
 	justify-items: center;
 	gap: 6px;
+}
+.how-react {
+	justify-items: center;
+	gap: 8px;
+}
+.how-react-buttons {
+	display: flex;
+	gap: 6px;
+	width: 100%;
+}
+.how-react-buttons > span {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	justify-content: center;
+	gap: 5px;
+	min-width: 0;
+	height: 22px;
+	border: 1px solid var(--line);
+	border-radius: var(--control-radius);
+	background: var(--surface);
+	color: var(--muted);
+}
+.how-react-buttons > span:first-child {
+	background: var(--lime);
+	color: var(--ink);
+}
+.how-react-buttons i {
+	width: 14px;
+	height: 4px;
+	border-radius: 4px;
+	background: var(--input);
+	opacity: 0.65;
 }
 .how-wheel {
 	position: relative;
@@ -399,7 +445,12 @@
 		gap: 2px;
 	}
 	.home-view-picker .ui-button {
-		gap: 4px;
-		padding-inline: 4px;
+		gap: 3px;
+		padding-inline: 6px;
+		font-size: 12px;
+	}
+	.home-view-picker .ui-button > svg {
+		width: 14px;
+		height: 14px;
 	}
 }

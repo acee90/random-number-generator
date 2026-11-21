@@ -17,7 +17,6 @@ const views = [
 		Icon: Crown,
 		wide: hostWide,
 		compact: hostCompact,
-		description: `${example.host}가 모임 활동을 모아 룰렛을 돌릴 준비를 마쳤어요.`,
 		alt: `${[...example.activities, example.recommendation].join("·")} 룰렛과 방장용 돌리기 버튼`,
 	},
 	{
@@ -26,7 +25,6 @@ const views = [
 		Icon: UserRound,
 		wide: guestWide,
 		compact: guestCompact,
-		description: `초대받은 ${example.guest}는 하고 싶은 활동 ‘${example.recommendation}’을 추천해요.`,
 		alt: `참가자 화면의 ‘${example.recommendation}’이 입력된 후보 추천 칸과 추천하기 버튼`,
 	},
 	{
@@ -35,7 +33,6 @@ const views = [
 		Icon: Trophy,
 		wide: resultWide,
 		compact: resultCompact,
-		description: `‘${example.recommendation}’이 뽑혔어요. ${example.guest}가 결과에 좋아요를 남겼어요.`,
 		alt: `${example.recommendation}이 당첨된 결과 화면과 참가자의 좋아요 반응`,
 	},
 ] as const;
@@ -52,7 +49,7 @@ export default function HomeRoomShowcase() {
 						<Button
 							key={view.key}
 							size="sm"
-							variant={selected === view ? "secondary" : "ghost"}
+							variant={selected === view ? "secondary" : "outline"}
 							aria-pressed={selected === view}
 							aria-controls="home-room-frame"
 							onClick={() => setSelected(view)}
@@ -97,7 +94,6 @@ export default function HomeRoomShowcase() {
 						/>
 					</picture>
 				</div>
-				<figcaption aria-live="polite">{selected.description}</figcaption>
 			</figure>
 		</section>
 	);

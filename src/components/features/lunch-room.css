@@ -2,9 +2,6 @@
 	min-block-size: 100dvh;
 	padding-block-end: 40px;
 }
-.lunch-room[data-draw-focused="true"] > .site-header {
-	display: none;
-}
 .room-main {
 	min-inline-size: 0;
 	padding-block-start: 24px;
@@ -24,6 +21,16 @@
 	flex: 1;
 	flex-direction: column;
 	gap: 4px;
+}
+.room-title-row {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	min-inline-size: 0;
+}
+.room-title-row > h1 {
+	min-inline-size: 0;
 }
 .room-heading-actions {
 	display: flex;
@@ -70,26 +77,44 @@
 	border-radius: var(--control-radius);
 }
 .room-info {
-	position: relative;
 	flex-shrink: 0;
 }
-.room-info > summary {
+.room-info-trigger {
+	position: relative;
+	display: grid;
+	place-items: center;
+	inline-size: 18px;
+	block-size: 18px;
+	padding: 0;
+	margin-inline-start: 1px;
+	border: 0;
+	border-radius: 50%;
+	background: transparent;
+	color: var(--muted);
 	list-style: none;
+	cursor: help;
 }
-.room-info > summary::-webkit-details-marker {
-	display: none;
+.room-info-trigger::after {
+	position: absolute;
+	inset: -13px;
+	content: "";
 }
-.room-info[open] > summary {
-	border-color: #3f5e25;
+.room-info[data-open="true"] > .room-info-trigger {
 	background: #edf2e3;
+	color: #3f5e25;
 }
-.room-info:not([open]) > .room-lifetime {
-	display: none;
+.room-info-trigger svg {
+	inline-size: 14px;
+	block-size: 14px;
+}
+.room-info-trigger:focus-visible {
+	outline: var(--focus-ring-width) solid var(--ring);
+	outline-offset: var(--focus-ring-offset);
 }
 .room-info > .room-lifetime {
 	position: absolute;
 	inset-block-start: calc(100% + 8px);
-	inset-inline-end: 0;
+	inset-inline-start: 0;
 	z-index: 40;
 	display: grid;
 	gap: 6px;
@@ -101,9 +126,24 @@
 	border-radius: var(--control-radius, 4px);
 	background: #fff;
 	box-shadow: 0 8px 24px rgb(37 43 32 / 12%);
+	visibility: hidden;
+	pointer-events: none;
 	font-size: 12px;
 	line-height: 1.6;
 	color: #556247;
+}
+.room-info[data-open="true"]:not([data-dismissed="true"]) > .room-lifetime,
+.room-info:not([data-dismissed="true"])
+	> .room-info-trigger:focus-visible
+	+ .room-lifetime {
+	visibility: visible;
+	pointer-events: auto;
+}
+@media (hover: hover) and (pointer: fine) {
+	.room-info:not([data-dismissed="true"]):hover > .room-lifetime {
+		visibility: visible;
+		pointer-events: auto;
+	}
 }
 .room-lifetime > span {
 	display: flex;
@@ -237,6 +277,15 @@
 	min-inline-size: 0;
 	isolation: isolate;
 }
+.draw-presentation-controls {
+	position: absolute;
+	inset-block-start: 8px;
+	inset-inline-end: 8px;
+	z-index: 4;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
 .room-wheel-stage:has(> .room-result-overlay) {
 	container-type: inline-size;
 	block-size: auto;
@@ -263,16 +312,6 @@
 .lunch-room .lunch-wheel {
 	inline-size: min(calc(100cqi - 24px), calc(100cqb - 24px), 760px);
 	margin-block: 12px;
-}
-.room-draw-status {
-	display: block;
-	min-block-size: 38px;
-	padding-block-start: 10px;
-	font-size: 12px;
-	line-height: 1.6;
-	text-align: center;
-	color: #556247;
-	overflow-wrap: anywhere;
 }
 .room-motion-note {
 	font-size: 11px;
