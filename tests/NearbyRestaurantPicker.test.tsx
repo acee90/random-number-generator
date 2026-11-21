@@ -25,11 +25,20 @@ vi.mock("@/services/publicNearbyRestaurants", () => ({
 vi.mock("@/components/features/NearbyRestaurantMap", () => ({
 	default: ({
 		center,
+		userLocation,
 		onDragStart,
 		onDragEnd,
 		onMove,
 	}: ComponentProps<typeof NearbyRestaurantMap>) => (
 		<>
+			<output
+				data-testid="nearby-map-location"
+				data-user-location={
+					userLocation
+						? `${userLocation.latitude},${userLocation.longitude}`
+						: ""
+				}
+			/>
 			<button type="button" onClick={onDragStart}>
 				지도 끌기
 			</button>
@@ -153,4 +162,32 @@ it("preserves the previous result on a failed refresh and shows empty only when 
 	).toBeTruthy();
 	expect(screen.queryByRole("list", { name: "음식점 목록" })).toBeNull();
 	expect(button("음식점 추가").matches(":disabled")).toBe(true);
+});
+
+it("passes the geolocated coordinates to the map as the user's location", async () => {
+	const position = { latitude: 37.51, longitude: 127.04 };
+	const original = Object.getOwnPropertyDescriptor(navigator, "geolocation");
+	Object.defineProperty(navigator, "geolocation", {
+		configurable: true,
+		value: {
+			getCurrentPosition: (success: PositionCallback) =>
+				success({
+					coords: {
+						latitude: position.latitude,
+						longitude: position.longitude,
+					} as GeolocationCoordinates,
+				} as GeolocationPosition),
+		},
+	});
+	lookup.mockResolvedValueOnce(data(position, 1, "위치 식당"));
+	try {
+		openPicker();
+		await screen.findByText("1곳 · 가까운 순");
+		expect(screen.getByTestId("nearby-map-location").dataset.userLocation).toBe(
+			"37.51,127.04",
+		);
+	} finally {
+		if (original) Object.defineProperty(navigator, "geolocation", original);
+		else Reflect.deleteProperty(navigator, "geolocation");
+	}
 });

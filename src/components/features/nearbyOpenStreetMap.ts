@@ -54,6 +54,7 @@ export function createOpenStreetMap({
 		interactive: false,
 	}).addTo(map);
 	const markers = L.layerGroup().addTo(map);
+	let userMarker: L.CircleMarker | undefined;
 	const reportZoom = () =>
 		onZoomChange(map.getZoom(), map.getMinZoom(), map.getMaxZoom());
 	reportZoom();
@@ -96,6 +97,22 @@ export function createOpenStreetMap({
 					className: "nearby-map-restaurant",
 				}).addTo(markers);
 			}
+		},
+		setUserLocation(position) {
+			userMarker?.remove();
+			if (!position) {
+				userMarker = undefined;
+				return;
+			}
+			userMarker = L.circleMarker([position.latitude, position.longitude], {
+				radius: 8,
+				color: surface,
+				weight: 3,
+				fillColor: color,
+				fillOpacity: 1,
+				interactive: false,
+				className: "nearby-map-user-location",
+			}).addTo(map);
 		},
 		resize: () => {
 			map.invalidateSize({ animate: false });

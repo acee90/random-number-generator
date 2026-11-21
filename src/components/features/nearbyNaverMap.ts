@@ -120,6 +120,7 @@ export async function createNaverMap(
 				left: 16,
 			});
 		let markers: Marker[] = [];
+		let userMarker: Marker | null = null;
 		let dragging = false;
 		let gesturing = false;
 		const startGesture = () => {
@@ -164,6 +165,23 @@ export async function createNaverMap(
 				if (distanceBetween(asPosition(map.getCenter()), position) > 0.5)
 					map.setCenter(p);
 			},
+			setUserLocation(position) {
+				userMarker?.setMap(null);
+				userMarker = position
+					? new maps.Marker({
+							map,
+							position: new maps.LatLng(position.latitude, position.longitude),
+							title: "내 위치",
+							clickable: false,
+							zIndex: 1000,
+							icon: {
+								content:
+									'<span class="nearby-map-user-location" aria-hidden="true"></span>',
+								anchor: new maps.Point(8, 8),
+							},
+						})
+					: null;
+			},
 			setRestaurants(results) {
 				for (const marker of markers) marker.setMap(null);
 				markers = results.map(
@@ -185,6 +203,7 @@ export async function createNaverMap(
 				node.removeEventListener("pointerdown", startGesture, true);
 				for (const listener of listeners) maps.Event.removeListener(listener);
 				for (const marker of markers) marker.setMap(null);
+				userMarker?.setMap(null);
 				map.destroy();
 				if (window.navermap_authFailure === onFailure)
 					window.navermap_authFailure = previous;

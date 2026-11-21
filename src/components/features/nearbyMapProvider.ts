@@ -8,6 +8,7 @@ export type NearbyMapView = {
 	setView: (center: MapPosition, radius: NearbyRadius, fit: boolean) => void;
 	getZoom: () => number;
 	zoomBy: (steps: -1 | 1) => void;
+	setUserLocation: (position: MapPosition | null) => void;
 	setRestaurants: (results: readonly NearbyResult[]) => void;
 	resize: () => void;
 	destroy: () => void;

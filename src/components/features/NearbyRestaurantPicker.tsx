@@ -58,6 +58,7 @@ const pageSize = 10;
 function SearchContents({ existingIds, remaining, onAdd }: SearchProps) {
 	const filtersId = useId();
 	const [center, setCenter] = useState(seonjeongneungStation);
+	const [userLocation, setUserLocation] = useState<MapPosition | null>(null);
 	const [radius, setRadius] = useState<NearbyRadius>(500);
 	const [location, setLocation] = useState<LocationState>("locating");
 	const [dragging, setDragging] = useState(false);
@@ -73,6 +74,7 @@ function SearchContents({ existingIds, remaining, onAdd }: SearchProps) {
 		const request = ++locationAttempt.current;
 		const fail = () => {
 			if (request !== locationAttempt.current) return;
+			setUserLocation(null);
 			setLocation(initial ? "default" : "unavailable");
 		};
 		setLocation("locating");
@@ -84,7 +86,12 @@ function SearchContents({ existingIds, remaining, onAdd }: SearchProps) {
 		navigator.geolocation.getCurrentPosition(
 			({ coords }) => {
 				if (request !== locationAttempt.current) return;
-				setCenter({ latitude: coords.latitude, longitude: coords.longitude });
+				const position = {
+					latitude: coords.latitude,
+					longitude: coords.longitude,
+				};
+				setUserLocation(position);
+				setCenter(position);
 				setLocation("current");
 			},
 			fail,
@@ -221,6 +228,7 @@ function SearchContents({ existingIds, remaining, onAdd }: SearchProps) {
 					</div>
 					<NearbyRestaurantMap
 						center={center}
+						userLocation={userLocation}
 						radius={radius}
 						results={visible}
 						onMove={move}
