@@ -1,4 +1,4 @@
-import { Settings } from "lucide-react";
+import { LogOut, Settings } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import {
 	AlertDialog,
@@ -186,7 +186,7 @@ export default function RoomSettingsDialog({
 						</DialogTitle>
 						<DialogDescription>
 							{showEditor
-								? "방 이름을 변경하거나 방을 종료합니다."
+								? "방 이름을 변경합니다."
 								: "방장이 정한 방 이름입니다."}
 						</DialogDescription>
 					</DialogHeader>
@@ -249,20 +249,6 @@ export default function RoomSettingsDialog({
 							{error || room.error}
 						</p>
 					)}
-					{isHost && (
-						<div className="room-settings-end">
-							<Button
-								variant="destructive"
-								disabled={!editable}
-								onClick={() => {
-									setError("");
-									setConfirmClose(true);
-								}}
-							>
-								방 종료
-							</Button>
-						</div>
-					)}
 					<DialogFooter>
 						<Button
 							variant="outline"
@@ -282,6 +268,22 @@ export default function RoomSettingsDialog({
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>
+			{isHost && (
+				<Button
+					variant="destructive"
+					size="icon"
+					type="button"
+					title="방 종료"
+					aria-label="방 종료"
+					disabled={!editable}
+					onClick={() => {
+						setError("");
+						setConfirmClose(true);
+					}}
+				>
+					<LogOut size={18} aria-hidden="true" />
+				</Button>
+			)}
 			<AlertDialog
 				open={confirmClose}
 				onOpenChange={(next) => {

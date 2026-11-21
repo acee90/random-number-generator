@@ -100,9 +100,3 @@
 		padding: 24px;
 	}
 }
-
-.home-candidate-editor-dialog {
-	inline-size: min(720px, calc(100vw - 32px));
-	max-block-size: calc(100dvh - 32px);
-	overflow: auto;
-}

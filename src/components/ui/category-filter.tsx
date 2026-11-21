@@ -49,6 +49,7 @@ export function CategoryFilterChips({
 	allSelected,
 	total,
 	disabled,
+	onToggleAll,
 	onSelect,
 }: {
 	id?: string;
@@ -58,6 +59,7 @@ export function CategoryFilterChips({
 	allSelected: boolean;
 	total?: number;
 	disabled?: boolean;
+	onToggleAll?: () => void;
 	onSelect: (category: string | null) => void;
 }) {
 	return (
@@ -68,8 +70,10 @@ export function CategoryFilterChips({
 					variant="outline"
 					size="sm"
 					aria-pressed={allSelected}
-					onClick={() => onSelect(null)}
+					disabled={!options.length}
+					onClick={() => (onToggleAll ? onToggleAll() : onSelect(null))}
 				>
+					{onToggleAll && allSelected && <Check size={14} aria-hidden="true" />}
 					전체{total !== undefined && ` ${total}`}
 				</Button>
 				{options.map(({ value, count }) => (

@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import CopyFallback from "@/components/features/CopyFallback";
-import DrawPresentationMenu from "@/components/features/DrawPresentationMenu";
+import DrawPresentationControls from "@/components/features/DrawPresentationControls";
 import { LunchWheel } from "@/components/features/LunchWheel";
 import { roomCandidateNumbers } from "@/components/features/RoomCandidateList";
 import RoomChatUnreadBadge from "@/components/features/RoomChatUnreadBadge";
@@ -37,7 +37,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useDrawFullscreen, useDrawSound } from "@/hooks/useDrawPresentation";
+import { useDrawSound } from "@/hooks/useDrawPresentation";
 import type { LocalChatMessage, useLunchRoom } from "@/hooks/useLunchRoom";
 import { useRoomTimeline } from "@/hooks/useRoomTimeline";
 import type { LunchHistoryRecord } from "@/lib/lunchHistory";
@@ -119,7 +119,8 @@ export default function LunchSessionPage({
 	const [inviteUrl, setInviteUrl] = useState("");
 	const [selectedDraw, setSelectedDraw] = useState<RoomDraw | null>(null);
 	const roomViewportRef = useRef<HTMLDivElement>(null);
-	const presentationTriggerRef = useRef<HTMLButtonElement>(null);
+	const [roomInfoOpen, setRoomInfoOpen] = useState(false);
+	const [roomInfoDismissed, setRoomInfoDismissed] = useState(false);
 	const primaryColumnRef = useRef<HTMLDivElement>(null);
 	const selectedDrawTriggerRef = useRef<HTMLButtonElement>(null);
 	const rotorRef = useRef<HTMLDivElement>(null);
@@ -222,10 +223,6 @@ export default function LunchSessionPage({
 	const awaitingEntry =
 		!closed && (room.entryLoading || room.waitingForEntry || room.entryPending);
 	const presentationScope = closed || awaitingEntry ? null : roomId;
-	const fullscreen = useDrawFullscreen(
-		presentationScope,
-		presentationTriggerRef,
-	);
 	const sound = useDrawSound(
 		presentationScope,
 		connected && view === "wheel",
@@ -593,12 +590,8 @@ export default function LunchSessionPage({
 									? "방장이 추첨을 시작하면 함께 룰렛을 봅니다."
 									: "방장이 오프라인입니다. 방장이 돌아오면 추첨을 시작할 수 있습니다.";
 
-	const presentationMenu = !closed && (
-		<DrawPresentationMenu
-			fullscreen={fullscreen}
-			sound={sound}
-			triggerRef={presentationTriggerRef}
-		/>
+	const presentationControls = !closed && (
+		<DrawPresentationControls sound={sound} />
 	);
 
 	if (awaitingEntry)
@@ -623,7 +616,6 @@ export default function LunchSessionPage({
 	return (
 		<div
 			ref={roomViewportRef}
-			data-draw-focused={fullscreen.active || undefined}
 			className={`random-lab lunch-room${closed ? "" : " room-live"}`}
 		>
 			<SiteHeader active="lunch" />
@@ -636,9 +628,86 @@ export default function LunchSessionPage({
 				)}
 				<div className="room-heading">
 					<div className="room-title-block">
-						<h1>
-							{closed ? "점심 추첨방" : (snapshot?.title ?? "점심 추첨방")}
-						</h1>
+						<div className="room-title-row">
+							<h1>
+								{closed ? "점심 추첨방" : (snapshot?.title ?? "점심 추첨방")}
+							</h1>
+							{!closed && !solo && snapshot && (
+								<div
+									className="room-info"
+									data-open={roomInfoOpen || undefined}
+									data-dismissed={roomInfoDismissed || undefined}
+									onPointerEnter={() => setRoomInfoDismissed(false)}
+									onFocusCapture={() => setRoomInfoDismissed(false)}
+									onBlurCapture={(event) => {
+										if (
+											!event.currentTarget.contains(
+												event.relatedTarget as Node | null,
+											)
+										)
+											setRoomInfoOpen(false);
+									}}
+								>
+									<button
+										className="room-info-trigger"
+										type="button"
+										aria-label="방 정보"
+										aria-controls={`${id}-room-info`}
+										aria-describedby={`${id}-room-info`}
+										aria-expanded={roomInfoOpen}
+										onClick={() => {
+											setRoomInfoDismissed(false);
+											setRoomInfoOpen((open) => !open);
+										}}
+										onKeyDown={(event) => {
+											if (event.key === "Escape") {
+												event.preventDefault();
+												setRoomInfoOpen(false);
+												setRoomInfoDismissed(true);
+											}
+										}}
+									>
+										<Info size={14} aria-hidden="true" />
+									</button>
+									<div
+										id={`${id}-room-info`}
+										className="room-lifetime"
+										role="tooltip"
+									>
+										<span>
+											생성{" "}
+											<time
+												dateTime={new Date(snapshot.createdAt).toISOString()}
+											>
+												{new Date(snapshot.createdAt).toLocaleString("ko-KR", {
+													month: "2-digit",
+													day: "2-digit",
+													hour: "2-digit",
+													minute: "2-digit",
+												})}
+											</time>
+										</span>
+										<span>
+											종료{" "}
+											<time
+												dateTime={new Date(snapshot.expiresAt).toISOString()}
+											>
+												{new Date(snapshot.expiresAt).toLocaleString("ko-KR", {
+													month: "2-digit",
+													day: "2-digit",
+													hour: "2-digit",
+													minute: "2-digit",
+												})}
+											</time>
+										</span>
+										<p>
+											방장이 나가도 생성 후 24시간, 표시된 종료 시각까지 방이
+											유지됩니다.
+										</p>
+									</div>
+								</div>
+							)}
+						</div>
 						{!closed && !solo && (
 							<div className="room-connection" data-connected={connected}>
 								{connected ? (
@@ -694,63 +763,9 @@ export default function LunchSessionPage({
 										)}
 										{copied === "invite" ? "링크 복사됨" : "초대 링크 복사"}
 									</Button>
-									{snapshot && (
-										<details className="room-info">
-											<Button asChild variant="outline" size="icon">
-												<summary title="방 정보">
-													<Info size={18} aria-hidden="true" />
-													<span className="sr-only">방 정보</span>
-												</summary>
-											</Button>
-
-											<div className="room-lifetime">
-												<span>
-													생성{" "}
-													<time
-														dateTime={new Date(
-															snapshot.createdAt,
-														).toISOString()}
-													>
-														{new Date(snapshot.createdAt).toLocaleString(
-															"ko-KR",
-															{
-																month: "2-digit",
-																day: "2-digit",
-																hour: "2-digit",
-																minute: "2-digit",
-															},
-														)}
-													</time>
-												</span>
-												<span>
-													종료{" "}
-													<time
-														dateTime={new Date(
-															snapshot.expiresAt,
-														).toISOString()}
-													>
-														{new Date(snapshot.expiresAt).toLocaleString(
-															"ko-KR",
-															{
-																month: "2-digit",
-																day: "2-digit",
-																hour: "2-digit",
-																minute: "2-digit",
-															},
-														)}
-													</time>
-												</span>
-												<p>
-													방장이 나가도 생성 후 24시간, 표시된 종료 시각까지
-													방이 유지됩니다.
-												</p>
-											</div>
-										</details>
-									)}
 									<RoomSettingsDialog room={room} busy={busy} />
 								</>
 							)}
-							{presentationMenu}
 						</div>
 					)}
 				</div>
@@ -855,6 +870,7 @@ export default function LunchSessionPage({
 												룰렛
 											</h2>
 											<div className="room-wheel-stage">
+												{presentationControls}
 												<div
 													className={`room-wheel-area ${showResult ? "is-covered" : ""}`}
 													aria-hidden={showResult || undefined}
@@ -922,10 +938,7 @@ export default function LunchSessionPage({
 													</div>
 												)}
 											</div>
-											<output
-												className={showResult ? "sr-only" : "room-draw-status"}
-												aria-live="polite"
-											>
+											<output className="sr-only" aria-live="polite">
 												{status}
 											</output>
 

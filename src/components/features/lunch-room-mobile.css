@@ -45,6 +45,12 @@
 		gap: 8px;
 		margin-block-end: 8px;
 	}
+	.lunch-room.room-live .room-heading-actions {
+		flex-shrink: 1;
+		flex-wrap: wrap;
+		max-inline-size: 100%;
+		justify-content: flex-end;
+	}
 	.lunch-room.room-live .room-title-block {
 		gap: 2px;
 	}
@@ -303,5 +309,8 @@
 	}
 	.lunch-room.room-live .room-title-block:has(.room-connection) {
 		flex-basis: 100%;
+	}
+	.lunch-room.room-live .room-heading-actions {
+		flex: 1 1 100%;
 	}
 }

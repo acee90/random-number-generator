@@ -4,10 +4,15 @@ import {
 	Link2,
 	MousePointer2,
 	Plus,
+	ThumbsDown,
+	ThumbsUp,
 	UserRound,
 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
+
+const STEP_STAGGER_MS = 1050;
+const PLAYBACK_TAIL_MS = 2600;
 
 const steps = [
 	{
@@ -25,8 +30,12 @@ const steps = [
 	{
 		scene: "draw",
 		title: "룰렛으로 하나 뽑아요",
-		description:
-			"방장이 룰렛을 돌려요. 참가자는 뽑힌 후보에 좋아요나 싫어요를 남길 수 있어요.",
+		description: "확정한 후보를 룰렛으로 뽑고, 모두 같은 결과를 확인해요.",
+	},
+	{
+		scene: "react",
+		title: "결과에 반응을 남겨요",
+		description: "참가자는 뽑힌 후보에 좋아요나 싫어요를 남길 수 있어요.",
 	},
 ] as const;
 
@@ -43,6 +52,29 @@ function Line({ short = false }: { short?: boolean }) {
 }
 
 function Illustration({ scene }: { scene: (typeof steps)[number]["scene"] }) {
+	if (scene === "react")
+		return (
+			<div className="how-window how-react">
+				<div className="how-outcome">
+					<Check size={13} />
+					<Line short />
+				</div>
+				<div className="how-react-buttons">
+					<span>
+						<ThumbsUp size={12} />
+						<i />
+					</span>
+					<span>
+						<ThumbsDown size={12} />
+						<i />
+					</span>
+				</div>
+				<div className="how-action">
+					<ThumbsUp size={14} />
+					<Cursor />
+				</div>
+			</div>
+		);
 	if (scene === "draw")
 		return (
 			<div className="how-window how-draw">
@@ -112,26 +144,56 @@ export default function HomeHowItWorks() {
 	useEffect(() => {
 		if (!list.current || typeof IntersectionObserver === "undefined") return;
 		const cards = Array.from(list.current.children) as HTMLElement[];
+		if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+		let active = false;
+		let frame: number | undefined;
+		let timer: number | undefined;
+		const cycleDuration =
+			(cards.length - 1) * STEP_STAGGER_MS + PLAYBACK_TAIL_MS;
+
+		function playSequence() {
+			for (const [index, card] of cards.entries()) {
+				card.dataset.playback = "idle";
+				card.style.setProperty("--how-delay", `${index * STEP_STAGGER_MS}ms`);
+			}
+			frame = window.requestAnimationFrame(() => {
+				frame = undefined;
+				if (!active) return;
+				for (const card of cards) card.dataset.playback = "play";
+				timer = window.setTimeout(() => {
+					timer = undefined;
+					playSequence();
+				}, cycleDuration);
+			});
+		}
+
 		const observer = new IntersectionObserver(
-			(entries) => {
-				let order = 0;
-				for (const entry of entries) {
-					const card = entry.target as HTMLElement;
-					if (!entry.isIntersecting) card.dataset.playback = "idle";
-					else if (
-						entry.intersectionRatio >= 0.5 &&
-						card.dataset.playback !== "play"
-					) {
-						// Cards entering together read as one sequence. A card swiped in later starts immediately.
-						card.style.setProperty("--how-delay", `${order++ * 1050}ms`);
-						card.dataset.playback = "play";
+			([entry]) => {
+				if (!entry) return;
+				if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+					if (!active) {
+						active = true;
+						playSequence();
 					}
+				} else if (active) {
+					active = false;
+					if (frame !== undefined) window.cancelAnimationFrame(frame);
+					if (timer !== undefined) window.clearTimeout(timer);
+					frame = undefined;
+					timer = undefined;
+					for (const card of cards) card.dataset.playback = "idle";
 				}
 			},
 			{ threshold: [0, 0.5] },
 		);
-		for (const card of cards) observer.observe(card);
-		return () => observer.disconnect();
+		observer.observe(list.current);
+		return () => {
+			active = false;
+			observer.disconnect();
+			if (frame !== undefined) window.cancelAnimationFrame(frame);
+			if (timer !== undefined) window.clearTimeout(timer);
+		};
 	}, []);
 	return (
 		<section className="home-how" aria-labelledby="home-how-title">
