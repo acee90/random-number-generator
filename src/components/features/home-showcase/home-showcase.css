@@ -12,12 +12,6 @@
 	gap: 12px 24px;
 	margin-block-end: 20px;
 }
-.home-showcase-kicker {
-	margin: 0 0 6px;
-	font-size: 13px;
-	font-weight: 600;
-	color: var(--accent-foreground);
-}
 .home-showcase h2,
 .home-how h2 {
 	margin: 0;
@@ -25,6 +19,7 @@
 	line-height: 1.35;
 	letter-spacing: -0.04em;
 	font-weight: 700;
+	word-break: keep-all;
 }
 .home-view-picker {
 	display: flex;

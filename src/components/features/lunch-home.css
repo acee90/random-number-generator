@@ -22,8 +22,7 @@
 	padding: 32px;
 }
 .lunch-home-intro,
-.lunch-home-actions,
-.lunch-home-details {
+.lunch-home-actions {
 	min-inline-size: 0;
 }
 .lunch-home-intro .lunch-home-kicker {
@@ -48,6 +47,9 @@
 .lunch-home-actions {
 	display: grid;
 	gap: 8px;
+}
+.lunch-home-actions > button {
+	justify-self: center;
 }
 .lunch-home-create,
 .lunch-home-solo {
@@ -76,36 +78,6 @@
 .lunch-home-steps svg {
 	flex-shrink: 0;
 }
-.lunch-home-secondary {
-	padding: 8px 32px;
-	border-block-start: 1px solid var(--line);
-}
-.lunch-home-details summary {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 12px;
-	min-block-size: 44px;
-	list-style: none;
-	font-size: 13px;
-	color: var(--muted);
-	cursor: pointer;
-}
-.lunch-home-details summary::-webkit-details-marker {
-	display: none;
-}
-.lunch-home-details[open] summary svg {
-	transform: rotate(180deg);
-}
-.lunch-home-details > div {
-	padding-block: 8px 16px;
-}
-.lunch-home-details p {
-	margin: 0 0 8px;
-	color: var(--muted);
-	font-size: 13px;
-	line-height: 1.7;
-}
 .lunch-home-footer {
 	display: flex;
 	justify-content: space-between;
@@ -124,9 +96,6 @@
 		grid-template-columns: minmax(0, 1fr);
 		gap: 24px;
 		padding: 24px;
-	}
-	.lunch-home-secondary {
-		padding-inline: 24px;
 	}
 }
 

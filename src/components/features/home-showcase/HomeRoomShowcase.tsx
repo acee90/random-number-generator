@@ -35,7 +35,7 @@ const views = [
 		Icon: Trophy,
 		wide: resultWide,
 		compact: resultCompact,
-		description: `두 사람의 화면에 같은 결과가 떴어요. 다음 모임은 ‘${example.recommendation}’이에요.`,
+		description: `‘${example.recommendation}’이 뽑혔어요. ${example.guest}가 결과에 좋아요를 남겼어요.`,
 		alt: `${example.recommendation}이 당첨된 결과 화면과 참가자의 좋아요 반응`,
 	},
 ] as const;
@@ -45,10 +45,7 @@ export default function HomeRoomShowcase() {
 	return (
 		<section className="home-showcase" aria-labelledby="home-room-example">
 			<div className="home-showcase-heading">
-				<div>
-					<p className="home-showcase-kicker">추첨방 미리보기</p>
-					<h2 id="home-room-example">{example.title}</h2>
-				</div>
+				<h2 id="home-room-example">방장과 참가자 화면 둘러보기</h2>
 				<fieldset className="home-view-picker">
 					<legend className="sr-only">예시 화면 선택</legend>
 					{views.map((view) => (

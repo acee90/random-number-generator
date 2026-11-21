@@ -1,9 +1,9 @@
 import {
 	ArrowRight,
-	ChevronDown,
 	Dices,
 	Link2,
-	Shuffle,
+	ListPlus,
+	ThumbsUp,
 	Users,
 } from "lucide-react";
 import SiteHeader from "@/components/layout/SiteHeader";
@@ -30,7 +30,7 @@ export default function LunchHome() {
 								<br />
 								같이 정해요.
 							</h1>
-							<p>링크로 모여 같은 룰렛을 돌려요.</p>
+							<p>원하는 후보를 모아 룰렛으로 하나 뽑아요.</p>
 						</div>
 						<div className="lunch-home-actions">
 							<Button asChild size="default">
@@ -48,45 +48,28 @@ export default function LunchHome() {
 									<ArrowRight size={18} aria-hidden="true" />
 								</a>
 							</Button>
-							<ol className="lunch-home-steps" aria-label="이용 방법">
+							<HomeCandidateLibrary />
+							<ol
+								className="lunch-home-steps"
+								aria-label="추첨방에서 할 수 있는 일"
+							>
 								<li>
 									<Link2 size={18} aria-hidden="true" />
-									링크로 초대
+									링크로 초대하기
 								</li>
 								<li>
-									<Users size={18} aria-hidden="true" />
-									채팅하며 후보 선택
+									<ListPlus size={18} aria-hidden="true" />
+									후보 추천받기
 								</li>
 								<li>
-									<Shuffle size={18} aria-hidden="true" />
-									같은 룰렛, 같은 결과
+									<ThumbsUp size={18} aria-hidden="true" />
+									결과에 반응 남기기
 								</li>
 							</ol>
 						</div>
 					</div>
 					<HomeRoomShowcase />
 					<HomeHowItWorks />
-					<div className="lunch-home-secondary">
-						<HomeCandidateLibrary />
-						<details className="lunch-home-details">
-							<summary>
-								식당 목록 · 이용 안내
-								<ChevronDown size={16} aria-hidden="true" />
-							</summary>
-							<div>
-								<p>방을 만든 뒤 후보를 새로 작성하거나 목록을 불러옵니다.</p>
-								<p>
-									기본 음식점 목록도 불러오기에서 선택할 수 있습니다. 위치 검색
-									기능은 준비 중입니다.
-								</p>
-								<p>앱 설치나 회원가입 없이 링크로 참가할 수 있습니다.</p>
-								<p>
-									생성 후 24시간 유지 · 최대 30명. 만료되면 방의 채팅과 추첨
-									기록을 삭제합니다.
-								</p>
-							</div>
-						</details>
-					</div>
 				</section>
 			</main>
 			<footer className="lunch-home-footer">

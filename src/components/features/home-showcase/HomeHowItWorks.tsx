@@ -24,8 +24,9 @@ const steps = [
 	},
 	{
 		scene: "draw",
-		title: "룰렛으로 함께 정해요",
-		description: "방장이 룰렛을 돌리면 모두의 화면에 같은 결과가 떠요.",
+		title: "룰렛으로 하나 뽑아요",
+		description:
+			"방장이 룰렛을 돌려요. 참가자는 뽑힌 후보에 좋아요나 싫어요를 남길 수 있어요.",
 	},
 ] as const;
 
