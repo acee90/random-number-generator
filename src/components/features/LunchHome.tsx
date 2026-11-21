@@ -9,6 +9,8 @@ import {
 import SiteHeader from "@/components/layout/SiteHeader";
 import { Button } from "@/components/ui/button";
 import HomeCandidateLibrary from "./HomeCandidateLibrary";
+import HomeHowItWorks from "./home-showcase/HomeHowItWorks";
+import HomeRoomShowcase from "./home-showcase/HomeRoomShowcase";
 import "./lunch-home.css";
 
 export default function LunchHome() {
@@ -62,6 +64,8 @@ export default function LunchHome() {
 							</ol>
 						</div>
 					</div>
+					<HomeRoomShowcase />
+					<HomeHowItWorks />
 					<div className="lunch-home-secondary">
 						<HomeCandidateLibrary />
 						<details className="lunch-home-details">

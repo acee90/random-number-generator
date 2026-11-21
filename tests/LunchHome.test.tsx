@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, within } from "@testing-library/react";
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LunchHome from "../src/components/features/LunchHome";
 
@@ -50,6 +56,30 @@ describe("Jeommechu lunch home", () => {
 		).toBeTruthy();
 		expect(screen.queryByText(/곳으로 시작합니다/)).toBeNull();
 		expect(mocks.readName).not.toHaveBeenCalled();
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it("previews each role and the result without connecting to a room", () => {
+		render(<LunchHome />);
+		const preview = within(
+			screen.getByRole("region", { name: "다음 모임에서 뭐 할까?" }),
+		);
+		const choices = preview.getAllByRole("button");
+		const original = preview.getByRole("img").getAttribute("src");
+		expect(
+			preview.getByRole("button", { name: "방장 화면", pressed: true }),
+		).toBeTruthy();
+		fireEvent.click(preview.getByRole("button", { name: "참가자 화면" }));
+		expect(
+			preview.getByRole("img", { name: /후보 추천 칸/ }).getAttribute("src"),
+		).not.toBe(original);
+		fireEvent.click(preview.getByRole("button", { name: "추첨 결과" }));
+		expect(
+			choices.map((button) => button.getAttribute("aria-pressed")),
+		).toEqual(["false", "false", "true"]);
+		expect(preview.getByRole("img", { name: /방탈출이 당첨/ })).toBeTruthy();
+		const guide = within(screen.getByRole("region", { name: "이용 방법" }));
+		expect(guide.getAllByRole("listitem")).toHaveLength(3);
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 

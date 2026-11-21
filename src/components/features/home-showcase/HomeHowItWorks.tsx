@@ -1,0 +1,154 @@
+import {
+	Check,
+	Copy,
+	Link2,
+	MousePointer2,
+	Plus,
+	UserRound,
+} from "lucide-react";
+import { useEffect, useRef } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
+
+const steps = [
+	{
+		scene: "create",
+		title: "내 목록으로 시작해요",
+		description:
+			"방을 만든 뒤 보드게임, 볼링 같은 후보를 적거나 저장한 목록을 불러와요.",
+	},
+	{
+		scene: "invite",
+		title: "링크로 친구를 초대해요",
+		description:
+			"친구는 링크로 입장해요. 방장이 추천을 열면 하고 싶은 활동도 보탤 수 있어요.",
+	},
+	{
+		scene: "draw",
+		title: "룰렛으로 함께 정해요",
+		description: "방장이 룰렛을 돌리면 모두의 화면에 같은 결과가 떠요.",
+	},
+] as const;
+
+function Cursor() {
+	return <MousePointer2 className="how-cursor" size={22} />;
+}
+
+function Line({ short = false }: { short?: boolean }) {
+	return (
+		<Skeleton
+			className={`how-line animate-none${short ? " how-line-short" : ""}`}
+		/>
+	);
+}
+
+function Illustration({ scene }: { scene: (typeof steps)[number]["scene"] }) {
+	if (scene === "draw")
+		return (
+			<div className="how-window how-draw">
+				<div className="how-wheel">
+					<div className="how-wheel-disc" />
+					<div className="how-wheel-hub">
+						<Cursor />
+					</div>
+				</div>
+				<div className="how-outcome">
+					<Check size={13} />
+					<Line short />
+				</div>
+			</div>
+		);
+	if (scene === "invite")
+		return (
+			<div className="how-window how-invite">
+				<Line short />
+				<div className="how-share-row">
+					<div className="how-field">
+						<Link2 size={13} />
+						<Line />
+					</div>
+					<div className="how-action">
+						<Copy size={13} />
+						<Cursor />
+					</div>
+				</div>
+				<div className="how-person">
+					<span>
+						<UserRound size={12} />
+					</span>
+					<Line />
+				</div>
+				<div className="how-person how-new-person">
+					<span>
+						<UserRound size={12} />
+					</span>
+					<Line short />
+				</div>
+			</div>
+		);
+	return (
+		<div className="how-window how-create">
+			<Line short />
+			<div className="how-field">
+				<Line />
+			</div>
+			<div className="how-candidates">
+				<i />
+				<i />
+				<i className="how-added">
+					<Check size={10} />
+				</i>
+			</div>
+			<div className="how-action">
+				<Plus size={14} />
+				<Cursor />
+			</div>
+		</div>
+	);
+}
+
+export default function HomeHowItWorks() {
+	const list = useRef<HTMLOListElement>(null);
+	useEffect(() => {
+		if (!list.current || typeof IntersectionObserver === "undefined") return;
+		const cards = Array.from(list.current.children) as HTMLElement[];
+		const observer = new IntersectionObserver(
+			(entries) => {
+				let order = 0;
+				for (const entry of entries) {
+					const card = entry.target as HTMLElement;
+					if (!entry.isIntersecting) card.dataset.playback = "idle";
+					else if (
+						entry.intersectionRatio >= 0.5 &&
+						card.dataset.playback !== "play"
+					) {
+						// Cards entering together read as one sequence. A card swiped in later starts immediately.
+						card.style.setProperty("--how-delay", `${order++ * 1050}ms`);
+						card.dataset.playback = "play";
+					}
+				}
+			},
+			{ threshold: [0, 0.5] },
+		);
+		for (const card of cards) observer.observe(card);
+		return () => observer.disconnect();
+	}, []);
+	return (
+		<section className="home-how" aria-labelledby="home-how-title">
+			<h2 id="home-how-title">이용 방법</h2>
+			<ol className="home-how-steps" ref={list}>
+				{steps.map((step, index) => (
+					<li key={step.scene}>
+						<div className="how-stage" aria-hidden="true">
+							<span className="how-step-number">STEP 0{index + 1}</span>
+							<Illustration scene={step.scene} />
+						</div>
+						<div className="how-copy">
+							<h3>{step.title}</h3>
+							<p>{step.description}</p>
+						</div>
+					</li>
+				))}
+			</ol>
+		</section>
+	);
+}
