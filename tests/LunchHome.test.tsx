@@ -52,7 +52,7 @@ describe("Jeommechu lunch home", () => {
 		expect(within(main).queryByRole("textbox")).toBeNull();
 		expect(screen.queryByRole("dialog")).toBeNull();
 		expect(
-			screen.getByText(/방을 만든 뒤 후보를 새로 작성하거나 목록을 불러옵니다/),
+			within(main).getByRole("button", { name: "내 후보 목록" }),
 		).toBeTruthy();
 		expect(screen.queryByText(/곳으로 시작합니다/)).toBeNull();
 		expect(mocks.readName).not.toHaveBeenCalled();
@@ -62,7 +62,7 @@ describe("Jeommechu lunch home", () => {
 	it("previews each role and the result without connecting to a room", () => {
 		render(<LunchHome />);
 		const preview = within(
-			screen.getByRole("region", { name: "다음 모임에서 뭐 할까?" }),
+			screen.getByRole("region", { name: "방장과 참가자 화면 둘러보기" }),
 		);
 		const choices = preview.getAllByRole("button");
 		const original = preview.getByRole("img").getAttribute("src");

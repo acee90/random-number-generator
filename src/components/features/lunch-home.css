@@ -6,13 +6,11 @@
 }
 .jeommechu-home main {
 	flex: 1;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	align-content: start;
+	gap: 48px;
 	padding-block: 32px;
-}
-.lunch-home-board {
-	min-inline-size: 0;
-	border: 1px solid var(--line);
-	border-radius: var(--panel-radius);
-	background: var(--card);
 }
 .lunch-home-start {
 	display: grid;
@@ -20,10 +18,12 @@
 	align-items: center;
 	gap: 32px;
 	padding: 32px;
+	border: 1px solid var(--line);
+	border-radius: var(--panel-radius);
+	background: var(--card);
 }
 .lunch-home-intro,
-.lunch-home-actions,
-.lunch-home-details {
+.lunch-home-actions {
 	min-inline-size: 0;
 }
 .lunch-home-intro .lunch-home-kicker {
@@ -48,6 +48,9 @@
 .lunch-home-actions {
 	display: grid;
 	gap: 8px;
+}
+.lunch-home-actions > button {
+	justify-self: center;
 }
 .lunch-home-create,
 .lunch-home-solo {
@@ -76,36 +79,6 @@
 .lunch-home-steps svg {
 	flex-shrink: 0;
 }
-.lunch-home-secondary {
-	padding: 8px 32px;
-	border-block-start: 1px solid var(--line);
-}
-.lunch-home-details summary {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 12px;
-	min-block-size: 44px;
-	list-style: none;
-	font-size: 13px;
-	color: var(--muted);
-	cursor: pointer;
-}
-.lunch-home-details summary::-webkit-details-marker {
-	display: none;
-}
-.lunch-home-details[open] summary svg {
-	transform: rotate(180deg);
-}
-.lunch-home-details > div {
-	padding-block: 8px 16px;
-}
-.lunch-home-details p {
-	margin: 0 0 8px;
-	color: var(--muted);
-	font-size: 13px;
-	line-height: 1.7;
-}
 .lunch-home-footer {
 	display: flex;
 	justify-content: space-between;
@@ -118,15 +91,13 @@
 }
 @media (max-width: 720px) {
 	.jeommechu-home main {
+		gap: 32px;
 		padding-block: 24px;
 	}
 	.lunch-home-start {
 		grid-template-columns: minmax(0, 1fr);
 		gap: 24px;
 		padding: 24px;
-	}
-	.lunch-home-secondary {
-		padding-inline: 24px;
 	}
 }
 
