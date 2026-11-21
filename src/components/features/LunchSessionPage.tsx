@@ -97,6 +97,7 @@ export default function LunchSessionPage({
 	const [view, setView] = useState<RoomView>("wheel");
 	const [message, setMessage] = useState("");
 	const [chatCollapsed, setChatCollapsed] = useState(false);
+	const [chatTogglePointerFocus, setChatTogglePointerFocus] = useState(false);
 	const toggleChat = () => {
 		setChatPopover(null);
 		setChatCollapsed((value) => !value);
@@ -1162,12 +1163,20 @@ export default function LunchSessionPage({
 											variant="ghost"
 											size="auto"
 											className="room-chat-header-toggle"
+											data-pointer-focused={chatTogglePointerFocus || undefined}
 											aria-label={chatCollapsed ? "채팅 펼치기" : "채팅 접기"}
 											aria-expanded={!chatCollapsed}
 											aria-controls={`${id}-chat-content`}
 											aria-describedby={
 												unread > 0 ? `${id}-chat-unread` : undefined
 											}
+											onPointerDown={() => setChatTogglePointerFocus(true)}
+											onFocus={(event) => {
+												if (event.currentTarget.matches(":focus-visible"))
+													setChatTogglePointerFocus(false);
+											}}
+											onKeyDown={() => setChatTogglePointerFocus(false)}
+											onBlur={() => setChatTogglePointerFocus(false)}
 											onClick={toggleChat}
 										>
 											<RoomChatUnreadBadge
