@@ -2,6 +2,7 @@ import { FolderOpen, LoaderCircle, Pencil, Plus, Trash2 } from "lucide-react";
 import {
 	type ReactNode,
 	type RefObject,
+	Suspense,
 	useEffect,
 	useId,
 	useRef,
@@ -44,6 +45,7 @@ import CandidateListLoadDialog, {
 	type CandidateListSelection,
 } from "./CandidateListLoadDialog";
 import CandidateListSaveDialog from "./CandidateListSaveDialog";
+import { NearbyRestaurantEntry } from "./nearbyRestaurantEntry";
 import RoomCandidateAuthor from "./RoomCandidateAuthor";
 import RoomCandidateEditor from "./RoomCandidateEditor";
 import RoomExclusionPanel from "./RoomExclusionPanel";
@@ -214,6 +216,12 @@ export default function RoomLifecyclePanel({
 		(snapshot?.intakeId ?? null) === draftIntakeId &&
 		!draftStageInvalid;
 	const editable = isHost && editPhase && sameDraftStage && !locked;
+	const nearbyRemaining = Math.max(
+		0,
+		lunchRoomLimits.maxCandidates -
+			draftCandidates.length -
+			Number(Boolean(newName.trim())),
+	);
 	const showSetupChoice =
 		isHost &&
 		phase === "editing" &&
@@ -569,6 +577,14 @@ export default function RoomLifecyclePanel({
 		]);
 		setNewName("");
 	}
+	function appendNearby(items: RoomCandidate[]) {
+		if (!editable || sharedAdd || items.length > nearbyRemaining) return false;
+		setDraftCandidates((entries) => [...entries, ...items]);
+		setWriting(true);
+		if (showSetupChoice)
+			requestAnimationFrame(() => editorTitleRef.current?.focus());
+		return true;
+	}
 	function importList(selection: CandidateListSelection) {
 		if (!editable) return false;
 		setEditorGeneration((generation) => generation + 1);
@@ -810,6 +826,15 @@ export default function RoomLifecyclePanel({
 								<FolderOpen size={20} aria-hidden="true" />
 								<strong>목록 불러오기</strong>
 							</Button>
+							<Suspense fallback={null}>
+								<NearbyRestaurantEntry
+									setup
+									disabled={!editable}
+									existingIds={draftIds}
+									remaining={nearbyRemaining}
+									onAdd={appendNearby}
+								/>
+							</Suspense>
 						</section>
 					)}
 					{isHost ? (
@@ -824,17 +849,30 @@ export default function RoomLifecyclePanel({
 											: "후보 편집"
 								}
 								headerActions={
-									<Button
-										disabled={
-											locked ||
-											!sameDraftStage ||
-											((unsaved ? previewPreparedCount : preparedCount) === 0 &&
-												!newName.trim())
-										}
-										onClick={() => void changeStage("finalize")}
-									>
-										{stagePending === "finalize" ? "마감 중…" : "마감"}
-									</Button>
+									<>
+										{!sharedAdd && (
+											<Suspense fallback={null}>
+												<NearbyRestaurantEntry
+													disabled={!editable}
+													existingIds={draftIds}
+													remaining={nearbyRemaining}
+													onAdd={appendNearby}
+												/>
+											</Suspense>
+										)}
+										<Button
+											disabled={
+												locked ||
+												!sameDraftStage ||
+												((unsaved ? previewPreparedCount : preparedCount) ===
+													0 &&
+													!newName.trim())
+											}
+											onClick={() => void changeStage("finalize")}
+										>
+											{stagePending === "finalize" ? "마감 중…" : "마감"}
+										</Button>
+									</>
 								}
 								sourceName={sourceName}
 								candidates={draftCandidates}

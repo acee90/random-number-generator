@@ -63,38 +63,6 @@
 .room-simple-filters[hidden] {
 	display: none;
 }
-.room-simple-filters fieldset {
-	min-inline-size: 0;
-	margin: 0;
-	padding: 0;
-	border: 0;
-}
-.room-simple-chips {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 6px;
-}
-.room-simple-chips > button {
-	max-inline-size: 100%;
-	white-space: normal;
-	overflow-wrap: anywhere;
-	border-radius: 999px;
-	box-shadow: none;
-}
-.room-simple-chips > button[aria-pressed="true"] {
-	background: var(--lime);
-	border-color: var(--ink);
-	color: var(--ink);
-}
-@media (hover: hover) and (pointer: fine) {
-	.room-simple-chips > button[aria-pressed="false"]:not(:disabled):hover {
-		background: var(--paper);
-		border-color: var(--muted);
-	}
-	.room-simple-chips > button[aria-pressed="true"]:not(:disabled):hover {
-		background: var(--primary-hover);
-	}
-}
 .room-simple-search {
 	display: flex;
 	align-items: center;
@@ -111,19 +79,6 @@
 }
 .room-simple-filter-reset {
 	margin-block: 8px;
-}
-.room-simple-filter-count {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	min-inline-size: 30px;
-	padding: 1px 6px;
-	border-radius: 999px;
-	background: var(--surface);
-	color: var(--ink);
-	font-size: 12px;
-	font-weight: 500;
-	font-variant-numeric: tabular-nums;
 }
 .room-simple-list {
 	margin: 0;

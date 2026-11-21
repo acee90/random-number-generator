@@ -6,6 +6,7 @@ import { defineConfig } from "vite";
 import viteTsConfigPaths from "vite-tsconfig-paths";
 
 const config = defineConfig({
+	optimizeDeps: { include: ["leaflet"] },
 	plugins: [
 		cloudflare({ viteEnvironment: { name: "ssr" } }),
 		// this is the plugin that enables path aliases

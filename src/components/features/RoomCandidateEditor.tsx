@@ -9,7 +9,6 @@ import {
 	RotateCcw,
 	Save,
 	Search,
-	SlidersHorizontal,
 	Trash2,
 } from "lucide-react";
 import {
@@ -31,6 +30,10 @@ import {
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import {
+	CategoryFilterButton,
+	CategoryFilterChips,
+} from "@/components/ui/category-filter";
 import {
 	Dialog,
 	DialogContent,
@@ -474,76 +477,44 @@ export default function RoomCandidateEditor({
 
 			<div className="room-simple-listbar">
 				<p>전체 후보 {candidates.length}개</p>
-				<Button
-					variant="outline"
-					size="sm"
-					aria-expanded={filterOpen}
-					aria-label="필터"
-					aria-describedby={`${id}-filter-count`}
-					aria-controls={`${id}-filters`}
+				<CategoryFilterButton
+					controls={`${id}-filters`}
+					expanded={filterOpen}
+					count={preparedCount}
+					total={candidates.length}
+					description={`전체 후보 ${candidates.length}개 중 필터로 ${preparedCount}개 선택`}
 					onClick={() => {
 						if (!finishName()) return;
 						setRecentAdditionId(null);
 						setFilterOpen(!filterOpen);
 						if (filterOpen) setQuery("");
 					}}
-				>
-					<SlidersHorizontal size={16} aria-hidden="true" />
-					필터
-					<span className="room-simple-filter-count" aria-hidden="true">
-						{preparedCount}/{candidates.length}
-					</span>
-				</Button>
-				<span className="sr-only" id={`${id}-filter-count`}>
-					전체 후보 {candidates.length}개 중 필터로 {preparedCount}개 선택
-				</span>
+				/>
 			</div>
 			<div
 				id={`${id}-filters`}
 				hidden={!filterOpen}
 				className="room-simple-filters"
 			>
-				<fieldset disabled={disabled}>
-					<legend className="sr-only">이번 추첨에 넣을 분류</legend>
-					<div className="room-simple-chips">
-						<Button
-							variant="outline"
-							size="sm"
-							aria-pressed={categories.every((category) =>
-								selectedCategories.includes(category),
-							)}
-							onClick={() => {
-								setRecentAdditionId(null);
-								onFilterChange({ ...filter, categories: null });
-							}}
-						>
-							전체
-						</Button>
-						{categories.map((value) => (
-							<Button
-								key={value}
-								variant="outline"
-								size="sm"
-								aria-label={`${value} 분류 포함`}
-								aria-pressed={selectedCategories.includes(value)}
-								onClick={() => {
-									setRecentAdditionId(null);
-									onFilterChange({
-										...filter,
-										categories: selectedCategories.includes(value)
-											? selectedCategories.filter((entry) => entry !== value)
-											: [...new Set([...selectedCategories, value])],
-									});
-								}}
-							>
-								{selectedCategories.includes(value) && (
-									<Check size={14} aria-hidden="true" />
-								)}
-								{value}
-							</Button>
-						))}
-					</div>
-				</fieldset>
+				<CategoryFilterChips
+					legend="이번 추첨에 넣을 분류"
+					options={categories.map((value) => ({ value }))}
+					selected={selectedCategories}
+					allSelected={categories.every((value) =>
+						selectedCategories.includes(value),
+					)}
+					disabled={disabled}
+					onSelect={(value) => {
+						setRecentAdditionId(null);
+						const next =
+							value === null
+								? null
+								: selectedCategories.includes(value)
+									? selectedCategories.filter((entry) => entry !== value)
+									: [...new Set([...selectedCategories, value])];
+						onFilterChange({ ...filter, categories: next });
+					}}
+				/>
 				<label className="room-simple-search" htmlFor={`${id}-search`}>
 					<Search size={16} aria-hidden="true" />
 					<span className="sr-only">후보 검색</span>
