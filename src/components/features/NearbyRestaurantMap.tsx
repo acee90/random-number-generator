@@ -28,6 +28,19 @@ const directions = {
 } as const;
 const keyId = import.meta.env.VITE_NAVER_MAPS_KEY_ID?.trim();
 
+async function getNaverMapsClientId() {
+	if (keyId) return keyId;
+
+	const response = await fetch("/api/public-config", {
+		headers: { Accept: "application/json" },
+	});
+	if (!response.ok) throw new Error("네이버 지도 설정을 불러오지 못했어요.");
+	const config = (await response.json()) as {
+		naverMapsClientId?: string | null;
+	};
+	return config.naverMapsClientId?.trim() ?? "";
+}
+
 export default function NearbyRestaurantMap(props: MapProps) {
 	const [canvas, setCanvas] = useState<HTMLDivElement | null>(null);
 	const current = useRef(props);
@@ -76,9 +89,9 @@ export default function NearbyRestaurantMap(props: MapProps) {
 			},
 		};
 		async function start() {
-			if (keyId) return createNaverMap(options, keyId);
-			const { createOpenStreetMap } = await import("./nearbyOpenStreetMap");
-			return createOpenStreetMap(options);
+			const clientId = await getNaverMapsClientId();
+			if (!clientId) throw new Error("네이버 지도 Client ID가 필요해요.");
+			return createNaverMap(options, clientId);
 		}
 		void start()
 			.then((loaded) => {
