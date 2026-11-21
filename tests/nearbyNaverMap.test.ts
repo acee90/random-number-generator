@@ -21,6 +21,10 @@ it("follows a dragged Naver map center, refits a changed radius, and releases ov
 	let current = new LatLng(station.latitude, station.longitude);
 	let zoom = 15;
 	const mapOptions = vi.fn();
+	const markers: Array<{
+		options: object;
+		setMap: ReturnType<typeof vi.fn>;
+	}> = [];
 	const instance = {
 		getCenter: () => current,
 		getZoom: () => zoom,
@@ -46,7 +50,6 @@ it("follows a dragged Naver map center, refits a changed radius, and releases ov
 		setRadius: vi.fn(),
 		getBounds: () => ({ region: "circle" }),
 	};
-	const marker = { setMap: vi.fn() };
 	const maps = {
 		LatLng,
 		Map: class {
@@ -61,8 +64,11 @@ it("follows a dragged Naver map center, refits a changed radius, and releases ov
 			}
 		},
 		Marker: class {
-			constructor() {
-				Object.assign(this, marker);
+			options: object;
+			setMap = vi.fn();
+			constructor(options: object) {
+				this.options = options;
+				markers.push(this);
 			}
 		},
 		Point: class {},
@@ -129,6 +135,21 @@ it("follows a dragged Naver map center, refits a changed radius, and releases ov
 		expect(instance.fitBounds).toHaveBeenCalledTimes(1);
 		expect(instance.setOptions).toHaveBeenLastCalledWith("zoomOrigin", current);
 		expect(view.getZoom()).toBe(15);
+		view.setUserLocation({ latitude: 37.51, longitude: 127.04 });
+		expect(markers[0].options).toEqual(
+			expect.objectContaining({
+				title: "내 위치",
+				clickable: false,
+				position: expect.objectContaining({
+					latitude: 37.51,
+					longitude: 127.04,
+				}),
+			}),
+		);
+		view.setUserLocation(null);
+		expect(markers[0].setMap).toHaveBeenCalledWith(null);
+		view.setUserLocation(station);
+		expect(markers).toHaveLength(2);
 		view.zoomBy(-1);
 		view.zoomBy(-1);
 		expect(view.getZoom()).toBe(13);
@@ -148,7 +169,9 @@ it("follows a dragged Naver map center, refits a changed radius, and releases ov
 		window.navermap_authFailure?.();
 		expect(onFailure).toHaveBeenCalledOnce();
 		view.destroy();
-		expect(marker.setMap).toHaveBeenCalledWith(null);
+		expect(markers.every((marker) => marker.setMap.mock.calls.length > 0)).toBe(
+			true,
+		);
 		expect(events.size).toBe(0);
 		expect(instance.destroy).toHaveBeenCalledOnce();
 		expect(window.navermap_authFailure).toBe(previous);

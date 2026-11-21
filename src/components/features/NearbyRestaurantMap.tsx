@@ -13,6 +13,7 @@ import { createNaverMap } from "./nearbyNaverMap";
 
 type MapProps = {
 	center: MapPosition;
+	userLocation: MapPosition | null;
 	radius: NearbyRadius;
 	results: readonly NearbyResult[];
 	onMove: (position: MapPosition) => void;
@@ -40,7 +41,7 @@ export default function NearbyRestaurantMap(props: MapProps) {
 	});
 	const previousRadius = useRef<NearbyRadius | null>(null);
 	const fittedZoom = useRef<number | null>(null);
-	const { center, radius, results } = props;
+	const { center, userLocation, radius, results } = props;
 
 	useEffect(() => {
 		if (!canvas) return;
@@ -122,6 +123,11 @@ export default function NearbyRestaurantMap(props: MapProps) {
 	useEffect(() => {
 		view?.setRestaurants(results);
 	}, [view, results]);
+	useEffect(() => {
+		view?.setUserLocation(userLocation);
+	}, [view, userLocation]);
+	const showCenterPin =
+		!userLocation || distanceBetween(center, userLocation) > 1;
 
 	return (
 		<div className="nearby-map">
@@ -139,7 +145,7 @@ export default function NearbyRestaurantMap(props: MapProps) {
 				}}
 			>
 				<div key={attempt} className="nearby-map-canvas" ref={setCanvas} />
-				{view && !failed && (
+				{view && !failed && showCenterPin && (
 					<MapPin
 						className="nearby-map-center-pin"
 						aria-hidden="true"
@@ -177,7 +183,7 @@ export default function NearbyRestaurantMap(props: MapProps) {
 			)}
 			{failed && (
 				<div className="nearby-map-notice">
-					<output>도로 지도를 불러오지 못했어요.</output>
+					<output>지도를 불러오지 못했어요.</output>
 					<Button
 						variant="outline"
 						onClick={() => {
