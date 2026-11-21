@@ -1,0 +1,46 @@
+.category-filter {
+	min-inline-size: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+.category-filter-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+.category-filter-chips > button {
+	max-inline-size: 100%;
+	white-space: normal;
+	overflow-wrap: anywhere;
+	border-radius: 999px;
+	box-shadow: none;
+}
+.category-filter-chips > button[aria-pressed="true"] {
+	background: var(--lime);
+	border-color: var(--ink);
+	color: var(--ink);
+}
+@media (hover: hover) and (pointer: fine) {
+	.category-filter-chips > button[aria-pressed="false"]:not(:disabled):hover {
+		background: var(--paper);
+		border-color: var(--muted);
+	}
+	.category-filter-chips > button[aria-pressed="true"]:not(:disabled):hover {
+		background: var(--primary-hover);
+	}
+}
+
+.category-filter-count {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-inline-size: 30px;
+	padding: 1px 6px;
+	border-radius: 999px;
+	background: var(--surface);
+	color: var(--ink);
+	font-size: 12px;
+	font-weight: 500;
+	font-variant-numeric: tabular-nums;
+}
