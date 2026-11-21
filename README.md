@@ -116,6 +116,8 @@ npm run dev
 
 일반 버튼은 `Button`의 variant와 size를 사용합니다. 룰렛·투표·탭·번호 타일처럼 조작 모양 자체가 기능인 부분만 `plain`/`auto`로 기존 모양과 애니메이션을 유지합니다. 체크박스·라디오·범위 입력은 브라우저의 기본 폼 동작을 사용하고, PC의 비모달 기록 창은 채팅과 함께 조작하는 동작을 유지하기 위해 Radix Dialog를 직접 구성합니다.
 
+홈의 ‘추첨방 미리보기’는 실제 방 화면을 캡처한 WebP를 사용합니다. 방 UI나 예시 후보(`src/data/homeRoomExample.ts`)가 바뀌면 `npm run capture:home`을 실행해 방장·참가자·결과의 데스크톱 및 모바일 이미지 6장을 함께 갱신합니다. 캡처는 설치된 Chrome을 사용하며 다른 Chromium을 쓰려면 `CHROME_PATH`에 실행 파일 경로를 지정합니다.
+
 ## CORE 컴포넌트 미리보기
 
 [Storybook 작업 #31](https://github.com/acee90/random-number-generator/issues/31)은 **룰렛·투표처럼 재미와 조작감을 결정하는 CORE**만 다룹니다. 서버/API 키나 다중 브라우저 없이 화면과 반응을 확인합니다.
