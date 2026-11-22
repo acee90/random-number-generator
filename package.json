@@ -9,6 +9,7 @@
 		"serve": "vite preview",
 		"test": "vitest run",
 		"capture:home": "node scripts/capture-home-preview.mjs",
+		"check:roulette": "node scripts/check-roulette-board.mjs",
 		"check:release:web": "node scripts/release-web-check.mjs",
 		"check:release:room": "node scripts/release-room-check.mjs",
 		"check:latency": "node scripts/diagnose-room-latency.mjs",

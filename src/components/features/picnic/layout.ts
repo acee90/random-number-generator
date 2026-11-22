@@ -22,6 +22,9 @@ export function getWheelLabels(
 export type VoteChoice = "up" | "down";
 export type Control = "exclude" | "sound" | "draw" | VoteChoice;
 export type StageScene = {
+	/** The ticket or wheel occupies the top of the same canvas as the lists. */
+	mainHeight?: number;
+	voteMotionRound?: string;
 	toolbar?: {
 		exclude: boolean;
 		locked: boolean;

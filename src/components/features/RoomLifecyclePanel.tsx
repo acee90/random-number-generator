@@ -45,8 +45,8 @@ import CandidateListLoadDialog, {
 import CandidateListSaveDialog from "./CandidateListSaveDialog";
 import RoomCandidateAuthor from "./RoomCandidateAuthor";
 import RoomCandidateEditor from "./RoomCandidateEditor";
-import type { ExclusionSetting } from "./RoomGameStage";
 import RoomExclusionPanel from "./RoomExclusionPanel";
+import type { ExclusionSetting } from "./RoomGameStage";
 import "./room-lifecycle.css";
 
 type Room = ReturnType<typeof useLunchRoom>;
@@ -99,6 +99,7 @@ export default function RoomLifecyclePanel({
 	children: (
 		requestStart: () => void,
 		exclusion: ExclusionSetting,
+		panel: ReactNode,
 	) => ReactNode;
 }) {
 	const id = useId();
@@ -1005,7 +1006,9 @@ export default function RoomLifecyclePanel({
 						data-result={showResult || undefined}
 					>
 						<RoomExclusionPanel
-							renderGame={(setting) => children(requestStart, setting)}
+							renderGame={(setting, panel) =>
+								children(requestStart, setting, panel)
+							}
 							snapshot={snapshot}
 							isHost={isHost}
 							locked={locked}

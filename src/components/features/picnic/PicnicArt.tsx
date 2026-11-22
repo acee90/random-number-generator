@@ -8,6 +8,7 @@ import {
 import type { StageScene } from "./layout";
 import type { createPicnicPainter } from "./paint";
 import "./picnic-art.css";
+import "./details.css";
 
 type Painter = Awaited<ReturnType<typeof createPicnicPainter>>;
 export function PicnicArt({

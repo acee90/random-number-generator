@@ -1,10 +1,11 @@
 import { CanvasRenderer, Container } from "pixi.js";
 import "pixi.js/graphics";
 import "pixi.js/text";
-import { drawTable, drawWheel } from "./board";
+import { drawRim, drawTable, drawWheel } from "./board";
+import { drawDetails, observeDetails } from "./details";
 import { type StageScene, stageLayout } from "./layout";
 import { drawCloth, drawHub, drawToolbar, layer, pen } from "./stationery";
-import { drawBallots, drawTicket } from "./ticket";
+import { drawBallot, drawTicket } from "./ticket";
 
 export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 	const renderer = new CanvasRenderer();
@@ -23,16 +24,58 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 	}
 	const stage = new Container();
 	const cloth = layer(stage),
-		rotor = layer(stage),
+		rim = layer(stage),
+		disc = layer(stage),
+		rotor = layer(disc),
 		table = layer(stage),
 		hub = layer(stage),
 		ticket = layer(stage),
 		ballots = layer(stage),
-		toolbar = layer(stage);
+		toolbar = layer(stage),
+		details = layer(stage);
+	// Clip the cached square texture to the disc, including its antialiased edge.
+	const discMask = pen(stage).circle(0, 0, 174.5).fill(0xffffff);
+	disc.mask = discMask;
+	const choices = ["up", "down"] as const;
+	const cards = { up: layer(ballots), down: layer(ballots) };
+	const ink: Partial<
+		Record<(typeof choices)[number], ReturnType<typeof drawBallot>>
+	> = {};
+	const pulses = new Map<(typeof choices)[number], number>();
+	let previousVotes: { round: string; up: number; down: number } | undefined;
+	let motionFrame = 0;
 	const keys = new Map<Container, string>();
 	const destroyChildren = { children: true, context: true, style: true };
 	let angle = 0;
 	let dirty = true;
+	const detailsRoot =
+		canvas.parentElement?.querySelector<HTMLElement>(".picnic-details");
+	function refreshDetails() {
+		for (const child of details.removeChildren())
+			child.destroy(destroyChildren);
+		if (detailsRoot) drawDetails(details, detailsRoot, canvas);
+	}
+	const disconnect =
+		detailsRoot &&
+		observeDetails(detailsRoot, () => {
+			refreshDetails();
+			renderer.render({ container: stage });
+		});
+	function animateVotes(now: number) {
+		for (const [choice, start] of pulses) {
+			const glyph = ink[choice];
+			if (!glyph) continue;
+			const progress = Math.min(1, Math.max(0, (now - start) / 420));
+			const remaining = (1 - progress) ** 3;
+			cards[choice].scale.set(1 - 0.04 * remaining);
+			glyph.number.scale.set(glyph.numberScale * (1 + 0.42 * remaining));
+			glyph.stamp.scale.set(0.8 + 0.9 * (1 - remaining));
+			glyph.stamp.alpha = 0.85 * (1 - progress);
+			if (progress === 1) pulses.delete(choice);
+		}
+		renderer.render({ container: stage });
+		motionFrame = pulses.size ? requestAnimationFrame(animateVotes) : 0;
+	}
 	function update(
 		group: Container,
 		values: unknown,
@@ -60,28 +103,87 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 				renderer.resize(width, height, resolution);
 				keys.clear();
 				dirty = true;
+				refreshDetails();
 			}
 			const result = scene.result,
-				layout = stageLayout(width, height, Boolean(result?.votes));
+				layout = stageLayout(
+					width,
+					scene.mainHeight ?? height,
+					Boolean(result?.votes),
+				);
 			const { wheelSide: side, wheelY } = layout;
-			update(cloth, true, () => drawCloth(cloth, layout), true);
+			update(cloth, true, () => drawCloth(cloth, { width, height }), true);
 			if (rotor.visible !== !result) dirty = true;
-			rotor.visible = table.visible = hub.visible = !result;
-			ticket.visible = ballots.visible = Boolean(result);
+			rim.visible =
+				disc.visible =
+				rotor.visible =
+				table.visible =
+				hub.visible =
+					!result;
+			ticket.visible = Boolean(result);
+			ballots.visible = Boolean(result?.votes);
+			const round = scene.voteMotionRound;
+			if (!round || round !== previousVotes?.round) {
+				if (pulses.size) dirty = true;
+				pulses.clear();
+				cancelAnimationFrame(motionFrame);
+				motionFrame = 0;
+				for (const choice of choices) {
+					cards[choice].scale.set(1);
+					const art = ink[choice];
+					if (art) {
+						art.stamp.alpha = 0;
+						art.number.scale.set(art.numberScale);
+					}
+				}
+			}
 			if (result) {
 				update(
 					ticket,
 					[result.name, result.category, result.number, layout.ticketTop],
 					() => drawTicket(ticket, layout, result),
 				);
-				update(ballots, [result.votes, scene.hover, scene.pressed], () =>
-					drawBallots(ballots, layout, scene),
-				);
+				const votes = result.votes;
+				if (votes) {
+					for (const choice of choices) {
+						update(
+							cards[choice],
+							[
+								votes[choice],
+								votes.selected,
+								votes.enabled,
+								scene.hover === choice,
+								scene.pressed === choice,
+								layout.voteTop,
+							],
+							() => {
+								ink[choice] = drawBallot(cards[choice], layout, scene, choice);
+							},
+						);
+						if (
+							round &&
+							previousVotes?.round === round &&
+							votes[choice] > previousVotes[choice]
+						) {
+							pulses.set(choice, performance.now());
+						}
+					}
+					if (pulses.size && !motionFrame) animateVotes(performance.now());
+				}
 			} else {
+				update(
+					rim,
+					[side, wheelY],
+					() =>
+						drawRim(layer(rim, (width - side) / 2, wheelY - side / 2), side),
+					true,
+				);
 				rotor.position.set(width / 2, wheelY);
+				discMask.position.copyFrom(rotor.position);
+				discMask.scale.set(side / 440);
 				update(
 					rotor,
-					[scene.wheel.count, scene.wheel.labels],
+					[side, scene.wheel.count, scene.wheel.labels],
 					() => {
 						drawWheel(
 							layer(rotor, -side / 2, -side / 2),
@@ -94,36 +196,18 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 				);
 				update(
 					table,
-					scene.wheel.phase === "spinning",
+					[side, wheelY],
 					() => {
 						const props = layer(table, (width - side) / 2, wheelY - side / 2);
 						drawTable(props, side);
-						if (scene.wheel.phase === "spinning") {
-							const arcs = pen(layer(table, width / 2, wheelY));
-							arcs.scale.set(side / 440);
-							for (const [r, a, d] of [
-								[202, 0.08, 0.41],
-								[208, 0.21, 0.25],
-								[202, 2.85, 0.47],
-								[206, 3.26, 0.21],
-								[204, 5.55, 0.41],
-							])
-								arcs
-									.moveTo(r * Math.cos(a), r * Math.sin(a))
-									.arc(0, 0, r, a, a + d)
-									.stroke({
-										color: 0xcb7954,
-										alpha: 0.7,
-										width: 2.4,
-										cap: "round",
-									});
-						}
 					},
 					true,
 				);
 				update(
 					hub,
 					[
+						side,
+						wheelY,
 						scene.wheel.caption,
 						scene.wheel.phase,
 						scene.wheel.count,
@@ -136,6 +220,10 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 				if (scene.wheel.phase !== "spinning") angle = 0;
 				rotor.rotation = angle;
 			}
+			previousVotes =
+				round && result?.votes
+					? { round, up: result.votes.up, down: result.votes.down }
+					: undefined;
 			update(toolbar, [scene.toolbar, scene.hover, scene.pressed], () =>
 				drawToolbar(toolbar, layout, scene),
 			);
@@ -150,6 +238,8 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 			renderer.render({ container: stage });
 		},
 		destroy() {
+			disconnect?.();
+			cancelAnimationFrame(motionFrame);
 			stage.destroy(destroyChildren);
 			renderer.destroy();
 		},

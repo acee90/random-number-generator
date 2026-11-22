@@ -1,6 +1,7 @@
 import {
 	type ComponentProps,
 	type CSSProperties,
+	type ReactNode,
 	type RefObject,
 	useId,
 	useLayoutEffect,
@@ -38,6 +39,7 @@ type Props = Omit<FeedbackOptions, "draw"> & {
 	isHost: boolean;
 	wheel?: WheelProps;
 	exclusion?: ExclusionSetting;
+	preparation?: ReactNode;
 	sound?: ReturnType<typeof useDrawSound>;
 	reducedMotion?: boolean;
 	titleRef?: RefObject<HTMLHeadingElement | null>;
@@ -83,6 +85,7 @@ export default function RoomGameStage({
 	isHost,
 	wheel,
 	exclusion,
+	preparation,
 	sound,
 	reducedMotion,
 	titleRef,
@@ -95,7 +98,12 @@ export default function RoomGameStage({
 }: Props) {
 	const id = useId();
 	const frame = useRef<HTMLElement>(null);
-	const [size, setSize] = useState({ width: 320, height: 352 });
+	const main = useRef<HTMLDivElement>(null);
+	const [size, setSize] = useState({
+		width: 320,
+		height: 352,
+		mainHeight: 352,
+	});
 	const [hover, setHover] = useState<Control | null>(null);
 	const [pressed, setPressed] = useState<Control | null>(null);
 	useLayoutEffect(() => {
@@ -105,10 +113,13 @@ export default function RoomGameStage({
 			if (!el?.clientWidth || !el.clientHeight) return;
 			const width = el.clientWidth,
 				height = el.clientHeight;
+			const mainHeight = main.current?.clientHeight || height;
 			setSize((current) =>
-				current.width === width && current.height === height
+				current.width === width &&
+				current.height === height &&
+				current.mainHeight === mainHeight
 					? current
-					: { width, height },
+					: { width, height, mainHeight },
 			);
 		}
 		measure();
@@ -118,6 +129,7 @@ export default function RoomGameStage({
 		}
 		const observer = new ResizeObserver(measure);
 		observer.observe(el);
+		if (main.current) observer.observe(main.current);
 		return () => observer.disconnect();
 	}, []);
 	const feedback = useRoomFeedback({ draw, ...voting });
@@ -148,6 +160,11 @@ export default function RoomGameStage({
 					? "방장 대기"
 					: (wheel.drawText ?? "돌리기");
 	const scene: StageScene = {
+		mainHeight: size.mainHeight,
+		voteMotionRound:
+			result?.votes && voting.connected && !voting.readOnly && !reducedMotion
+				? draw?.id
+				: undefined,
 		toolbar:
 			exclusion && sound
 				? {
@@ -175,7 +192,11 @@ export default function RoomGameStage({
 		hover,
 		pressed,
 	};
-	const layout = stageLayout(size.width, size.height, Boolean(result?.votes));
+	const layout = stageLayout(
+		size.width,
+		size.mainHeight,
+		Boolean(result?.votes),
+	);
 	const box = {
 		"--pad": `${layout.pad}px`,
 		"--top": `${layout.top}px`,
@@ -227,79 +248,88 @@ export default function RoomGameStage({
 					rotorRef={wheel?.rotorRef}
 					animate={!result && phase === "spinning" && !reducedMotion}
 				/>
-				{exclusion && <PicnicExclusionSwitch setting={exclusion} />}
-				{sound && (
-					<div className="picnic-sound" data-hit="sound">
-						<DrawPresentationControls sound={sound} />
-					</div>
-				)}
-				{!result && wheel && (
-					<div className="picnic-wheel">
-						<LunchWheel {...wheel} />
-					</div>
-				)}
-				{result && (
-					<section className="picnic-ticket" aria-labelledby={headingId}>
-						<div className="room-result-summary">
-							<p>당첨 메뉴</p>
-							<h3 id={headingId} ref={titleRef} tabIndex={-1}>
-								{result.name}
-							</h3>
-							<p>{result.category}</p>
-							<small>후보 {result.number}번</small>
+				<div
+					ref={main}
+					className="picnic-main"
+					data-result={Boolean(result) || undefined}
+				>
+					{exclusion && <PicnicExclusionSwitch setting={exclusion} />}
+					{sound && (
+						<div className="picnic-sound" data-hit="sound">
+							<DrawPresentationControls sound={sound} />
 						</div>
-					</section>
-				)}
-				{result?.votes && draw && (
-					<fieldset className="picnic-ballots">
-						<legend className="sr-only">이번 추첨 결과 투표</legend>
-						{choices.map(({ vote }) => (
-							<div
-								key={vote}
-								data-hit={vote}
-								data-selected={feedback.ownChoice === vote || undefined}
-							>
-								<VoteTally
-									key={draw.id}
-									id={`${id}-${vote}`}
-									choice={vote}
-									count={
-										vote === "up"
-											? feedback.upVotes.length
-											: feedback.downVotes.length
-									}
-									selected={feedback.ownChoice === vote}
-									readOnly={Boolean(voting.readOnly)}
-									animate={
-										voting.connected && !voting.readOnly && !reducedMotion
-									}
-									canVote={feedback.canVote}
-									onVote={() => feedback.submit(vote)}
-								/>
+					)}
+					{!result && wheel && (
+						<div className="picnic-wheel">
+							<LunchWheel {...wheel} />
+						</div>
+					)}
+					{result && (
+						<section className="picnic-ticket" aria-labelledby={headingId}>
+							<div className="room-result-summary">
+								<p>당첨 메뉴</p>
+								<h3 id={headingId} ref={titleRef} tabIndex={-1}>
+									{result.name}
+								</h3>
+								<p>{result.category}</p>
+								<small>후보 {result.number}번</small>
 							</div>
-						))}
-					</fieldset>
-				)}
-			</section>
-			{draw && !solo && (
-				<RoomFeedbackDetails
-					draw={draw}
-					{...voting}
-					isHost={isHost}
-					mode="results"
-					feedback={feedback}
-					stageTallies
-				/>
-			)}
-			{draw && showNextAction && isHost && !voting.readOnly && (
-				<div className="room-result-actions">
-					<RoomNextGameButton
-						disabled={!canNext || nextPending || voting.pending}
-						pending={nextPending}
-						onClick={onNext}
-					/>
+						</section>
+					)}
+					{result?.votes && draw && (
+						<fieldset className="picnic-ballots">
+							<legend className="sr-only">이번 추첨 결과 투표</legend>
+							{choices.map(({ vote }) => (
+								<div
+									key={vote}
+									data-hit={vote}
+									data-selected={feedback.ownChoice === vote || undefined}
+								>
+									<VoteTally
+										key={draw.id}
+										id={`${id}-${vote}`}
+										choice={vote}
+										count={
+											vote === "up"
+												? feedback.upVotes.length
+												: feedback.downVotes.length
+										}
+										selected={feedback.ownChoice === vote}
+										readOnly={Boolean(voting.readOnly)}
+										animate={
+											voting.connected && !voting.readOnly && !reducedMotion
+										}
+										canVote={feedback.canVote}
+										onVote={() => feedback.submit(vote)}
+									/>
+								</div>
+							))}
+						</fieldset>
+					)}
 				</div>
-			)}
+				<div className="picnic-details">
+					{draw && !solo && (
+						<RoomFeedbackDetails
+							draw={draw}
+							{...voting}
+							isHost={isHost}
+							mode="results"
+							feedback={feedback}
+							stageTallies
+						/>
+					)}
+					{draw && showNextAction && isHost && !voting.readOnly && (
+						<div className="room-result-actions">
+							<RoomNextGameButton
+								disabled={!canNext || nextPending || voting.pending}
+								pending={nextPending}
+								onClick={onNext}
+							/>
+						</div>
+					)}
+					{preparation}
+				</div>
+			</section>
 		</div>
 	);
 }

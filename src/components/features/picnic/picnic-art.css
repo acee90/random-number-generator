@@ -3,11 +3,20 @@
 	isolation: isolate;
 	container-type: inline-size;
 	width: min(100%, 720px);
+	margin-inline: auto;
+	background: var(--surface);
+}
+.picnic-main {
+	position: relative;
+	width: 100%;
 	aspect-ratio: 10 / 7;
 	min-height: 352px;
 	max-height: 448px;
-	margin-inline: auto;
-	background: var(--surface);
+}
+.picnic-main[data-result] {
+	aspect-ratio: auto;
+	height: clamp(266px, 60cqi, 344px);
+	min-height: 0;
 }
 .picnic-art {
 	position: absolute;
@@ -20,7 +29,7 @@
 .picnic-art[data-painted] {
 	visibility: visible;
 }
-.picnic-frame > .picnic-exclusion,
+.picnic-main > .picnic-exclusion,
 .picnic-sound,
 .picnic-ticket,
 .picnic-wheel,
@@ -28,7 +37,6 @@
 	position: absolute;
 }
 .picnic-exclusion {
-	position: relative;
 	inset: var(--top) auto auto var(--pad);
 	width: var(--switch-width, 156px);
 	height: 44px;
@@ -180,6 +188,9 @@
 	pointer-events: none;
 }
 @media (forced-colors: none) {
+	.picnic-frame:has(.picnic-art[data-painted]) .picnic-details {
+		opacity: 0;
+	}
 	.picnic-frame:has(.picnic-art[data-painted]) .picnic-exclusion button {
 		position: absolute;
 		inset: 0;

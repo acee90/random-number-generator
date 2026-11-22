@@ -19,8 +19,8 @@ import CopyFallback from "@/components/features/CopyFallback";
 import { roomCandidateNumbers } from "@/components/features/RoomCandidateList";
 import RoomChatUnreadBadge from "@/components/features/RoomChatUnreadBadge";
 import RoomDrawDialog from "@/components/features/RoomDrawDialog";
-import RoomGameStage from "@/components/features/RoomGameStage";
 import RoomEntryGate from "@/components/features/RoomEntryGate";
+import RoomGameStage from "@/components/features/RoomGameStage";
 import RoomLifecyclePanel from "@/components/features/RoomLifecyclePanel";
 import RoomSettingsDialog from "@/components/features/RoomSettingsDialog";
 import SiteHeader from "@/components/layout/SiteHeader";
@@ -854,7 +854,7 @@ export default function LunchSessionPage({
 									onStart={start}
 									onHistory={() => changeView("history")}
 								>
-									{(requestStart, exclusion) => (
+									{(requestStart, exclusion, panel) => (
 										<section
 											id={`${id}-draw-panel`}
 											className="room-draw-panel"
@@ -900,6 +900,7 @@ export default function LunchSessionPage({
 												}}
 												sound={sound}
 												exclusion={exclusion}
+												preparation={panel}
 												reducedMotion={reducedMotion}
 												showNextAction={false}
 												solo={solo}

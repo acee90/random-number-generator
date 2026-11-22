@@ -449,9 +449,11 @@ describe("current result feedback and frozen history", () => {
 			}),
 		).toBeNull();
 		expect(
-			screen.getByRole("region", { name: "실시간 투표 현황" }).parentElement
-				?.className,
-		).toBe("room-result-layout");
+			within(screen.getByRole("region", { name: "게임 보드" })).getByRole(
+				"region",
+				{ name: "실시간 투표 현황" },
+			),
+		).toBeTruthy();
 	});
 	it("lets the host close voting for everyone, then focuses the next draw without auto-starting", () => {
 		room.self = { id: "host-client", isHost: true };
@@ -3533,7 +3535,11 @@ describe("synchronized lunch room UI", () => {
 		room.self = { id: "host-client", isHost: true };
 		room.snapshot = snapshot({ status: "result", draw: draw(baseTime - 8000) });
 		render(<LunchRoomPage roomId={roomId} />);
-		const preparation = screen.getByRole("complementary", {
+		const board = within(screen.getByRole("region", { name: "게임 보드" }));
+		expect(
+			board.getByRole("heading", { name: "실시간 투표 현황" }),
+		).toBeTruthy();
+		const preparation = board.getByRole("complementary", {
 			name: "다음 게임 준비",
 		});
 		expect(

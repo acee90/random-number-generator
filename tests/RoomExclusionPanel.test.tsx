@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+
 import {
 	cleanup,
 	fireEvent,
@@ -6,12 +7,13 @@ import {
 	screen,
 	within,
 } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-	PicnicExclusionSwitch,
-	type ExclusionSetting,
-} from "../src/components/features/RoomGameStage";
 import RoomExclusionPanel from "../src/components/features/RoomExclusionPanel";
+import {
+	type ExclusionSetting,
+	PicnicExclusionSwitch,
+} from "../src/components/features/RoomGameStage";
 import type { RoomSnapshot } from "../src/lib/lunchRoom";
 
 afterEach(cleanup);
@@ -51,8 +53,11 @@ function snapshot(
 function props(state = snapshot()) {
 	return {
 		snapshot: state,
-		renderGame: (setting: ExclusionSetting) => (
-			<PicnicExclusionSwitch setting={setting} />
+		renderGame: (setting: ExclusionSetting, panel: ReactNode) => (
+			<>
+				<PicnicExclusionSwitch setting={setting} />
+				{panel}
+			</>
 		),
 		isHost: true,
 		locked: false,
@@ -70,6 +75,12 @@ describe("RoomExclusionPanel", () => {
 		const list = screen.getByRole("list", { name: "당첨 제외 내역" });
 		const rows = within(list).getAllByRole("listitem");
 		expect(rows).toHaveLength(200);
+		const toggle = screen.getByRole("button", { name: /당첨 제외 내역/ });
+		fireEvent.click(toggle);
+		expect(toggle.getAttribute("aria-expanded")).toBe("false");
+		expect(screen.queryByRole("list", { name: "당첨 제외 내역" })).toBeNull();
+		fireEvent.click(toggle);
+		expect(screen.getByRole("list", { name: "당첨 제외 내역" })).toBe(list);
 		expect(within(rows[0]).getByText("후보 200")).toBeTruthy();
 		expect(within(rows[0]).getByText("200회차 당첨")).toBeTruthy();
 		expect(rows[0].querySelector("time")?.getAttribute("datetime")).toBe(

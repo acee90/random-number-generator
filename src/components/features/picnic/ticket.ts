@@ -1,6 +1,6 @@
 import type { Container, Graphics } from "pixi.js";
 import { rosette } from "./board";
-import type { StageLayout, StageScene } from "./layout";
+import type { StageLayout, StageScene, VoteChoice } from "./layout";
 import { picnic } from "./palette";
 import { layer, lettering, line, pen, stateFill } from "./stationery";
 
@@ -174,64 +174,67 @@ function thumb(parent: Container, x: number, down: boolean, fg: number) {
 		.closePath()
 		.stroke({ color: fg, width: 1.9, join: "round", cap: "round" });
 }
-export function drawBallots(
-	parent: Container,
+export function drawBallot(
+	card: Container,
 	layout: StageLayout,
 	scene: StageScene,
+	choice: VoteChoice,
 ) {
 	const votes = scene.result?.votes;
 	if (!votes) return;
 	const { voteWidth: w, voteHeight: h, width, voteTop } = layout;
-	for (const choice of ["up", "down"] as const) {
-		const up = choice === "up",
-			selected = votes.selected === choice;
-		const x = width / 2 + ((up ? -1 : 1) * (w + 12)) / 2;
-		const card = layer(parent, x, voteTop + h / 2);
-		card.angle = up ? -1.8 : 1.8;
-		const q = pen(card),
-			fg = up ? 0x305d57 : 0x894536;
-		const fill = stateFill(
-			scene,
-			choice,
-			votes.enabled || selected
-				? up
-					? 0xcde8d9
-					: 0xffcfb7
-				: up
-					? 0xdce8dc
-					: 0xf4d7c6,
-			up ? 0xbde0cf : 0xffbfa3,
-			up ? 0xa5cdb9 : 0xf5af93,
-			votes.enabled,
-		);
-		q.roundRect(1 - w / 2, 3 - h / 2, w, h, 6)
-			.fill(0xcda68b)
-			.roundRect(-w / 2, -h / 2, w, h, 6)
-			.fill(fill)
-			.stroke({ color: fg, width: selected ? 2.5 : 1.4 });
-		if (selected) {
-			q.circle(-w * 0.32, 0, 10.3).fill(fg);
-			q.moveTo(-w * 0.32 - 4.5, 0)
-				.lineTo(-w * 0.32 - 1, 3.5)
-				.lineTo(-w * 0.32 + 5, -4)
-				.stroke({ color: 0xfff6de, width: 2, cap: "round", join: "round" });
-		} else thumb(card, -w * 0.32, !up, fg);
-		lettering(
-			card,
-			up ? "좋아요" : "싫어요",
-			-w * 0.045,
-			0,
-			w < 145 ? 13.2 : 15,
-			fg,
-		);
-		lettering(
-			card,
-			String(votes[choice]),
-			w * 0.29,
-			0,
-			Math.min(28, h * 0.47),
-			fg,
-			{ serif: true, maxWidth: w * 0.31 },
-		);
-	}
+	const up = choice === "up",
+		selected = votes.selected === choice;
+	const x = width / 2 + ((up ? -1 : 1) * (w + 12)) / 2;
+	card.position.set(x, voteTop + h / 2);
+	card.angle = up ? -1.8 : 1.8;
+	const q = pen(card),
+		fg = up ? 0x305d57 : 0x894536;
+	const fill = stateFill(
+		scene,
+		choice,
+		votes.enabled || selected
+			? up
+				? 0xcde8d9
+				: 0xffcfb7
+			: up
+				? 0xdce8dc
+				: 0xf4d7c6,
+		up ? 0xbde0cf : 0xffbfa3,
+		up ? 0xa5cdb9 : 0xf5af93,
+		votes.enabled,
+	);
+	q.roundRect(1 - w / 2, 3 - h / 2, w, h, 6)
+		.fill(0xcda68b)
+		.roundRect(-w / 2, -h / 2, w, h, 6)
+		.fill(fill)
+		.stroke({ color: fg, width: selected ? 2.5 : 1.4 });
+	if (selected) {
+		q.circle(-w * 0.32, 0, 10.3).fill(fg);
+		q.moveTo(-w * 0.32 - 4.5, 0)
+			.lineTo(-w * 0.32 - 1, 3.5)
+			.lineTo(-w * 0.32 + 5, -4)
+			.stroke({ color: 0xfff6de, width: 2, cap: "round", join: "round" });
+	} else thumb(card, -w * 0.32, !up, fg);
+	lettering(
+		card,
+		up ? "좋아요" : "싫어요",
+		-w * 0.045,
+		0,
+		w < 145 ? 13.2 : 15,
+		fg,
+	);
+	const number = lettering(
+		card,
+		String(votes[choice]),
+		w * 0.29,
+		0,
+		Math.min(28, h * 0.47),
+		fg,
+		{ serif: true, maxWidth: w * 0.31 },
+	);
+	const stamp = layer(card, -w * 0.32, 0);
+	pen(stamp).circle(0, 0, 11.5).stroke({ color: fg, width: 1.5 });
+	stamp.alpha = 0;
+	return { number, numberScale: number.scale.x, stamp };
 }

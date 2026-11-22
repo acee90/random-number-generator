@@ -62,7 +62,10 @@ export function lettering(
 	return parent.addChild(glyph);
 }
 
-export function drawCloth(parent: Container, { width, height }: StageLayout) {
+export function drawCloth(
+	parent: Container,
+	{ width, height }: Pick<StageLayout, "width" | "height">,
+) {
 	const g = pen(parent);
 	const stride = width < 350 ? 18 : 22;
 	g.rect(0, 0, width, height).fill(0xfff2da);
@@ -86,13 +89,17 @@ export function drawCloth(parent: Container, { width, height }: StageLayout) {
 		seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
 		return seed / 4294967296;
 	};
-	for (let i = 0; i < (width * height) / 350; i++)
-		g.rect(
-			random() * width,
-			random() * height,
-			0.55 + random() * 0.9,
-			0.48,
-		).fill({ color: i % 3 ? 0x846548 : 0xffffff, alpha: i % 3 ? 0.14 : 0.65 });
+	for (let y = 0; y < height; y += stride)
+		for (let i = 0; i < (width * stride) / 350; i++)
+			g.rect(
+				random() * width,
+				y + random() * stride,
+				0.55 + random() * 0.9,
+				0.48,
+			).fill({
+				color: i % 3 ? 0x846548 : 0xffffff,
+				alpha: i % 3 ? 0.14 : 0.65,
+			});
 }
 
 export function stateFill(

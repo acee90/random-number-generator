@@ -129,12 +129,7 @@ function drawLabels(
 	}
 }
 
-export function drawWheel(
-	stage: Container,
-	side: number,
-	labels: readonly WheelLabel[],
-	count: number,
-) {
+export function drawRim(stage: Container, side: number) {
 	const board = boardLayer(stage, side);
 	const face = board.addChild(new Graphics());
 	const rim = rosette(195.5, 3.5, 24);
@@ -158,6 +153,16 @@ export function drawWheel(
 			.arc(0, 0, 181.6, angle, angle + 0.05)
 			.stroke({ color: picnic.cream, width: 1.8, cap: "round" });
 	}
+}
+
+export function drawWheel(
+	stage: Container,
+	side: number,
+	labels: readonly WheelLabel[],
+	count: number,
+) {
+	const board = boardLayer(stage, side);
+	const face = board.addChild(new Graphics());
 	// Beyond the circumference in screen pixels adjacent sectors share pixels.
 	const sectors = Math.min(count, Math.max(360, Math.ceil(side * Math.PI)));
 	const step = turn / Math.max(1, sectors);
