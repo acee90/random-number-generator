@@ -309,10 +309,6 @@
 	opacity: 0.18;
 	pointer-events: none;
 }
-.lunch-room .lunch-wheel {
-	inline-size: min(calc(100cqi - 24px), calc(100cqb - 24px), 760px);
-	margin-block: 12px;
-}
 .room-motion-note {
 	font-size: 11px;
 	line-height: 1.5;

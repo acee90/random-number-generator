@@ -1,24 +1,16 @@
 import { Check, ThumbsDown, ThumbsUp } from "lucide-react";
-import {
-	type CSSProperties,
-	useEffect,
-	useId,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
-	isRoomDrawVoter,
-	type RoomDraw,
-	type RoomDrawVote,
-} from "@/lib/lunchRoom";
+	type FeedbackOptions,
+	type RoomFeedback,
+	useRoomFeedback,
+	type VoteChoice,
+} from "@/hooks/useRoomFeedback";
+import type { RoomDraw } from "@/lib/lunchRoom";
 import "./room-draw-feedback.css";
 
-type VoteChoice = RoomDrawVote["vote"];
-type OptimisticVote = Pick<RoomDrawVote, "participantId" | "name" | "vote">;
-type DisplayVote = RoomDrawVote | OptimisticVote;
-const choices = [
+export const choices = [
 	{ vote: "up", label: "좋아요", Icon: ThumbsUp },
 	{ vote: "down", label: "싫어요", Icon: ThumbsDown },
 ] as const;
@@ -58,7 +50,7 @@ function VoteBurst() {
 	);
 }
 
-function VoteTally({
+export function VoteTally({
 	id,
 	choice,
 	count,
@@ -67,6 +59,7 @@ function VoteTally({
 	readOnly,
 	canVote,
 	onVote,
+	onBoard = false,
 }: {
 	id: string;
 	choice: VoteChoice;
@@ -76,6 +69,7 @@ function VoteTally({
 	readOnly: boolean;
 	canVote: boolean;
 	onVote: () => void;
+	onBoard?: boolean;
 }) {
 	const previous = useRef({ count, animate });
 	const [burst, setBurst] = useState(0);
@@ -85,6 +79,7 @@ function VoteTally({
 		previous.current = { count, animate };
 	}, [count, animate]);
 	const { label, Icon } = choice === "up" ? choices[0] : choices[1];
+	const Heading = onBoard ? "h4" : "h5";
 	const content = (
 		<>
 			<span
@@ -92,7 +87,7 @@ function VoteTally({
 				key={`icon:${burst}`}
 				aria-hidden="true"
 			>
-				<Icon size={28} />
+				{onBoard && selected ? <Check size={20} /> : <Icon size={28} />}
 				{animate && burst > 0 && <VoteBurst />}
 			</span>
 			<span className="room-feedback-team-label">{label}</span>
@@ -100,7 +95,7 @@ function VoteTally({
 				<strong>{count}</strong>
 				{animate && burst > 0 && <VoteBurst />}
 			</span>
-			{selected && (
+			{selected && !onBoard && (
 				<span className="room-feedback-team-selection" aria-hidden="true">
 					<Check size={12} />내 선택
 				</span>
@@ -108,8 +103,10 @@ function VoteTally({
 		</>
 	);
 	return (
-		<h5
+		<Heading
 			aria-label={`${label} ${count}`}
+			data-hit={onBoard ? choice : undefined}
+			data-selected={(onBoard && selected) || undefined}
 			id={id}
 			className="room-feedback-tally-heading"
 			data-burst={(animate && burst) || undefined}
@@ -130,105 +127,63 @@ function VoteTally({
 					{content}
 				</Button>
 			)}
-		</h5>
+		</Heading>
 	);
 }
 
-export default function RoomDrawFeedback({
+type FeedbackProps = Omit<FeedbackOptions, "draw"> & {
+	draw: RoomDraw;
+	isHost: boolean;
+	mode?: "full" | "results";
+};
+export default function RoomDrawFeedback(props: FeedbackProps) {
+	const feedback = useRoomFeedback(props);
+	return <RoomFeedbackDetails {...props} feedback={feedback} />;
+}
+
+export function RoomFeedbackDetails({
 	draw,
 	selfId,
 	isHost,
 	connected,
-	pending,
-	optimisticVote,
 	readOnly = false,
 	mode = "full",
-	onVote,
-}: {
-	draw: RoomDraw;
-	selfId?: string;
-	isHost: boolean;
-	connected: boolean;
-	pending: boolean;
-	optimisticVote?: OptimisticVote;
-	readOnly?: boolean;
-	mode?: "full" | "results";
-	onVote: (drawId: string, vote: VoteChoice) => boolean;
-}) {
+	feedback,
+	onBoard = false,
+	reducedMotion = false,
+}: Pick<
+	FeedbackProps,
+	"draw" | "selfId" | "isHost" | "connected" | "readOnly" | "mode"
+> & { feedback: RoomFeedback; onBoard?: boolean; reducedMotion?: boolean }) {
 	const id = useId();
-	const [failedSubmission, setFailedSubmission] = useState<{
-		drawId: string;
-		message: string;
-	} | null>(null);
-	const votes = useMemo(
-		() =>
-			[...(draw.votes ?? [])].sort(
-				(left, right) =>
-					left.reactionMs - right.reactionMs ||
-					left.timestamp - right.timestamp,
-			),
-		[draw.votes],
-	);
-	const eligible = isRoomDrawVoter(draw, selfId);
-	const pendingVote =
-		pending &&
-		connected &&
-		eligible &&
-		!readOnly &&
-		optimisticVote?.participantId === selfId &&
-		!votes.some((vote) => vote.participantId === optimisticVote?.participantId)
-			? optimisticVote
-			: undefined;
-	const upVotes: DisplayVote[] = votes.filter((vote) => vote.vote === "up");
-	const downVotes: DisplayVote[] = votes.filter((vote) => vote.vote === "down");
-	if (pendingVote) {
-		(pendingVote.vote === "up" ? upVotes : downVotes).push(pendingVote);
-	}
-	const ranksByParticipant = new Map(
-		votes.map((vote, index) => [vote.participantId, index + 1]),
-	);
-	const ownVote =
-		votes.find((vote) => vote.participantId === selfId) ?? pendingVote;
-	const ownChoice = choices.find((choice) => choice.vote === ownVote?.vote);
-	const submitError =
-		!readOnly && !pending && !ownVote && failedSubmission?.drawId === draw.id
-			? failedSubmission.message
-			: "";
-	const canVote = !readOnly && connected && eligible && !pending && !ownVote;
-	const statusMessage = readOnly
-		? "확정된 투표 기록입니다."
-		: !connected
-			? "다시 연결되면 투표할 수 있습니다."
-			: pendingVote
-				? "투표를 보내고 있습니다…"
-				: ownChoice
-					? `${ownChoice.label}에 투표했습니다.`
-					: pending
-						? "투표를 보내고 있습니다…"
-						: submitError ||
-							(!selfId
-								? "참가 정보를 확인하고 있습니다."
-								: !eligible
-									? "추첨 시작 후 입장해 이번 결과에는 투표할 수 없습니다. 다음 추첨부터 참여해 주세요."
-									: "");
-	const showVisibleStatus =
-		!readOnly &&
-		(!connected ||
-			(!pending && !ownVote && (Boolean(submitError) || !selfId || !eligible)));
+	const {
+		upVotes,
+		downVotes,
+		ranksByParticipant,
+		ownChoice,
+		showVisibleStatus,
+		statusMessage,
+		submitError,
+		canVote,
+		submit,
+	} = feedback;
 
 	return (
 		<section
 			className="room-draw-feedback"
-			data-mode={mode}
-			data-own-choice={ownVote?.vote}
-			aria-labelledby={`${id}-title`}
+			data-mode={onBoard ? "board" : mode}
+			data-own-choice={ownChoice}
+			aria-label={onBoard ? "실시간 투표 현황" : undefined}
+			aria-labelledby={onBoard ? undefined : `${id}-title`}
 		>
-			<div className="room-feedback-heading">
-				<h4 id={`${id}-title`}>
-					{mode === "results" ? "실시간 투표 현황" : "메뉴 투표"}
-				</h4>
-				<span>{votes.length + (pendingVote ? 1 : 0)}명 참여</span>
-			</div>
+			{!onBoard && (
+				<div className="room-feedback-heading">
+					<h4 id={`${id}-title`}>
+						{mode === "results" ? "실시간 투표 현황" : "메뉴 투표"}
+					</h4>
+					<span>{upVotes.length + downVotes.length}명 참여</span>
+				</div>
+			)}
 
 			<output
 				className={showVisibleStatus ? "room-feedback-status" : "sr-only"}
@@ -309,27 +264,22 @@ export default function RoomDrawFeedback({
 							key={vote}
 							className="room-feedback-list"
 							data-choice={vote}
-							data-selected={ownVote?.vote === vote || undefined}
+							data-selected={ownChoice === vote || undefined}
 							aria-labelledby={`${id}-${vote}`}
 						>
 							<VoteTally
+								onBoard={onBoard}
 								key={`${draw.id}:${vote}`}
 								id={`${id}-${vote}`}
 								choice={vote}
 								count={voters.length}
-								selected={ownVote?.vote === vote}
-								animate={mode === "results" && !readOnly && connected}
+								selected={ownChoice === vote}
+								animate={
+									mode === "results" && !readOnly && connected && !reducedMotion
+								}
 								readOnly={readOnly}
 								canVote={canVote}
-								onVote={() => {
-									if (!canVote) return;
-									setFailedSubmission(null);
-									if (!onVote(draw.id, vote))
-										setFailedSubmission({
-											drawId: draw.id,
-											message: "투표를 보내지 못했습니다. 다시 시도해 주세요.",
-										});
-								}}
+								onVote={() => submit(vote)}
 							/>
 							{voters.length > 0 ? (
 								voterList
@@ -340,7 +290,7 @@ export default function RoomDrawFeedback({
 					);
 				})}
 			</fieldset>
-			{mode === "results" && isHost && !readOnly && (
+			{!onBoard && mode === "results" && isHost && !readOnly && (
 				<p className="room-feedback-timing-note">
 					후보 편집이나 다음 게임으로 이동하면 투표가 마감돼요.
 				</p>

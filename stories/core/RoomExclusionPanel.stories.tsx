@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import RoomExclusionPanel from "@/components/features/RoomExclusionPanel";
+import "@/components/features/picnic/picnic-art.css";
+import "@/components/features/picnic/details.css";
 import { sampleLunchPlaces } from "@/lib/lunch";
 import type { RoomSnapshot } from "@/lib/lunchRoom";
 
@@ -62,12 +64,12 @@ type PreviewArgs = {
 	locked: boolean;
 	busy: boolean;
 	showResult: boolean;
-	sidebarWidth: number;
+	boardWidth: number;
 };
 
 function ExclusionPanelPreview({
 	initialSnapshot,
-	sidebarWidth,
+	boardWidth,
 	...props
 }: PreviewArgs) {
 	const [snapshot, setSnapshot] = useState(initialSnapshot);
@@ -83,8 +85,10 @@ function ExclusionPanelPreview({
 				</button>
 			</div>
 			<div
+				className="picnic-frame"
 				style={{
-					inlineSize: `${sidebarWidth}px`,
+					minBlockSize: 400,
+					inlineSize: `${boardWidth}px`,
 					maxInlineSize: "100%",
 					border: "1px solid var(--line)",
 				}}
@@ -92,16 +96,18 @@ function ExclusionPanelPreview({
 				<RoomExclusionPanel
 					{...props}
 					snapshot={snapshot}
-					onToggle={(excludeDrawn) =>
-						setSnapshot((current) => ({ ...current, excludeDrawn }))
-					}
-					onReset={() =>
+					onToggle={async (excludeDrawn) => {
+						setSnapshot((current) => ({ ...current, excludeDrawn }));
+						return true;
+					}}
+					onReset={async () => {
 						setSnapshot((current) => ({
 							...current,
 							excludedIds: [],
 							exclusionRecords: [],
-						}))
-					}
+						}));
+						return true;
+					}}
 				/>
 			</div>
 		</div>
@@ -118,7 +124,7 @@ const meta = {
 		locked: false,
 		busy: false,
 		showResult: false,
-		sidebarWidth: 170,
+		boardWidth: 597,
 	},
 	argTypes: {
 		initialSnapshot: { table: { disable: true } },
@@ -126,10 +132,10 @@ const meta = {
 		locked: { name: "옵션 잠김" },
 		busy: { name: "변경 전송 중" },
 		showResult: { name: "결과 화면" },
-		sidebarWidth: {
-			name: "패널 너비",
+		boardWidth: {
+			name: "보드 너비",
 			control: "select",
-			options: [170, 260, 320],
+			options: [320, 597, 720],
 		},
 	},
 	render: (args) => (

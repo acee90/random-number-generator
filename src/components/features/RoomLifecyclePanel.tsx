@@ -45,12 +45,11 @@ import CandidateListLoadDialog, {
 import CandidateListSaveDialog from "./CandidateListSaveDialog";
 import RoomCandidateAuthor from "./RoomCandidateAuthor";
 import RoomCandidateEditor from "./RoomCandidateEditor";
-import RoomExclusionPanel from "./RoomExclusionPanel";
+import type { ExclusionOptions } from "./RoomExclusionPanel";
 import "./room-lifecycle.css";
 
 type Room = ReturnType<typeof useLunchRoom>;
 type StartOptions = { expectedRevision?: number };
-type Confirmation = { revision: number };
 type StageAction = "open" | "close" | "finalize";
 
 function gameFilterFor(snapshot: RoomSnapshot | null): GameFilter {
@@ -78,7 +77,6 @@ export default function RoomLifecyclePanel({
 	room,
 	busy,
 	showResult,
-	resultAction,
 	onEditResult,
 	onStart,
 	onHistory,
@@ -90,12 +88,14 @@ export default function RoomLifecyclePanel({
 	solo?: boolean;
 	busy: boolean;
 	showResult: boolean;
-	resultAction?: ReactNode;
 	onEditResult?: () => boolean;
 	onStart: (options?: StartOptions) => void;
 	onHistory: () => void;
 	historyButtonRef?: RefObject<HTMLButtonElement | null>;
-	children: (requestStart: () => void) => ReactNode;
+	children: (
+		requestStart: () => void,
+		exclusion: ExclusionOptions,
+	) => ReactNode;
 }) {
 	const id = useId();
 	const snapshot = room.snapshot;
@@ -137,8 +137,6 @@ export default function RoomLifecyclePanel({
 	);
 	const [recommendationPending, setRecommendationPending] = useState(false);
 	const recommendationAttempt = useRef(0);
-	const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
-	const [localError, setLocalError] = useState("");
 	const [candidateViewOpen, setCandidateViewOpen] = useState(false);
 	const candidateViewTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const panelRef = useRef<HTMLElement | null>(null);
@@ -360,7 +358,6 @@ export default function RoomLifecyclePanel({
 		else resetDraft();
 	}
 	function requestStart() {
-		setLocalError("");
 		onStart({ expectedRevision: revision });
 	}
 	async function recommend() {
@@ -498,18 +495,6 @@ export default function RoomLifecyclePanel({
 		void room.enterEditing(revision).then((accepted) => {
 			if (!accepted) focusEditorRef.current = false;
 		});
-	}
-	async function confirm() {
-		const action = confirmation;
-		setConfirmation(null);
-		if (!action) return;
-		if (action.revision !== revision || locked || !isHost) {
-			setLocalError(
-				"게임 조건이 바뀌었어요. 목록을 확인한 뒤 다시 진행해 주세요.",
-			);
-			return;
-		}
-		await room.resetExclusions(action.revision);
 	}
 	function addCandidateFromEditor(name: string) {
 		if (!editable) return false;
@@ -710,11 +695,6 @@ export default function RoomLifecyclePanel({
 					<option key={category} value={category} />
 				))}
 			</datalist>
-			{localError && (
-				<p role="alert" className="room-error">
-					{localError}
-				</p>
-			)}
 			{!listScreen && unsaved && (
 				<output className="room-draft-notice">
 					적용하지 않은 편집 내용을 보관하고 있어요. 편집 단계에서 확인할 수
@@ -1000,22 +980,17 @@ export default function RoomLifecyclePanel({
 						className="room-roulette-and-exclusions"
 						data-result={showResult || undefined}
 					>
-						<div className="room-lifecycle-main">{children(requestStart)}</div>
-						<RoomExclusionPanel
-							snapshot={snapshot}
-							isHost={isHost}
-							locked={locked}
-							busy={busy}
-							showResult={showResult}
-							action={showResult ? resultAction : undefined}
-							onToggle={(checked) =>
-								void room.updateRoomOptions(checked, revision)
-							}
-							onReset={() => {
-								setLocalError("");
-								setConfirmation({ revision });
-							}}
-						/>
+						<div className="room-lifecycle-main">
+							{children(requestStart, {
+								snapshot,
+								isHost,
+								locked,
+								busy,
+								showResult,
+								onToggle: room.updateRoomOptions,
+								onReset: room.resetExclusions,
+							})}
+						</div>
 					</div>
 					{!showResult && !busy && eligible.length === 0 && (
 						<output className="room-waiting-empty">
@@ -1158,28 +1133,6 @@ export default function RoomLifecyclePanel({
 							}}
 						>
 							추천 삭제
-						</AlertDialogAction>
-					</AlertDialogFooter>
-				</AlertDialogContent>
-			</AlertDialog>
-			<AlertDialog
-				open={Boolean(confirmation)}
-				onOpenChange={(open) => {
-					if (!open) setConfirmation(null);
-				}}
-			>
-				<AlertDialogContent>
-					<AlertDialogHeader>
-						<AlertDialogTitle>제외 목록을 초기화할까요?</AlertDialogTitle>
-						<AlertDialogDescription>
-							당첨 제외 내역만 비웁니다. 후보 원본, 직접 제외, 지난 기록과 현재
-							결과는 유지됩니다.
-						</AlertDialogDescription>
-					</AlertDialogHeader>
-					<AlertDialogFooter>
-						<AlertDialogCancel>취소</AlertDialogCancel>
-						<AlertDialogAction onClick={() => void confirm()}>
-							초기화
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>

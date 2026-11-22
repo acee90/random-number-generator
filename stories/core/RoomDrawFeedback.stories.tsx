@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import RoomDrawResult from "@/components/features/RoomDrawResult";
+import RoomGameStage from "@/components/features/RoomGameStage";
 import {
 	createPreviewDraw,
 	previewGuests,
@@ -11,7 +11,7 @@ import { ResultFrame, VotePlayground } from "./playgrounds";
 
 const meta = {
 	title: "CORE/투표",
-	component: RoomDrawResult,
+	component: RoomGameStage,
 	args: {
 		draw: createPreviewDraw(),
 		selfId: previewSelfId,
@@ -37,7 +37,7 @@ const meta = {
 		titleId: { table: { disable: true } },
 	},
 	render: (args) => <ResultFrame {...args} />,
-} satisfies Meta<typeof RoomDrawResult>;
+} satisfies Meta<typeof RoomGameStage>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Playground: Story = {
