@@ -16,12 +16,11 @@ export type CandidateListDraft = {
 
 export type SavedCandidateList = CandidateListDraft & { updatedAt: number };
 
-/** Preview limits; service request/snapshot limits are part of the #4 migration. */
+/** Field limits are shared; collection size is governed by serialized byte limits. */
 export const candidateDraftLimits = {
 	name: 40,
 	itemName: 80,
 	category: 24,
-	items: 200,
 	savedLists: 20,
 } as const;
 

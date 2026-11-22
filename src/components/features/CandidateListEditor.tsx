@@ -5,13 +5,7 @@ import {
 	RotateCcw,
 	Trash2,
 } from "lucide-react";
-import {
-	type FormEvent,
-	useEffect,
-	useId,
-	useRef,
-	useState,
-} from "react";
+import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -68,9 +62,7 @@ function validateDraft(
 	if (!draft.name) errors.name = "목록 이름을 입력해 주세요.";
 	else if (draft.name.length > candidateDraftLimits.name)
 		errors.name = `목록 이름은 ${candidateDraftLimits.name}자까지 입력해 주세요.`;
-	if (draft.items.length > candidateDraftLimits.items)
-		errors.items = `후보는 ${candidateDraftLimits.items}개까지 넣을 수 있어요.`;
-	else if (personalSave && draft.items.length === 0)
+	if (personalSave && draft.items.length === 0)
 		errors.items = "저장할 후보를 1개 이상 추가해 주세요.";
 	else if (
 		!personalSave &&
@@ -165,7 +157,6 @@ export function CandidateListEditor({
 	}
 
 	function addItem() {
-		if (draft.items.length >= candidateDraftLimits.items) return;
 		const item: CandidateListItem = {
 			id: crypto.randomUUID(),
 			name: "",
@@ -264,23 +255,12 @@ export function CandidateListEditor({
 					</h2>
 					<div>
 						<NearbyRestaurantEntry
-							existingIds={
-								new Set(draft.items.map(({ id: itemId }) => itemId))
-							}
-							remaining={Math.max(
-								0,
-								candidateDraftLimits.items - draft.items.length,
-							)}
+							existingIds={new Set(draft.items.map(({ id: itemId }) => itemId))}
 							disabled={locked}
 							onAdd={(items) => {
-								if (
-									locked ||
-									draft.items.length + items.length >
-										candidateDraftLimits.items
-								)
-									return false;
+								if (locked) return false;
 								onChange({ ...draft, items: [...draft.items, ...items] });
-									return true;
+								return true;
 							}}
 						/>
 						{onImportTemplate && (
@@ -445,7 +425,6 @@ export function CandidateListEditor({
 					variant="outline"
 					type="button"
 					ref={addRef}
-					disabled={draft.items.length >= candidateDraftLimits.items}
 					onClick={addItem}
 				>
 					<Plus size={20} aria-hidden="true" />

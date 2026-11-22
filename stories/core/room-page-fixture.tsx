@@ -441,8 +441,7 @@ export function RoomPageFixtureProvider({
 				!snapshot.intakeId ||
 				!trimmed ||
 				!normalizedCategory ||
-				trimmed.length > 80 ||
-				snapshot.candidates.length >= lunchRoomLimits.maxCandidates
+				trimmed.length > 80
 			)
 				return false;
 			applySnapshot((value) => ({

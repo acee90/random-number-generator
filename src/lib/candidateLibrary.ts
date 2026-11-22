@@ -78,7 +78,6 @@ function parseList(value: unknown): VersionedCandidateList | null {
 		!opaqueId.test(value.id) ||
 		!validText(value.name, candidateDraftLimits.name) ||
 		!Array.isArray(value.items) ||
-		value.items.length > candidateDraftLimits.items ||
 		typeof value.updatedAt !== "number" ||
 		!Number.isSafeInteger(value.updatedAt) ||
 		value.updatedAt < 0 ||

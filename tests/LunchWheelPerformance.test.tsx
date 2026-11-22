@@ -197,4 +197,27 @@ describe("static wheel face rendering", () => {
 		view.rerender(<LunchWheel {...wheelProps(2)} />);
 		expect(view.container.querySelectorAll("text")).toHaveLength(2);
 	});
+
+	it("keeps every candidate in the wheel while skipping unreadable labels above 117", () => {
+		const cos = vi.spyOn(Math, "cos");
+		const candidates = Array.from({ length: 797 }, (_, index) => ({
+			id: `restaurant-${index}`,
+			name: `음식점 ${index}`,
+			category: "한식",
+		}));
+		const view = render(
+			<LunchWheel
+				{...wheelProps(0)}
+				candidates={candidates}
+				candidateNumbers={candidates.map((_, index) => index + 1)}
+			/>,
+		);
+		expect(
+			view.container
+				.querySelector(".lunch-wheel")
+				?.getAttribute("data-candidate-count"),
+		).toBe("797");
+		expect(view.container.querySelectorAll("text")).toHaveLength(0);
+		expect(cos).not.toHaveBeenCalled();
+	});
 });

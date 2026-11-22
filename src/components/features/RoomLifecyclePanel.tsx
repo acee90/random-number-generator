@@ -36,7 +36,6 @@ import {
 	type RoomGameFilter as GameFilter,
 	getEligibleRoomCandidates,
 	getRoomPhase,
-	lunchRoomLimits,
 	type RoomCandidate,
 	type RoomSnapshot,
 } from "@/lib/lunchRoom";
@@ -215,12 +214,6 @@ export default function RoomLifecyclePanel({
 		(snapshot?.intakeId ?? null) === draftIntakeId &&
 		!draftStageInvalid;
 	const editable = isHost && editPhase && sameDraftStage && !locked;
-	const nearbyRemaining = Math.max(
-		0,
-		lunchRoomLimits.maxCandidates -
-			draftCandidates.length -
-			Number(Boolean(newName.trim())),
-	);
 	const showSetupChoice =
 		isHost &&
 		phase === "editing" &&
@@ -406,12 +399,6 @@ export default function RoomLifecyclePanel({
 		let items = liveDraftCandidates;
 		const pendingName = newName.trim();
 		if (pendingName) {
-			if (items.length >= lunchRoomLimits.maxCandidates) {
-				setEditError(
-					`후보는 ${lunchRoomLimits.maxCandidates}개까지 추가할 수 있습니다.`,
-				);
-				return false;
-			}
 			items = [
 				{
 					id: crypto.randomUUID(),
@@ -553,12 +540,7 @@ export default function RoomLifecyclePanel({
 	}
 	async function addCandidateFromEditor() {
 		const name = newName.trim();
-		if (
-			!name ||
-			!editable ||
-			draftCandidates.length >= lunchRoomLimits.maxCandidates
-		)
-			return;
+		if (!name || !editable) return;
 		if (sharedAdd) {
 			if (await room.addCandidate(name)) {
 				setNewName((value) => (value.trim() === name ? "" : value));
@@ -577,7 +559,7 @@ export default function RoomLifecyclePanel({
 		setNewName("");
 	}
 	function appendNearby(items: RoomCandidate[]) {
-		if (!editable || sharedAdd || items.length > nearbyRemaining) return false;
+		if (!editable || sharedAdd) return false;
 		setDraftCandidates((entries) => [...entries, ...items]);
 		setWriting(true);
 		if (showSetupChoice)
@@ -829,7 +811,6 @@ export default function RoomLifecyclePanel({
 								setup
 								disabled={!editable}
 								existingIds={draftIds}
-								remaining={nearbyRemaining}
 								onAdd={appendNearby}
 							/>
 						</section>
@@ -848,12 +829,11 @@ export default function RoomLifecyclePanel({
 								headerActions={
 									<>
 										{!sharedAdd && (
-										<NearbyRestaurantEntry
-											disabled={!editable}
-											existingIds={draftIds}
-											remaining={nearbyRemaining}
-											onAdd={appendNearby}
-										/>
+											<NearbyRestaurantEntry
+												disabled={!editable}
+												existingIds={draftIds}
+												onAdd={appendNearby}
+											/>
 										)}
 										<Button
 											disabled={

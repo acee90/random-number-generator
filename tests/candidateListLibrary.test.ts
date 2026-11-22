@@ -86,6 +86,21 @@ describe("Storybook candidate list library", () => {
 		]);
 	});
 
+	it("round-trips a saved list with 797 candidates", () => {
+		const value = library();
+		const first = value.lists[0].items[0];
+		value.lists[0].items = Array.from({ length: 797 }, (_, index) => ({
+			...first,
+			id: `restaurant-${index}`,
+			name: `음식점 ${index}`,
+		}));
+		const storage = memoryStorage();
+		writeCandidateLibrary(storage, value);
+		expect(readCandidateLibrary(storage).library.lists[0].items).toHaveLength(
+			797,
+		);
+	});
+
 	it("uses only the isolated preview namespace and never reads or rewrites service data", () => {
 		const initial = {
 			"randomlab.history": "unchanged history",
@@ -170,15 +185,6 @@ describe("Storybook candidate list library", () => {
 					(_, n) => ({ ...value.lists[0], id: `list-${n}` }),
 				);
 				value.lastUsedId = null;
-			},
-		],
-		[
-			"too many rows",
-			(value: CandidateLibrary) => {
-				value.lists[0].items = Array.from(
-					{ length: candidateDraftLimits.items + 1 },
-					(_, n) => ({ ...value.lists[0].items[0], id: `row-${n}` }),
-				);
 			},
 		],
 		[

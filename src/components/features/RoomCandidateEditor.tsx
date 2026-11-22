@@ -248,13 +248,7 @@ export default function RoomCandidateEditor({
 	}, [contextKey, disabled]);
 
 	function requestAdd() {
-		if (
-			disabled ||
-			!newName.trim() ||
-			candidates.length >= lunchRoomLimits.maxCandidates ||
-			!finishName()
-		)
-			return;
+		if (disabled || !newName.trim() || !finishName()) return;
 		if (!sharedAdd) {
 			pendingAdditionIds.current = new Set(
 				candidates.map((candidate) => candidate.id),
@@ -317,12 +311,7 @@ export default function RoomCandidateEditor({
 	}
 
 	function undoDelete() {
-		if (
-			disabled ||
-			!deleted ||
-			candidates.length >= lunchRoomLimits.maxCandidates
-		)
-			return;
+		if (disabled || !deleted) return;
 		if (
 			!candidates.some((candidate) => candidate.id === deleted.candidate.id)
 		) {
@@ -362,13 +351,6 @@ export default function RoomCandidateEditor({
 		}
 		if (names.some((name) => name.length > 80)) {
 			setBulkError("후보 이름은 한 줄에 80자까지 입력해 주세요.");
-			bulkRef.current?.focus();
-			return;
-		}
-		if (candidates.length + names.length > lunchRoomLimits.maxCandidates) {
-			setBulkError(
-				`후보는 ${lunchRoomLimits.maxCandidates}개까지 추가할 수 있습니다. ${lunchRoomLimits.maxCandidates - candidates.length}개 이하로 줄여 주세요.`,
-			);
 			bulkRef.current?.focus();
 			return;
 		}
@@ -442,9 +424,7 @@ export default function RoomCandidateEditor({
 								<Save size={16} aria-hidden="true" /> 내 목록에 저장
 							</DropdownMenuItem>
 							<DropdownMenuItem
-								disabled={
-									disabled || candidates.length >= lunchRoomLimits.maxCandidates
-								}
+								disabled={disabled}
 								onSelect={() => {
 									overlayFromMenu.current = true;
 									setBulkError("");
@@ -587,11 +567,7 @@ export default function RoomCandidateEditor({
 					size="icon"
 					aria-label={sharedAddPending ? "후보 추가 중" : "후보 추가"}
 					aria-busy={sharedAddPending}
-					disabled={
-						disabled ||
-						!newName.trim() ||
-						candidates.length >= lunchRoomLimits.maxCandidates
-					}
+					disabled={disabled || !newName.trim()}
 					onClick={() => {
 						requestAdd();
 						newCandidateRef.current?.focus();
@@ -608,28 +584,17 @@ export default function RoomCandidateEditor({
 					)}
 				</Button>
 			</div>
-			{candidates.length >= lunchRoomLimits.maxCandidates && (
-				<p className="room-simple-note">
-					후보는 {lunchRoomLimits.maxCandidates}개까지 추가할 수 있습니다.
-				</p>
-			)}
-
 			{deleted && (
 				<div className="room-simple-undo">
 					<span>{deleted.candidate.name} 삭제됨</span>
 					<Button
 						variant="ghost"
 						size="sm"
-						disabled={
-							disabled || candidates.length >= lunchRoomLimits.maxCandidates
-						}
+						disabled={disabled}
 						onClick={undoDelete}
 					>
 						되돌리기
 					</Button>
-					{candidates.length >= lunchRoomLimits.maxCandidates && (
-						<span>복구하려면 후보를 하나 비워 주세요.</span>
-					)}
 				</div>
 			)}
 

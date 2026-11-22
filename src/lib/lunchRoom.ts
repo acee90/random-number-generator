@@ -15,7 +15,6 @@ export const lunchRoomLimits = {
 	awayAfterMs: 5 * 60 * 1000,
 	maxMessages: 100,
 	maxHistory: 20,
-	maxCandidates: 200,
 	maxCategoryLength: 24,
 	maxMessageBytes: 4096,
 	maxEditMessageBytes: 256 * 1024,
@@ -430,7 +429,6 @@ function candidateIds(value: unknown, minimum = 2): string[] | null {
 	if (
 		!Array.isArray(value) ||
 		value.length < minimum ||
-		value.length > lunchRoomLimits.maxCandidates ||
 		!Array.from(value).every(
 			(id) => typeof id === "string" && placeIds.has(id),
 		) ||
@@ -694,11 +692,7 @@ export function parseRoomGameFilter(value: unknown): RoomGameFilter | null {
 	const excludedIds = parseCandidateIdList(value.excludedIds);
 	if (!excludedIds) return null;
 	if (value.categories === null) return { categories: null, excludedIds };
-	if (
-		!Array.isArray(value.categories) ||
-		value.categories.length > lunchRoomLimits.maxCandidates
-	)
-		return null;
+	if (!Array.isArray(value.categories)) return null;
 	const categories = Array.from(value.categories, normalizeRoomCategory);
 	if (
 		categories.some((category) => category === null) ||
@@ -709,12 +703,7 @@ export function parseRoomGameFilter(value: unknown): RoomGameFilter | null {
 }
 
 function parsePlaces(value: unknown, minimum = 0): RoomCandidate[] | null {
-	if (
-		!Array.isArray(value) ||
-		value.length < minimum ||
-		value.length > lunchRoomLimits.maxCandidates
-	)
-		return null;
+	if (!Array.isArray(value) || value.length < minimum) return null;
 	const places: RoomCandidate[] = [];
 	const seen = new Set<string>();
 	for (const item of value) {
@@ -872,8 +861,7 @@ function parseDraw(value: unknown): RoomDraw | null {
 }
 
 function parseExclusionRecords(value: unknown): RoomExclusionRecord[] | null {
-	if (!Array.isArray(value) || value.length > lunchRoomLimits.maxCandidates)
-		return null;
+	if (!Array.isArray(value)) return null;
 	const records: RoomExclusionRecord[] = [];
 	const candidates = new Set<string>();
 	const draws = new Set<string>();
@@ -910,7 +898,6 @@ function parseExclusionRecords(value: unknown): RoomExclusionRecord[] | null {
 
 function parseCandidateIdList(value: unknown): string[] | null {
 	return Array.isArray(value) &&
-		value.length <= lunchRoomLimits.maxCandidates &&
 		Array.from(value).every(isId) &&
 		new Set(value).size === value.length
 		? [...value]

@@ -7,6 +7,7 @@ import "./lunch-wheel.css";
 type Phase = "idle" | "fetching" | "spinning" | "done";
 
 const wheelColors = ["#d6f266", "#edf2e3", "#ffffff", "#dce6c9"];
+const maximumReadableLabels = Math.floor((2 * Math.PI * 112) / 6);
 
 type WheelLabel = { id: string; text: string };
 
@@ -85,13 +86,16 @@ export function LunchWheel({
 	drawText?: string;
 }) {
 	const size = candidates.length;
-	const labels = candidates.map((place, index) => {
-		const characters = Array.from(place.name);
-		return {
-			id: place.id,
-			text: `${candidateNumbers[index]} ${characters.length > 5 ? `${characters.slice(0, 4).join("")}…` : place.name}`,
-		};
-	});
+	const labels =
+		size <= maximumReadableLabels
+			? candidates.map((place, index) => {
+					const characters = Array.from(place.name);
+					return {
+						id: place.id,
+						text: `${candidateNumbers[index]} ${characters.length > 5 ? `${characters.slice(0, 4).join("")}…` : place.name}`,
+					};
+				})
+			: [];
 	const background = size
 		? `conic-gradient(${candidates
 				.map(

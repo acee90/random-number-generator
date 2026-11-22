@@ -3110,18 +3110,15 @@ describe("empty setup and independent game filter service", () => {
 		});
 	};
 
-	it("restores a room created with the maximum custom list and its inclusion flags", async () => {
+	it("restores a room created with 797 custom candidates and their inclusion flags", async () => {
 		const { input } = await room(false);
 		const context = new HarnessContext();
-		const candidates = Array.from(
-			{ length: lunchRoomLimits.maxCandidates },
-			(_, index) => ({
-				id: `saved-${index}`,
-				name: "같은 이름",
-				category: "팀 메뉴",
-				included: index % 2 === 0,
-			}),
-		);
+		const candidates = Array.from({ length: 797 }, (_, index) => ({
+			id: `saved-${index}`,
+			name: "같은 이름",
+			category: "팀 메뉴",
+			included: index % 2 === 0,
+		}));
 		await createServer(context).initialize({
 			...input,
 			candidateIds: [],
@@ -5113,30 +5110,24 @@ describe("LunchRoomServer game lifecycle", () => {
 		expect(acknowledgements(host, "retry-open-save")).toHaveLength(1);
 	});
 
-	it("rejects recommendations at the supported candidate limit without changing the list or version", async () => {
+	it("accepts recommendations after a 797-candidate list without changing unrelated rows", async () => {
 		const { server, context } = await room();
 		const host = await connect(server, context, "방장", hostToken);
 		const guest = await connect(server, context, "추천손님");
-		await replaceList(
-			server,
-			host,
-			lunchRoomLimits.maxCandidates,
-			"maximum-list",
-		);
-		await transition(server, host, "open", "maximum-open");
+		await replaceList(server, host, 797, "large-list");
+		await transition(server, host, "open", "large-list-open");
 		const before = structuredClone(latestSnapshot(host).snapshot);
 		await send(server, guest, {
 			type: "recommend",
-			id: "over-maximum",
+			id: "after-797",
 			intakeId: before.intakeId,
 			name: "추가 후보",
 		});
-		expect(requestErrors(guest, "over-maximum")).toMatchObject([
-			{ code: "CANDIDATE_LIMIT" },
-		]);
-		expect(latestSnapshot(host).snapshot.candidates).toEqual(before.candidates);
-		expect(latestSnapshot(host).snapshot.listVersion).toBe(before.listVersion);
-		expect(revision(host)).toBe(before.revision);
+		expect(requestErrors(guest, "after-797")).toEqual([]);
+		expect(latestSnapshot(host).snapshot.candidates).toHaveLength(798);
+		expect(latestSnapshot(host).snapshot.candidates.slice(0, 797)).toEqual(
+			before.candidates,
+		);
 	});
 
 	it("rejects unversioned legacy candidate replacement without losing a new recommendation or stored exclusions", async () => {

@@ -275,9 +275,6 @@ describe("lunch room creation and seed candidate selection", () => {
 	it("accepts all107 source restaurants for room creation, selection and a complete draw snapshot", () => {
 		const candidateIds = sampleLunchPlaces.map((place) => place.id);
 		expect(candidateIds).toHaveLength(107);
-		expect(lunchRoomLimits.maxCandidates).toBeGreaterThanOrEqual(
-			candidateIds.length,
-		);
 		const createInput = validateCreateRoomInput({
 			title: "전체 식당",
 			hostName: "방장",
@@ -1415,16 +1412,13 @@ describe("room lifecycle and candidate protocol", () => {
 		expect(client(command)).toBeNull();
 	});
 
-	it("accepts full candidate edits beyond the ordinary frame limit without relaxing chat limits", () => {
-		const candidates = Array.from(
-			{ length: lunchRoomLimits.maxCandidates },
-			(_, index) => ({
-				id: `custom-${index}`,
-				name: "한".repeat(80),
-				category: "확인 불가",
-				included: true,
-			}),
-		);
+	it("accepts full candidate edits with 797 candidates without relaxing chat limits", () => {
+		const candidates = Array.from({ length: 797 }, (_, index) => ({
+			id: `custom-${index}`,
+			name: `음식점 ${index}`,
+			category: "확인 불가",
+			included: true,
+		}));
 		const edit = {
 			type: "room-edit",
 			id: "edit-full",
@@ -1435,7 +1429,13 @@ describe("room lifecycle and candidate protocol", () => {
 		expect(new TextEncoder().encode(raw).byteLength).toBeGreaterThan(
 			lunchRoomLimits.maxMessageBytes,
 		);
+		expect(new TextEncoder().encode(raw).byteLength).toBeLessThanOrEqual(
+			lunchRoomLimits.maxEditMessageBytes,
+		);
 		expect(parseClientMessage(raw)).toEqual(edit);
+		expect(
+			parseRoomSnapshot(makeRoom({ candidates }))?.candidates,
+		).toHaveLength(797);
 		expect(
 			client({
 				type: "chat",
@@ -1692,7 +1692,7 @@ describe("candidate setup and independent game filters", () => {
 			expectedRevision: 1,
 			filter: {
 				categories: Array.from(
-					{ length: 200 },
+					{ length: 797 },
 					(_, index) => `${index}-${"한".repeat(20)}`,
 				),
 				excludedIds: [],
@@ -1745,9 +1745,9 @@ describe("candidate setup and independent game filters", () => {
 });
 
 describe("custom candidate snapshot capacity", () => {
-	it("fits the supported full custom list and twenty complete immutable rounds within the server frame limit", () => {
+	it("keeps a long-entry 200-row stress payload with twenty immutable rounds under the server frame limit", () => {
 		const candidates: RoomCandidate[] = Array.from(
-			{ length: lunchRoomLimits.maxCandidates },
+			{ length: 200 },
 			(_, index) => ({
 				id: `candidate-${index}-${"x".repeat(60)}`,
 				name: "한".repeat(80),
@@ -1784,6 +1784,38 @@ describe("custom candidate snapshot capacity", () => {
 				{ length: lunchRoomLimits.maxMessages },
 				(_, index) =>
 					makeChat({ id: `chat-${index}`, text: "\u0000".repeat(500) }),
+			),
+		});
+		const raw = JSON.stringify({ type: "snapshot", snapshot, serverTime: now });
+		expect(new TextEncoder().encode(raw).byteLength).toBeLessThan(
+			lunchRoomLimits.maxServerMessageBytes,
+		);
+		expect(parseServerMessage(raw)).not.toBeNull();
+	});
+
+	it("fits 797 ordinary candidates and twenty complete immutable rounds under the server frame limit", () => {
+		const candidates: RoomCandidate[] = Array.from(
+			{ length: 797 },
+			(_, index) => ({
+				id: `restaurant-${index}`,
+				name: `음식점 ${index}`,
+				category: "한식",
+				included: true,
+			}),
+		);
+		const draw = makeDraw({
+			candidates,
+			winnerIndex: candidates.length - 1,
+			probabilities: candidates.map(() => 1 / candidates.length),
+			toRotation:
+				1800 - ((candidates.length - 1 + 0.5) * 360) / candidates.length,
+		});
+		const snapshot = makeRoom({
+			candidates,
+			draw,
+			history: Array.from(
+				{ length: lunchRoomLimits.maxHistory },
+				(_, index) => ({ ...draw, id: `history-${index}` }),
 			),
 		});
 		const raw = JSON.stringify({ type: "snapshot", snapshot, serverTime: now });
