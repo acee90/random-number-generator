@@ -20,16 +20,12 @@ export function getWheelLabels(
 }
 
 export type VoteChoice = "up" | "down";
-export type Control = "exclude" | "sound" | "draw" | VoteChoice;
+export type Control = "sound" | "draw" | VoteChoice;
 export type StageScene = {
 	/** The ticket or wheel occupies the top of the same canvas as the lists. */
 	mainHeight?: number;
 	voteMotionRound?: string;
-	toolbar?: {
-		exclude: boolean;
-		sound: boolean;
-		soundSupported: boolean;
-	};
+	sound?: { enabled: boolean; supported: boolean };
 	wheel: {
 		labels: readonly WheelLabel[];
 		count: number;
@@ -66,7 +62,6 @@ export function stageLayout(width: number, height: number) {
 		height,
 		pad,
 		top,
-		optionsWidth: small ? 148 : 160,
 		wheelSide,
 		wheelY: 56 + (height - 61) / 2,
 		hubSize: Math.max(48, (wheelSide * 94) / 440),

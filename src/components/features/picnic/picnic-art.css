@@ -15,7 +15,7 @@
 }
 .picnic-main[data-result] {
 	aspect-ratio: auto;
-	height: calc(var(--ticket-top) + var(--ticket-h) + 24px);
+	height: calc(var(--ticket-top) + var(--ticket-h) + 16px);
 	min-height: 0;
 }
 .picnic-art {
@@ -29,27 +29,14 @@
 .picnic-art[data-painted] {
 	visibility: visible;
 }
-.picnic-frame > .picnic-exclusion,
 .picnic-sound,
 .picnic-ticket,
 .picnic-wheel {
 	position: absolute;
 }
-.picnic-frame > .picnic-exclusion {
-	inset: var(--top) auto auto var(--pad);
-	z-index: 1;
-	width: var(--options-width, 160px);
-	height: 44px;
-	gap: 6px;
-	padding: 0 10px;
-	border-radius: 24px;
-	font-size: 13px;
-}
-.picnic-exclusion span {
-	font-size: 12px;
-}
 .picnic-sound {
-	inset: var(--top) var(--pad) auto auto;
+	inset-block-start: var(--top);
+	inset-inline-end: var(--pad);
 	width: 44px;
 	height: 44px;
 	border-radius: 50%;
@@ -128,7 +115,7 @@
 @media (forced-colors: none) {
 	.picnic-frame:has(.picnic-art[data-painted])
 		:is(
-			.picnic-exclusion,
+			.picnic-options,
 			.picnic-sound button,
 			.lunch-wheel-center,
 			.room-result-summary,
@@ -140,19 +127,6 @@
 	.picnic-frame:has(.picnic-art[data-painted])
 		:is(.lunch-wheel-track, .lunch-wheel-pointer) {
 		visibility: hidden;
-	}
-	.picnic-frame:has(.picnic-art[data-painted]):has(
-			.picnic-exclusion:focus-visible
-		)::after {
-		content: "";
-		position: absolute;
-		inset: var(--top) auto auto var(--pad);
-		width: var(--options-width);
-		height: 44px;
-		border-radius: 24px;
-		outline: 3px solid #284f84;
-		outline-offset: 2px;
-		pointer-events: none;
 	}
 }
 @media (forced-colors: active) {

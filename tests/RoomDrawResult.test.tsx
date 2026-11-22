@@ -105,7 +105,7 @@ describe("optimistic room result voting", () => {
 		}) as HTMLButtonElement;
 		update({ canNext: true });
 		expect(next.disabled).toBe(false);
-		expect(next.getAttribute("data-variant")).toBe("default");
+		expect(next.closest(".picnic-sheet")).toBeNull();
 		expect(
 			screen.getByRole("heading", { name: original.draw.candidates[0].name }),
 		).toBeTruthy();
@@ -281,7 +281,7 @@ describe("optimistic room result voting", () => {
 		const button = screen.getByRole("button", { name: `${label} 투표` });
 		button.focus();
 		fireEvent.click(button);
-		const tally = screen.getByRole("heading", { level: 5, name: tallyName });
+		const tally = screen.getByRole("heading", { level: 4, name: tallyName });
 		expect(document.activeElement).toBe(button);
 		expect(tally.contains(button)).toBe(true);
 		const choice = label === "좋아요" ? "up" : "down";

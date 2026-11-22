@@ -48,14 +48,31 @@ try {
 	const board = page.getByRole("region", { name: "게임 보드" });
 	const idle = board.locator('canvas[data-painted][data-scene="idle"]');
 	await idle.waitFor();
-	const options = board.getByRole("button", { name: /^중복 없이 추첨/ });
-	const popup = page.getByRole("dialog", { name: "중복 없이 추첨" });
-	await options.click();
-	const exclude = popup.getByRole("switch");
-	if (!(await exclude.isChecked())) await exclude.click();
-	await popup.getByRole("button", { name: "닫기" }).click();
+	const history = board.getByRole("button", { name: "당첨 제외 내역 열기" });
+	const popup = page.getByRole("dialog", { name: "당첨 제외 내역" });
+	const switchName = /중복 없이 추첨/;
+	const exclude = board.getByRole("switch", { name: switchName });
+	const initial = await exclude.isChecked();
+	await board
+		.getByText("중복 없이 추첨", { exact: true })
+		.click({ position: { x: 12, y: 22 } });
+	await board
+		.getByRole("switch", { name: switchName, checked: !initial })
+		.waitFor();
+	assert.equal(await popup.count(), 0);
+	await exclude.click();
+	await board
+		.getByRole("switch", { name: switchName, checked: initial })
+		.waitFor();
+	if (!initial) {
+		await exclude.press("Space");
+		await board
+			.getByRole("switch", { name: switchName, checked: true })
+			.waitFor();
+	}
 	for (const { width, height } of [
 		{ width: 320, height: 760 },
+		{ width: 591, height: 718 },
 		{ width: 597, height: 850 },
 		{ width: 701, height: 718 },
 		{ width: 1440, height: 940 },
@@ -133,14 +150,30 @@ try {
 			);
 		const result = board.locator('canvas[data-painted][data-scene="result"]');
 		await result.waitFor();
+		assert.equal(
+			await board.getByRole("heading", { name: "실시간 투표 현황" }).count(),
+			0,
+		);
+		assert.equal(
+			await board.getByText(/다음 게임으로 이동하면 투표가/).count(),
+			0,
+		);
+		const next = board.getByRole("button", { name: "다음 게임" });
+		const nextBox = await next.boundingBox(),
+			winnerBox = await board.locator(".picnic-ticket").boundingBox(),
+			sheetBox = await board.locator(".picnic-sheet").boundingBox();
+		assert.ok(
+			nextBox.y >= winnerBox.y + winnerBox.height &&
+				nextBox.y + nextBox.height <= sheetBox.y,
+		);
 		const like = board.getByRole("button", { name: "좋아요 투표" });
 		await like.click();
 		await board
 			.getByRole("heading", { name: "좋아요 1", exact: true })
 			.waitFor();
 		const motion = await result.evaluate(async (canvas) => {
-			const card = canvas.parentElement
-				.querySelector('[data-hit="up"]')
+			const number = canvas.parentElement
+				.querySelector('[data-hit="up"] strong')
 				.getBoundingClientRect();
 			const box = canvas.getBoundingClientRect(),
 				scale = canvas.width / box.width;
@@ -150,10 +183,10 @@ try {
 			for (let i = 0; i < 8; i++) {
 				await new Promise(requestAnimationFrame);
 				const { data } = ctx.getImageData(
-					(card.x - box.x + card.width * 0.65) * scale,
-					(card.y - box.y + 5) * scale,
-					card.width * 0.3 * scale,
-					(card.height - 10) * scale,
+					(number.x - box.x - 5) * scale,
+					(number.y - box.y - 5) * scale,
+					(number.width + 10) * scale,
+					(number.height + 10) * scale,
 				);
 				frames.add(
 					data.reduce((sum, byte) => Math.imul(sum ^ byte, 16777619), 0),
@@ -176,7 +209,7 @@ try {
 			const list = await group
 				.locator("ul, .room-feedback-empty")
 				.boundingBox();
-			assert.ok(button.height >= 44 && Math.abs(button.x - list.x) <= 1);
+			assert.ok(button.height >= 70 && Math.abs(button.x - list.x) <= 1);
 			assert.ok(
 				list.y >= button.y + button.height &&
 					list.y - button.y - button.height <= 12,
@@ -186,8 +219,8 @@ try {
 			await board.getByRole("list", { name: "당첨 제외 내역" }).count(),
 			0,
 		);
-		await options.focus();
-		await options.press("Enter");
+		await history.focus();
+		await history.press("Enter");
 		await popup.waitFor();
 		assert.ok(
 			await popup.getByRole("list", { name: "당첨 제외 내역" }).isVisible(),
@@ -227,7 +260,7 @@ try {
 		} else await page.keyboard.press("Escape");
 		await popup.waitFor({ state: "detached" });
 		await page.waitForFunction(() =>
-			document.activeElement?.matches(".picnic-exclusion"),
+			document.activeElement?.matches(".picnic-history-button"),
 		);
 
 		await board.getByRole("button", { name: "다음 게임" }).click();

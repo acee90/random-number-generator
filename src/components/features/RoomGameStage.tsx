@@ -133,14 +133,7 @@ export default function RoomGameStage({
 			result?.votes && voting.connected && !voting.readOnly && !reducedMotion
 				? draw?.id
 				: undefined,
-		toolbar:
-			exclusion && sound
-				? {
-						exclude: exclusion.snapshot?.excludeDrawn ?? false,
-						sound: sound.enabled,
-						soundSupported: sound.supported,
-					}
-				: undefined,
+		sound: sound && { enabled: sound.enabled, supported: sound.supported },
 		wheel: {
 			labels:
 				wheel && !result
@@ -163,7 +156,6 @@ export default function RoomGameStage({
 	const box = {
 		"--pad": `${layout.pad}px`,
 		"--top": `${layout.top}px`,
-		"--options-width": `${layout.optionsWidth}px`,
 		"--wheel": `${layout.wheelSide}px`,
 		"--wheel-y": `${layout.wheelY}px`,
 		"--hub": `${layout.hubSize}px`,
@@ -238,33 +230,33 @@ export default function RoomGameStage({
 					)}
 				</div>
 				<div className="picnic-details">
-					{result && draw && (!solo || (isHost && !voting.readOnly)) && (
-						<div className="picnic-sheet">
-							{!solo && (
-								<RoomFeedbackDetails
-									draw={draw}
-									{...voting}
-									isHost={isHost}
-									mode="results"
-									feedback={feedback}
-									onBoard
-									reducedMotion={reducedMotion}
-								/>
+					{result && (result.votes || (isHost && !voting.readOnly)) && (
+						<div className="picnic-result-tools">
+							{result.votes && (
+								<span className="picnic-participation">
+									{result.votes.up + result.votes.down}명 참여
+								</span>
 							)}
 							{isHost && !voting.readOnly && (
-								<div className="picnic-footer">
-									{!solo && (
-										<p className="room-feedback-timing-note">
-											후보 편집이나 다음 게임으로 이동하면 투표가 마감돼요.
-										</p>
-									)}
-									<RoomNextGameButton
-										disabled={!canNext || nextPending || voting.pending}
-										pending={nextPending}
-										onClick={onNext}
-									/>
-								</div>
+								<RoomNextGameButton
+									disabled={!canNext || nextPending || voting.pending}
+									pending={nextPending}
+									onClick={onNext}
+								/>
 							)}
+						</div>
+					)}
+					{result?.votes && draw && (
+						<div className="picnic-sheet">
+							<RoomFeedbackDetails
+								draw={draw}
+								{...voting}
+								isHost={isHost}
+								mode="results"
+								feedback={feedback}
+								onBoard
+								reducedMotion={reducedMotion}
+							/>
 						</div>
 					)}
 				</div>

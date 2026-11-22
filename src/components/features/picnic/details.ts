@@ -1,5 +1,6 @@
 import { type Container, Text, type TextStyleFontWeight } from "pixi.js";
 import { layer, pen } from "./stationery";
+import { coupon } from "./ticket";
 
 // The native lists own wrapping, tab order and scrolling. Paint their visible
 // rows at those same coordinates so names, hit targets and the printed sheet agree.
@@ -90,28 +91,47 @@ export function drawDetails(
 			g.roundRect(x, y, w, h, 12)
 				.fill(style.backgroundColor)
 				.stroke({ color: style.borderTopColor, width: 1 });
-		} else if (el.matches(".picnic-setting-row")) {
-			pen(group).roundRect(x, y, w, h, 7).fill(style.backgroundColor);
 		} else if (
-			el.matches(".picnic-footer") &&
-			parseFloat(style.borderTopWidth)
+			el.matches(
+				".picnic-exclusion, .picnic-history-button, .picnic-options-error",
+			)
 		) {
+			const radius = Number.parseFloat(style.borderTopLeftRadius);
 			pen(group)
-				.moveTo(x, y)
-				.lineTo(x + w, y)
-				.stroke({ color: style.borderTopColor, width: 1 });
+				.roundRect(x, y, w, h, radius)
+				.fill(style.backgroundColor)
+				.stroke({ color: style.borderTopColor, width: 1.25 });
+		} else if (el.matches(".picnic-next-stub")) {
+			const cut = style.direction === "rtl" ? x + w : x;
+			const g = pen(group);
+			for (let dash = y + 1; dash < y + h; dash += 6)
+				g.moveTo(cut, dash).lineTo(cut, Math.min(y + h, dash + 3));
+			g.stroke({ color: style.borderInlineStartColor, width: 1 });
 		} else if (el.matches('[role="switch"]')) {
 			const checked = el.getAttribute("aria-checked") === "true";
+			const thumbAtRight = checked !== (style.direction === "rtl");
 			const g = pen(group);
 			g.roundRect(x, y, w, h, h / 2)
 				.fill(style.backgroundColor)
-				.circle(checked ? x + w - h / 2 : x + h / 2, y + h / 2, h / 2 - 3)
+				.circle(thumbAtRight ? x + w - h / 2 : x + h / 2, y + h / 2, h / 2 - 3)
 				.fill(0xfff8e9);
 			if (el.matches(":disabled")) g.alpha = 0.55;
 		} else if (el instanceof HTMLButtonElement) {
 			const active = !el.disabled && el.matches(":active");
 			const over = !el.disabled && hover && el.matches(":hover");
-			if (el.matches('.room-next-round, [data-slot="alert-dialog-action"]')) {
+			if (el.matches(".room-next-round")) {
+				const g = pen(group);
+				g.position.set(x + w / 2, y + h / 2);
+				coupon(
+					g,
+					w - 1.5,
+					h - 1.5,
+					style.backgroundColor,
+					style.borderTopColor,
+					1.25,
+					1,
+				);
+			} else if (el.matches('[data-slot="alert-dialog-action"]')) {
 				pen(group)
 					.roundRect(x, y, w, h, 7)
 					.fill(
@@ -144,7 +164,16 @@ export function drawDetails(
 			const g = pen(group);
 			g.position.set(x + w / 2, y + h / 2);
 			g.scale.set(w / 24, h / 24);
-			if (el.classList.contains("lucide-arrow-right")) {
+			if (el.classList.contains("lucide-history")) {
+				g.arc(0, 0, 8.5, -2.76, 2.56)
+					.moveTo(-9, -7)
+					.lineTo(-9, -2)
+					.lineTo(-4, -2)
+					.moveTo(0, -5)
+					.lineTo(0, 0)
+					.lineTo(3.8, 2.4);
+			} else if (el.classList.contains("lucide-arrow-right")) {
+				if (style.direction === "rtl") g.scale.x *= -1;
 				g.moveTo(-8, 0).lineTo(8, 0).moveTo(1, -7).lineTo(8, 0).lineTo(1, 7);
 			} else if (el.classList.contains("lucide-x")) {
 				g.moveTo(-6, -6).lineTo(6, 6).moveTo(6, -6).lineTo(-6, 6);
@@ -181,9 +210,21 @@ export function drawDetails(
 				.roundRect(x + w - 4, y + offset, 3, thumb, 1.5)
 				.fill(0xa88970);
 		}
-		if (el.matches(':focus-visible:not([tabindex="-1"])')) {
+		if (
+			el.matches(
+				'.picnic-exclusion:has(:focus-visible), :focus-visible:not([tabindex="-1"], [role="switch"])',
+			)
+		) {
 			pen(group)
-				.roundRect(x + 1.5, y + 1.5, w - 3, h - 3, 6)
+				.roundRect(
+					x + 1.5,
+					y + 1.5,
+					w - 3,
+					h - 3,
+					el.matches(".picnic-exclusion, .picnic-history-button")
+						? h / 2 - 1.5
+						: 6,
+				)
 				.stroke({ color: 0x284f84, width: 3 });
 		}
 	}

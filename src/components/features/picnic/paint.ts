@@ -4,7 +4,7 @@ import "pixi.js/text";
 import { drawRim, drawTable, drawWheel } from "./board";
 import { drawDetails, observeDetails } from "./details";
 import { type StageScene, stageLayout } from "./layout";
-import { drawCloth, drawHub, drawToolbar, layer, pen } from "./stationery";
+import { drawCloth, drawHub, drawSound, layer, pen } from "./stationery";
 import { drawBallot, drawTicket } from "./ticket";
 
 export async function createPicnicPainter(canvas: HTMLCanvasElement) {
@@ -32,7 +32,8 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 		ticket = layer(stage),
 		details = layer(stage),
 		ballots = layer(stage),
-		toolbar = layer(stage),
+		sound = layer(stage),
+		options = layer(stage),
 		popup = layer(stage);
 	// Clip the cached square texture to the disc, including its antialiased edge.
 	const discMask = pen(stage).circle(0, 0, 174.5).fill(0xffffff);
@@ -51,6 +52,8 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 	let dirty = true;
 	const detailsRoot =
 		canvas.parentElement?.querySelector<HTMLElement>(".picnic-details");
+	const optionsRoot =
+		canvas.parentElement?.querySelector<HTMLElement>(".picnic-options");
 	const popupRoot = canvas.parentElement?.querySelector<HTMLElement>(
 		".picnic-popup-layer",
 	);
@@ -73,6 +76,7 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 				height: rect.height,
 			};
 			const focused = Boolean(el.querySelector(":focus-visible"));
+			const rtl = el.matches(":dir(rtl)");
 			update(
 				cards[choice],
 				[
@@ -83,9 +87,17 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 					scene.hover === choice,
 					scene.pressed === choice,
 					focused,
+					rtl,
 				],
 				() => {
-					ink[choice] = drawBallot(cards[choice], box, scene, choice, focused);
+					ink[choice] = drawBallot(
+						cards[choice],
+						box,
+						scene,
+						choice,
+						focused,
+						rtl,
+					);
 				},
 			);
 		}
@@ -95,19 +107,23 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 		for (const child of group.removeChildren()) child.destroy(destroyChildren);
 		if (root) drawDetails(group, root, canvas);
 	}
-	const disconnectDetails =
-		detailsRoot &&
-		observeDetails(detailsRoot, () => {
-			refreshLayer(details, detailsRoot);
-			if (latestScene) paintBallots(latestScene);
+	function observeLayer(
+		group: Container,
+		root?: HTMLElement | null,
+		after?: () => void,
+	) {
+		if (!root) return;
+		return observeDetails(root, () => {
+			refreshLayer(group, root);
+			after?.();
 			renderer.render({ container: stage });
 		});
-	const disconnectPopup =
-		popupRoot &&
-		observeDetails(popupRoot, () => {
-			refreshLayer(popup, popupRoot);
-			renderer.render({ container: stage });
-		});
+	}
+	const disconnectDetails = observeLayer(details, detailsRoot, () => {
+		if (latestScene) paintBallots(latestScene);
+	});
+	const disconnectOptions = observeLayer(options, optionsRoot);
+	const disconnectPopup = observeLayer(popup, popupRoot);
 	function animateVotes(now: number) {
 		for (const [choice, start] of pulses) {
 			const glyph = ink[choice];
@@ -152,6 +168,7 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 				keys.clear();
 				dirty = true;
 				refreshLayer(details, detailsRoot);
+				refreshLayer(options, optionsRoot);
 				refreshLayer(popup, popupRoot);
 			}
 			const result = scene.result,
@@ -256,8 +273,11 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 				round && result?.votes
 					? { round, up: result.votes.up, down: result.votes.down }
 					: undefined;
-			update(toolbar, [scene.toolbar, scene.hover, scene.pressed], () =>
-				drawToolbar(toolbar, layout, scene),
+			const rtl = canvas.matches(":dir(rtl)");
+			update(
+				sound,
+				[scene.sound, scene.hover === "sound", scene.pressed === "sound", rtl],
+				() => drawSound(sound, layout, scene, rtl),
 			);
 			if (dirty) {
 				renderer.render({ container: stage });
@@ -271,6 +291,7 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 		},
 		destroy() {
 			disconnectDetails?.();
+			disconnectOptions?.();
 			disconnectPopup?.();
 			cancelAnimationFrame(motionFrame);
 			stage.destroy(destroyChildren);

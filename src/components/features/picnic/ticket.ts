@@ -1,23 +1,23 @@
-import type { Container, Graphics } from "pixi.js";
+import type { ColorSource, Container, Graphics } from "pixi.js";
 import { rosette } from "./board";
 import type { StageLayout, StageScene, VoteChoice } from "./layout";
 import { picnic } from "./palette";
 import { layer, lettering, line, pen, stateFill } from "./stationery";
 
-function coupon(
+export function coupon(
 	g: Graphics,
 	w: number,
 	h: number,
-	fill: number,
-	edge: number,
+	fill: ColorSource,
+	edge: ColorSource,
 	stroke = 1.7,
+	notches = 5,
 ) {
 	const l = -w / 2,
 		r = w / 2,
 		t = -h / 2,
 		b = h / 2,
-		rad = 7,
-		notches = 5;
+		rad = 7;
 	g.moveTo(l + rad, t)
 		.lineTo(r - rad, t)
 		.quadraticCurveTo(r, t, r, t + rad);
@@ -156,9 +156,9 @@ export function drawTicket(
 		line(strip, x, -4.5, x + 2, 4.5, 0xedb953, 0.8);
 }
 
-function thumb(parent: Container, x: number, down: boolean, fg: number) {
-	const c = layer(parent, x, 0);
-	c.scale.set(0.8, down ? -0.8 : 0.8);
+function thumb(parent: Container, down: boolean, fg: number) {
+	const c = layer(parent);
+	c.scale.y = down ? -1 : 1;
 	const g = pen(c);
 	g.roundRect(-12, -3.3, 4.5, 13, 1.1).stroke({ color: fg, width: 1.9 });
 	g.moveTo(-6, 8.6)
@@ -181,6 +181,7 @@ export function drawBallot(
 	scene: StageScene,
 	choice: VoteChoice,
 	focused: boolean,
+	rtl: boolean,
 ) {
 	const votes = scene.result?.votes;
 	if (!votes) return;
@@ -206,37 +207,51 @@ export function drawBallot(
 			color: selected ? fg : up ? 0x91ada0 : 0xd0a38d,
 			width: selected ? 2 : 1,
 		});
-	const inset = w < 150 ? 10 : 16;
-	const iconX = l + inset + 10;
+	const stacked = w < 152;
+	const inset = w < 190 ? 12 : 18;
+	const font = stacked ? 15 : 18;
+	const direction = rtl ? -1 : 1;
+	const iconX = direction * (stacked ? -(font * 3 + 6) / 2 : l + inset + 12);
+	const iconY = stacked ? t + 18 : 0;
+	const icon = layer(card, iconX, iconY);
+	icon.scale.set(stacked ? 0.8 : 1);
 	if (selected) {
-		g.circle(iconX, 0, 9.5).fill(fg);
-		g.moveTo(iconX - 4.5, 0)
-			.lineTo(iconX - 1, 3.5)
-			.lineTo(iconX + 4.8, -3.5)
-			.stroke({ color: 0xfff6de, width: 2, cap: "round", join: "round" });
-	} else thumb(card, iconX, !up, fg);
-	const font = w < 150 ? 13 : 15;
-	lettering(
+		const mark = pen(icon);
+		mark.circle(0, 0, 12).fill(fg);
+		mark
+			.moveTo(-5.4, 0)
+			.lineTo(-1.2, 4.2)
+			.lineTo(6, -4.6)
+			.stroke({ color: 0xfff6de, width: 2.3, cap: "round", join: "round" });
+	} else thumb(icon, !up, fg);
+	const label = lettering(
 		card,
 		up ? "좋아요" : "싫어요",
-		iconX + (w < 150 ? 14 : 18),
-		0,
+		iconX + direction * (stacked ? 16 : 21),
+		iconY,
 		font,
 		fg,
-		{ left: true },
 	);
+	label.anchor.x = rtl ? 1 : 0;
 	const number = lettering(
 		card,
 		String(votes[choice]),
-		w / 2 - inset,
-		0,
-		w < 150 ? 21 : 25,
+		stacked ? 0 : direction * (w / 2 - inset),
+		stacked ? h / 2 - 22 : 0,
+		stacked ? 29 : 35,
 		fg,
-		{ serif: true, maxWidth: w * 0.25 },
+		{
+			serif: true,
+			maxWidth: stacked
+				? w - 16
+				: Math.min(w * 0.36, w - 2 * inset - 36 - font * 3),
+		},
 	);
-	number.anchor.x = 1;
-	const stamp = layer(card, iconX, 0);
-	pen(stamp).circle(0, 0, 11).stroke({ color: fg, width: 1.5 });
+	number.anchor.x = stacked ? 0.5 : rtl ? 0 : 1;
+	const stamp = layer(card, iconX, iconY);
+	pen(stamp)
+		.circle(0, 0, stacked ? 10 : 14)
+		.stroke({ color: fg, width: 1.5 });
 	stamp.alpha = 0;
 	if (focused)
 		g.roundRect(l - 1.5, t - 1.5, w + 3, h + 3, 9).stroke({

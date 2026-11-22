@@ -1,4 +1,4 @@
-import { ChevronDown, RotateCcw } from "lucide-react";
+import { History, RotateCcw } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import {
 	AlertDialog,
@@ -57,7 +57,8 @@ export default function RoomExclusionPanel({
 	const [open, setOpen] = useState(false);
 	const [container, setContainer] = useState<HTMLDivElement | null>(null);
 	const [resetRevision, setResetRevision] = useState<number | null>(null);
-	const [error, setError] = useState("");
+	const [resetError, setResetError] = useState("");
+	const [toggleError, setToggleError] = useState("");
 	const titleRef = useRef<HTMLHeadingElement>(null);
 	const popupRef = useRef<HTMLDivElement>(null);
 	const scrollRef = useRef<HTMLElement>(null);
@@ -75,7 +76,7 @@ export default function RoomExclusionPanel({
 	);
 	const note = inProgress
 		? "추첨 후 변경할 수 있어요."
-		: !excludeDrawn && rows.length
+		: !excludeDrawn && snapshot?.excludedIds?.length
 			? showResult
 				? "다음 게임으로 넘어가면 제외 내역을 비워요."
 				: "다음 추첨을 시작하면 제외 내역을 비워요."
@@ -124,15 +125,17 @@ export default function RoomExclusionPanel({
 	}, [hasRows]);
 
 	async function changeSetting(checked: boolean) {
-		setError("");
+		setToggleError("");
 		if (!(await onToggle(checked, revision)))
-			setError("설정을 변경하지 못했어요. 다시 시도해 주세요.");
+			setToggleError("설정을 변경하지 못했어요. 다시 시도해 주세요.");
 	}
 	async function reset() {
 		if (resetRevision !== revision || disabled) {
-			setError("게임 조건이 바뀌었어요. 목록을 확인한 뒤 다시 진행해 주세요.");
+			setResetError(
+				"게임 조건이 바뀌었어요. 목록을 확인한 뒤 다시 진행해 주세요.",
+			);
 		} else if (!(await onReset(revision))) {
-			setError("제외 목록을 초기화하지 못했어요. 다시 시도해 주세요.");
+			setResetError("제외 목록을 초기화하지 못했어요. 다시 시도해 주세요.");
 		}
 	}
 
@@ -142,20 +145,43 @@ export default function RoomExclusionPanel({
 			onOpenChange={(next) => {
 				setOpen(next);
 				if (!next) setResetRevision(null);
-				setError("");
+				setResetError("");
 			}}
 		>
-			<DialogTrigger asChild>
-				<Button
-					variant="outline"
-					size="auto"
+			<div className="picnic-options">
+				<Label
+					htmlFor={id}
 					className="picnic-exclusion"
-					data-hit="exclude"
+					data-disabled={disabled || undefined}
 				>
-					중복 없이 추첨 <span>{excludeDrawn ? "켜짐" : "꺼짐"}</span>
-					<ChevronDown size={14} aria-hidden />
-				</Button>
-			</DialogTrigger>
+					중복 없이 추첨
+					<Switch
+						id={id}
+						checked={excludeDrawn}
+						disabled={disabled}
+						aria-label="중복 없이 추첨 · 뽑힌 후보 제외"
+						aria-description={note ?? undefined}
+						onCheckedChange={(checked) => void changeSetting(checked)}
+					/>
+				</Label>
+				<DialogTrigger asChild>
+					<Button
+						variant="outline"
+						size="auto"
+						className="picnic-history-button"
+						aria-label="당첨 제외 내역 열기"
+						title="당첨 제외 내역"
+					>
+						<History size={16} aria-hidden />
+						<span>제외 내역</span>
+					</Button>
+				</DialogTrigger>
+				{toggleError && (
+					<p className="picnic-options-error" role="alert">
+						{toggleError}
+					</p>
+				)}
+			</div>
 			<div className="picnic-popup-layer" ref={setContainer} />
 			{container && (
 				<DialogContent
@@ -175,28 +201,10 @@ export default function RoomExclusionPanel({
 						titleRef.current?.focus({ preventScroll: true });
 					}}
 				>
-					<DialogTitle ref={titleRef} tabIndex={-1}>
-						중복 없이 추첨
-					</DialogTitle>
-					<div className="picnic-setting-row">
-						<Label htmlFor={id}>뽑힌 후보 제외</Label>
-						<Switch
-							id={id}
-							size="lg"
-							checked={excludeDrawn}
-							disabled={disabled}
-							aria-label="중복 없이 추첨 · 뽑힌 후보 제외"
-							aria-describedby={note ? `${id}-note` : undefined}
-							onCheckedChange={(value) => void changeSetting(value)}
-						/>
-					</div>
-					{note && (
-						<p className="room-draw-exclusion-note" id={`${id}-note`}>
-							{note}
-						</p>
-					)}
 					<div className="picnic-ledger-heading">
-						<h3>당첨 제외 내역</h3>
+						<DialogTitle ref={titleRef} tabIndex={-1}>
+							당첨 제외 내역
+						</DialogTitle>
 						<span>{rows.length}개</span>
 					</div>
 					{rows.length ? (
@@ -244,14 +252,15 @@ export default function RoomExclusionPanel({
 							아직 제외된 후보가 없어요.
 						</p>
 					)}
-					{error && <p role="alert">{error}</p>}
+					{note && <p className="room-draw-exclusion-note">{note}</p>}
+					{resetError && <p role="alert">{resetError}</p>}
 					{((isHost && (excludeDrawn || hasRows)) ||
 						resetRevision !== null) && (
 						<AlertDialog
 							open={resetRevision !== null}
 							onOpenChange={(next) => {
 								setResetRevision(next ? revision : null);
-								if (next) setError("");
+								if (next) setResetError("");
 							}}
 						>
 							<AlertDialogTrigger asChild>

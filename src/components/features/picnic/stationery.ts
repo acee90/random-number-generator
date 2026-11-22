@@ -30,7 +30,6 @@ export function lettering(
 	fill: number,
 	options: {
 		serif?: boolean;
-		left?: boolean;
 		maxWidth?: number;
 		maxHeight?: number;
 	} = {},
@@ -50,7 +49,7 @@ export function lettering(
 		},
 		resolution: 2.5,
 	});
-	glyph.anchor.set(options.left ? 0 : 0.5, 0.5);
+	glyph.anchor.set(0.5);
 	glyph.position.set(x, y);
 	glyph.scale.set(
 		Math.min(
@@ -115,62 +114,28 @@ export function stateFill(
 	return normal;
 }
 
-export function drawToolbar(
+export function drawSound(
 	parent: Container,
 	layout: StageLayout,
 	scene: StageScene,
+	rtl: boolean,
 ) {
-	const options = scene.toolbar;
-	if (!options) return;
-	const { width, pad, top, optionsWidth } = layout;
+	const sound = scene.sound;
+	if (!sound) return;
+	const { width, pad, top } = layout;
 	const ink = picnic.ink,
-		group = layer(parent, pad, top),
-		g = pen(group);
-	const paper = 0xfff7e3;
-	g.roundRect(0.8, 2.5, optionsWidth, 44, 22)
-		.fill({ color: ink, alpha: 0.26 })
-		.roundRect(0, 0, optionsWidth, 44, 22)
-		.fill(stateFill(scene, "exclude", paper, 0xffeccc, 0xf6d9a7, true))
-		.stroke({ color: ink, width: 1.35 });
-	lettering(group, "중복 없이 추첨", 12, 22, width < 360 ? 12 : 13, ink, {
-		left: true,
-	});
-	const badgeX = optionsWidth - 58;
-	g.roundRect(badgeX, 12, 32, 20, 10).fill(
-		options.exclude ? 0xd3e7d6 : 0xeee2d2,
-	);
-	lettering(
-		group,
-		options.exclude ? "켜짐" : "꺼짐",
-		badgeX + 16,
-		22,
-		11.5,
-		options.exclude ? 0x305d47 : 0x695951,
-	);
-	g.moveTo(optionsWidth - 20, 20)
-		.lineTo(optionsWidth - 16, 24)
-		.lineTo(optionsWidth - 12, 20)
-		.stroke({ color: ink, width: 1.6, cap: "round", join: "round" });
-	const speaker = layer(parent, width - pad - 22, top + 22),
+		paper = 0xfff7e3;
+	const speaker = layer(parent, rtl ? pad + 22 : width - pad - 22, top + 22),
 		icon = pen(speaker);
 	icon
 		.circle(1, 2.5, 21.5)
 		.fill({ color: ink, alpha: 0.28 })
 		.circle(0, 0, 21.5)
-		.fill(
-			stateFill(
-				scene,
-				"sound",
-				paper,
-				0xffeccc,
-				0xf6d9a7,
-				options.soundSupported,
-			),
-		)
+		.fill(stateFill(scene, "sound", paper, 0xffeccc, 0xf6d9a7, sound.supported))
 		.stroke({ color: ink, width: 1.35 })
 		.poly([-10, -3, -6, -3, -1, -7, -1, 7, -6, 3, -10, 3])
 		.fill(ink);
-	if (options.sound) {
+	if (sound.enabled) {
 		icon
 			.moveTo(3, -4)
 			.quadraticCurveTo(7, 0, 3, 4)
@@ -181,7 +146,7 @@ export function drawToolbar(
 		line(icon, 3, -4, 9, 3, ink, 1.7);
 		line(icon, 9, -4, 3, 3, ink, 1.7);
 	}
-	if (!options.soundSupported) speaker.alpha = 0.65;
+	if (!sound.supported) speaker.alpha = 0.65;
 }
 
 export function drawHub(

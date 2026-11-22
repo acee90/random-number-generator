@@ -79,6 +79,7 @@ export function VoteTally({
 		previous.current = { count, animate };
 	}, [count, animate]);
 	const { label, Icon } = choice === "up" ? choices[0] : choices[1];
+	const Heading = onBoard ? "h4" : "h5";
 	const content = (
 		<>
 			<span
@@ -102,7 +103,7 @@ export function VoteTally({
 		</>
 	);
 	return (
-		<h5
+		<Heading
 			aria-label={`${label} ${count}`}
 			data-hit={onBoard ? choice : undefined}
 			data-selected={(onBoard && selected) || undefined}
@@ -126,7 +127,7 @@ export function VoteTally({
 					{content}
 				</Button>
 			)}
-		</h5>
+		</Heading>
 	);
 }
 
@@ -172,14 +173,17 @@ export function RoomFeedbackDetails({
 			className="room-draw-feedback"
 			data-mode={onBoard ? "board" : mode}
 			data-own-choice={ownChoice}
-			aria-labelledby={`${id}-title`}
+			aria-label={onBoard ? "실시간 투표 현황" : undefined}
+			aria-labelledby={onBoard ? undefined : `${id}-title`}
 		>
-			<div className="room-feedback-heading">
-				<h4 id={`${id}-title`}>
-					{mode === "results" ? "실시간 투표 현황" : "메뉴 투표"}
-				</h4>
-				<span>{upVotes.length + downVotes.length}명 참여</span>
-			</div>
+			{!onBoard && (
+				<div className="room-feedback-heading">
+					<h4 id={`${id}-title`}>
+						{mode === "results" ? "실시간 투표 현황" : "메뉴 투표"}
+					</h4>
+					<span>{upVotes.length + downVotes.length}명 참여</span>
+				</div>
+			)}
 
 			<output
 				className={showVisibleStatus ? "room-feedback-status" : "sr-only"}
