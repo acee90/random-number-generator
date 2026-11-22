@@ -214,13 +214,6 @@ describe("lunch room HTTP creation", () => {
 		{ ...input, hostName: "x".repeat(21) },
 		{ ...input, candidateIds: null },
 		{ ...input, candidateIds: ["missing-candidate"] },
-		{
-			...input,
-			candidateIds: Array.from(
-				{ length: lunchRoomLimits.maxCandidates + 1 },
-				() => "x",
-			),
-		},
 		{ ...input, candidateIds: [ids[0], ids[0]] },
 		{ ...input, candidateIds: [ids[0], "https://example.com/menu"] },
 		{ ...input, candidateIds: [ids[0], { id: ids[1], name: "주입한 식당" }] },
@@ -331,6 +324,25 @@ describe("lunch room HTTP creation", () => {
 				)
 			).status,
 		).toBe(400);
+	});
+
+	it("creates a room with 797 custom candidates inside the request byte limit", async () => {
+		const candidates = Array.from({ length: 797 }, (_, index) => ({
+			id: `restaurant-${index}`,
+			name: `음식점 ${index}`,
+			category: "한식",
+			included: true,
+		}));
+		const body = {
+			title: input.title,
+			hostName: input.hostName,
+			candidates,
+		};
+		expect(
+			new TextEncoder().encode(JSON.stringify(body)).byteLength,
+		).toBeLessThan(lunchRoomLimits.maxEditMessageBytes);
+		expect((await responseFor(createRequest(body))).status).toBe(201);
+		expect(party.initialize.mock.calls[0][0].candidates).toHaveLength(797);
 	});
 
 	it("rejects an advertised oversized body before initializing a room", async () => {

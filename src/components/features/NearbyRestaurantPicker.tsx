@@ -22,7 +22,6 @@ import {
 	DialogTrigger,
 } from "@/components/ui/dialog";
 import type { CandidateListItem } from "@/lib/candidateListDraft";
-import { lunchRoomLimits } from "@/lib/lunchRoom";
 import {
 	countCategories,
 	type MapPosition,
@@ -39,7 +38,6 @@ import "./nearby-restaurant-picker.css";
 
 type SearchProps = {
 	existingIds: ReadonlySet<string>;
-	remaining: number;
 	onAdd: (items: CandidateListItem[]) => boolean;
 };
 type LocationState = "locating" | "current" | "default" | "pin" | "unavailable";
@@ -56,7 +54,7 @@ type Load = {
 };
 const pageSize = 10;
 
-function SearchContents({ existingIds, remaining, onAdd }: SearchProps) {
+function SearchContents({ existingIds, onAdd }: SearchProps) {
 	const filtersId = useId();
 	const [center, setCenter] = useState(seonjeongneungStation);
 	const [userLocation, setUserLocation] = useState<MapPosition | null>(null);
@@ -170,9 +168,8 @@ function SearchContents({ existingIds, remaining, onAdd }: SearchProps) {
 		([name], index) => expanded || index < 4 || selected.includes(name),
 	);
 	const restaurantItems = nearbyCandidateItems(visible, existingIds);
-	const placesToAdd = restaurantItems.slice(0, remaining);
+	const placesToAdd = restaurantItems;
 	const categoryItems = nearbyCategoryItems(categories, existingIds);
-	const tooManyCategories = categoryItems.length > remaining;
 	const status = dragging
 		? "핀 이동 중"
 		: failed && loaded
@@ -182,13 +179,15 @@ function SearchContents({ existingIds, remaining, onAdd }: SearchProps) {
 				: locationMessages[location];
 
 	function select(value: string | null) {
-		setSelected((previous) =>
-			value === null
-				? []
-				: previous.includes(value)
-					? previous.filter((name) => name !== value)
-					: [...previous, value],
-		);
+		setSelected((previous) => {
+			if (value === null) return [];
+			const current = previous.length
+				? previous
+				: allTypes.map(([name]) => name);
+			return current.includes(value)
+				? current.filter((name) => name !== value)
+				: [...current, value];
+		});
 		setLimit(pageSize);
 		setAddError(false);
 	}
@@ -221,27 +220,27 @@ function SearchContents({ existingIds, remaining, onAdd }: SearchProps) {
 						</fieldset>
 					</div>
 					<div className="nearby-map-frame">
-					<NearbyRestaurantMap
-						center={center}
-						userLocation={userLocation}
-						radius={radius}
-						results={visible}
-						onMove={move}
-						onDragStart={() => {
-							locationAttempt.current += 1;
-							if (locating) setLocation("pin");
-							setDragging(true);
-						}}
-						onDragEnd={() => setDragging(false)}
-					/>
-					<Button
-						className="nearby-map-locate"
-						variant="outline"
-						disabled={locating}
-						onClick={() => locate(false)}
-					>
-						<LocateFixed size={16} aria-hidden="true" />내 위치
-					</Button>
+						<NearbyRestaurantMap
+							center={center}
+							userLocation={userLocation}
+							radius={radius}
+							results={visible}
+							onMove={move}
+							onDragStart={() => {
+								locationAttempt.current += 1;
+								if (locating) setLocation("pin");
+								setDragging(true);
+							}}
+							onDragEnd={() => setDragging(false)}
+						/>
+						<Button
+							className="nearby-map-locate"
+							variant="outline"
+							disabled={locating}
+							onClick={() => locate(false)}
+						>
+							<LocateFixed size={16} aria-hidden="true" />내 위치
+						</Button>
 					</div>
 					<div className="nearby-map-caption">
 						<output>{status}</output>
@@ -291,15 +290,13 @@ function SearchContents({ existingIds, remaining, onAdd }: SearchProps) {
 							legend="음식점 카테고리 여러 개 선택"
 							options={shownTypes.map(([value, count]) => ({ value, count }))}
 							selected={selected}
-							allSelected={selected.length === 0}
+							allSelected={
+								selected.length === 0 ||
+								allTypes.every(([name]) => selected.includes(name))
+							}
 							total={results.length}
 							onSelect={select}
 						/>
-					)}
-					{tooManyCategories && remaining > 0 && (
-						<p className="nearby-search-empty">
-							카테고리는 {remaining}개까지 선택해 주세요.
-						</p>
 					)}
 					{!loaded && busy && (
 						<output className="nearby-search-empty">
@@ -372,18 +369,16 @@ function SearchContents({ existingIds, remaining, onAdd }: SearchProps) {
 			</div>
 			<DialogFooter className="nearby-search-footer">
 				{addError ? (
-					<p role="alert">후보 목록이 바뀌었어요. 다시 추가해 주세요.</p>
+					<p role="alert">
+						후보를 추가하지 못했어요. 현재 목록을 확인한 뒤 다시 시도해 주세요.
+					</p>
 				) : (
-					<output>
-						{remaining === 0
-							? "후보 목록이 가득 찼어요."
-							: `남은 ${remaining}자리 · 후보 최대 ${lunchRoomLimits.maxCandidates}개 · 가까운 순으로 담아요.`}
-					</output>
+					<output>가까운 순으로 후보 목록에 추가해요.</output>
 				)}
 				<div className="nearby-add-actions">
 					<Button
 						variant="outline"
-						disabled={!canAdd || !categoryItems.length || tooManyCategories}
+						disabled={!canAdd || !categoryItems.length}
 						onClick={() => add(categoryItems)}
 					>
 						<Layers size={16} aria-hidden="true" />
@@ -407,7 +402,6 @@ function SearchContents({ existingIds, remaining, onAdd }: SearchProps) {
 }
 export default function NearbyRestaurantPicker({
 	existingIds,
-	remaining,
 	onAdd,
 	disabled = false,
 	setup = false,
@@ -447,7 +441,6 @@ export default function NearbyRestaurantPicker({
 				{open && !disabled && (
 					<SearchContents
 						existingIds={existingIds}
-						remaining={remaining}
 						onAdd={(items) => {
 							if (!onAdd(items)) return false;
 							setOpen(false);

@@ -84,19 +84,24 @@ function pendingLookup() {
 }
 function openPicker() {
 	const add = vi.fn(() => true);
-	render(
-		<NearbyRestaurantPicker
-			existingIds={new Set()}
-			remaining={200}
-			onAdd={add}
-		/>,
-	);
+	render(<NearbyRestaurantPicker existingIds={new Set()} onAdd={add} />);
 	fireEvent.click(button("주변 음식점"));
 	return add;
 }
 afterEach(() => {
 	cleanup();
 	lookup.mockReset();
+});
+
+it("adds every matching restaurant when the result set exceeds 200", async () => {
+	lookup.mockResolvedValueOnce(data(seonjeongneungStation, 797, "근처 식당"));
+	const add = openPicker();
+	await screen.findByText("797곳 · 가까운 순");
+	const addButton = button("음식점 797곳 추가");
+	expect(addButton.matches(":disabled")).toBe(false);
+	fireEvent.click(addButton);
+	expect(add).toHaveBeenCalledTimes(1);
+	expect(add.mock.calls[0][0]).toHaveLength(797);
 });
 
 it("keeps the expanded list, filter counts and choices while dragging, and only swaps in the latest pin", async () => {

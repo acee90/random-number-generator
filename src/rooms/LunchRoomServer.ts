@@ -109,9 +109,17 @@ const maxProcessedCommands = 2000;
 const maxGuestTokenMappings =
 	lunchRoomLimits.maxMembers * (lunchRoomLimits.maxHistory + 2) +
 	lunchRoomLimits.maxParticipants;
+const snapshotFrameReserveBytes = 256 * 1024;
+const utf8Encoder = new TextEncoder();
 const hashPattern = /^[0-9a-f]{64}$/i;
 const opaqueIdPattern = /^[A-Za-z0-9_-]{1,80}$/;
 const tokenPattern = /^[A-Za-z0-9_-]{16,256}$/;
+
+class RoomSnapshotSizeLimitError extends Error {
+	constructor() {
+		super("Room snapshot exceeds the supported server message size.");
+	}
+}
 
 export class LunchRoomServer extends Server<RoomEnv> {
 	static options = { hibernate: true };
@@ -120,6 +128,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 	private expired = false;
 	private mutationQueue: Promise<void> = Promise.resolve();
 	private scheduledAlarmAt: number | undefined;
+	private checkedSnapshotCapacityKey: string | null = null;
 
 	private exclusive<T>(work: () => Promise<T>): Promise<T> {
 		const task = this.mutationQueue.then(work);
@@ -835,16 +844,6 @@ export class LunchRoomServer extends Server<RoomEnv> {
 				);
 				return;
 			}
-			if (
-				message.type === "recommend" &&
-				snapshot.candidates.length >= lunchRoomLimits.maxCandidates
-			) {
-				fail(
-					"CANDIDATE_LIMIT",
-					`후보는 ${lunchRoomLimits.maxCandidates}개까지 등록할 수 있습니다.`,
-				);
-				return;
-			}
 			if (message.type === "remove-candidate") {
 				const candidate = snapshot.candidates.find(
 					(item) => item.id === message.candidateId,
@@ -964,8 +963,15 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			this.room.processedCommands = [...processed, { key, fingerprint }];
 			this.recordActivity(connection);
 			await this.save();
-		} catch {
+		} catch (error) {
 			this.room = before;
+			if (error instanceof RoomSnapshotSizeLimitError) {
+				fail(
+					"ROOM_SNAPSHOT_LIMIT",
+					"후보와 추첨 기록의 용량이 커서 저장할 수 없습니다. 후보나 메뉴 내용을 줄이거나 새 방에서 계속해 주세요.",
+				);
+				return;
+			}
 			fail(
 				"SAVE_FAILED",
 				"변경을 저장하지 못했습니다. 입력을 유지했으니 다시 시도해 주세요.",
@@ -1851,10 +1857,45 @@ export class LunchRoomServer extends Server<RoomEnv> {
 	private async save() {
 		if (this.room) {
 			this.refreshMembers();
-			await this.ctx.storage.put(roomKey, {
+			const snapshot = this.room.snapshot;
+			const capacityKey = [
+				snapshot.listVersion,
+				snapshot.revision ?? 0,
+				snapshot.drawCount ?? 0,
+				snapshot.draw?.id ?? "",
+				snapshot.history.length,
+				snapshot.messages.length,
+				snapshot.messages.at(-1)?.id ?? "",
+			].join(":");
+			const stored = {
 				...this.room,
-				snapshot: { ...this.room.snapshot, participants: [] },
-			});
+				snapshot: { ...snapshot, participants: [] },
+			};
+			if (capacityKey !== this.checkedSnapshotCapacityKey) {
+				const frame = JSON.stringify({
+					type: "snapshot",
+					snapshot: {
+						...snapshot,
+						...visibleRoomExclusions(snapshot),
+						participants: [],
+					},
+					serverTime: Date.now(),
+					self: { id: this.room.hostParticipantId, isHost: true },
+				});
+				const storageBytes = utf8Encoder.encode(
+					JSON.stringify(stored),
+				).byteLength;
+				const frameBytes = utf8Encoder.encode(frame).byteLength;
+				if (
+					storageBytes + snapshotFrameReserveBytes >
+						lunchRoomLimits.maxServerMessageBytes ||
+					frameBytes + snapshotFrameReserveBytes >
+						lunchRoomLimits.maxServerMessageBytes
+				)
+					throw new RoomSnapshotSizeLimitError();
+			}
+			await this.ctx.storage.put(roomKey, stored);
+			this.checkedSnapshotCapacityKey = capacityKey;
 		}
 	}
 

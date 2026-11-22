@@ -82,10 +82,12 @@ export function CategoryFilterChips({
 						variant="outline"
 						size="sm"
 						aria-label={count === undefined ? `${value} 분류 포함` : undefined}
-						aria-pressed={selected.includes(value)}
+						aria-pressed={allSelected || selected.includes(value)}
 						onClick={() => onSelect(value)}
 					>
-						{selected.includes(value) && <Check size={14} aria-hidden="true" />}
+						{(allSelected || selected.includes(value)) && (
+							<Check size={14} aria-hidden="true" />
+						)}
 						{value}
 						{count !== undefined && ` ${count}`}
 					</Button>

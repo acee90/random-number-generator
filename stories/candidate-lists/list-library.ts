@@ -74,7 +74,6 @@ function parseList(value: unknown): SavedCandidateList | null {
 		!isId(value.id) ||
 		!isText(value.name, candidateDraftLimits.name) ||
 		!Array.isArray(value.items) ||
-		value.items.length > candidateDraftLimits.items ||
 		typeof value.updatedAt !== "number" ||
 		!Number.isSafeInteger(value.updatedAt) ||
 		value.updatedAt < 0

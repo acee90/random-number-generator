@@ -249,12 +249,6 @@ export function CandidateListFlow({
 			importMode === "append" && draft
 				? { ...draft, items: [...draft.items, ...incoming] }
 				: { id: newId(), name, items: incoming };
-		if (next.items.length > candidateDraftLimits.items) {
-			setError(
-				`후보는 ${candidateDraftLimits.items}개까지 편집할 수 있습니다.`,
-			);
-			return;
-		}
 		setError("");
 		if (importMode === "append" && draft) {
 			setDraft(next);

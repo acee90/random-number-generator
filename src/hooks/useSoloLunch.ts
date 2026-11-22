@@ -156,7 +156,6 @@ export function useSoloLunch(places: readonly LunchPlace[] = emptyPlaces) {
 				return false;
 			if (candidates) {
 				if (
-					candidates.length > lunchRoomLimits.maxCandidates ||
 					new Set(candidates.map((item) => item.id)).size !== candidates.length
 				)
 					return false;
