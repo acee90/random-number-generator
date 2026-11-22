@@ -3,7 +3,8 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev": "vite dev --port 3000",
+		"dev": "infisical secrets-manager run --projectId=fb73da22-8db6-4d0b-b3a6-53170c224dc8 --env=dev -- npm run dev:plain",
+		"dev:plain": "vite dev --port 3000",
 		"build": "vite build",
 		"serve": "vite preview",
 		"test": "vitest run",

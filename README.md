@@ -93,20 +93,22 @@ Node.js 22 계열(22.12 이상)과 npm을 사용합니다. 저장소 루트에�
 ```powershell
 npm ci
 Copy-Item .env.example .env.local
-# .env.local에 사용할 API 키를 입력한 뒤 실행합니다.
+# Infisical CLI에 한 번 로그인한 뒤 실행합니다.
+infisical login
 npm run cf-typegen
 npm run dev
 ```
 
-처음 설정할 때 `.env.example`을 복사하고 필요한 API 키를 입력합니다. 개발 주소는 **[localhost:3000](http://localhost:3000)**입니다.
+`npm run dev`는 Infisical의 점메추 프로젝트 `dev` 환경에서 키를 주입한 뒤 서버를 시작합니다. 일반 로컬 환경으로 실행하려면 `npm run dev:plain`을 사용하고 필요한 키를 `.env.local`에 입력하세요. 개발 주소는 **[localhost:3000](http://localhost:3000)**입니다.
 
 | 환경 변수 | 용도 |
 | --- | --- |
 | `ANU_API_KEY` | [ANU Quantum Numbers](https://quantumnumbers.anu.edu.au/) 키. 비어 있으면 ANU를 건너뜁니다. |
 | `RANDOM_ORG_API_KEY` | [Random.org](https://api.random.org/api-keys) 키. 있으면 JSON-RPC API, 없으면 공개 HTTP API를 사용합니다. |
 | `RANDOM_ORG_HASHED_API_KEY` | 기존 설정 호환용. 현재 난수 요청 인증에는 사용하지 않습니다. |
+| `VITE_NAVER_MAPS_KEY_ID` | 네이버 Web Dynamic Map 공개 Client ID. `npm run dev` 실행 시 Infisical `dev` 환경에서 가져옵니다. |
 
-키는 서버에서만 읽습니다. `.env.local`과 `.dev.vars`는 Git에서 제외됩니다. **`.dev.vars` 파일이 있으면 `.env.local`을 읽지 않으므로** 한 방식만 사용합니다. 키를 바꾸면 개발 서버를 다시 시작합니다. 키 없이도 이후 출처로 대체하며 로컬 개발에 Cloudflare 인증 토큰은 필요하지 않습니다.
+ANU·Random.org 키는 서버에서만 읽고, 네이버 지도 Client ID는 지도 SDK가 브라우저에서 사용합니다. `.env.local`과 `.dev.vars`는 Git에서 제외됩니다. **`.dev.vars` 파일이 있으면 `.env.local`을 읽지 않으므로** 한 방식만 사용합니다. 키를 바꾸면 개발 서버를 다시 시작합니다. Infisical 키 주입은 CLI 계정 로그인이 필요하지만 로컬 개발에 Cloudflare 인증 토큰은 필요하지 않습니다.
 
 로컬 KV와 Durable Object 저장소는 `.wrangler/` 아래에 생성됩니다. 로컬 방과 운영 방은 서로 별개입니다. 같은 브라우저의 여러 탭은 참가 정보를 공유하므로 방장·참가자를 따로 확인하려면 다른 브라우저나 별도 브라우저 프로필을 사용합니다.
 

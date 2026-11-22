@@ -22,6 +22,7 @@ import {
 	DialogTrigger,
 } from "@/components/ui/dialog";
 import type { CandidateListItem } from "@/lib/candidateListDraft";
+import { lunchRoomLimits } from "@/lib/lunchRoom";
 import {
 	countCategories,
 	type MapPosition,
@@ -206,7 +207,7 @@ function SearchContents({ existingIds, remaining, onAdd }: SearchProps) {
 							{nearbyRadii.map((value) => (
 								<Button
 									key={value}
-									variant="outline"
+									variant={value === radius ? "secondary" : "outline"}
 									aria-pressed={value === radius}
 									onClick={() => {
 										setRadius(value);
@@ -218,14 +219,8 @@ function SearchContents({ existingIds, remaining, onAdd }: SearchProps) {
 								</Button>
 							))}
 						</fieldset>
-						<Button
-							variant="outline"
-							disabled={locating}
-							onClick={() => locate(false)}
-						>
-							<LocateFixed size={16} aria-hidden="true" />내 위치
-						</Button>
 					</div>
+					<div className="nearby-map-frame">
 					<NearbyRestaurantMap
 						center={center}
 						userLocation={userLocation}
@@ -239,6 +234,15 @@ function SearchContents({ existingIds, remaining, onAdd }: SearchProps) {
 						}}
 						onDragEnd={() => setDragging(false)}
 					/>
+					<Button
+						className="nearby-map-locate"
+						variant="outline"
+						disabled={locating}
+						onClick={() => locate(false)}
+					>
+						<LocateFixed size={16} aria-hidden="true" />내 위치
+					</Button>
+					</div>
 					<div className="nearby-map-caption">
 						<output>{status}</output>
 						<div className="nearby-source">
@@ -373,7 +377,7 @@ function SearchContents({ existingIds, remaining, onAdd }: SearchProps) {
 					<output>
 						{remaining === 0
 							? "후보 목록이 가득 찼어요."
-							: `남은 ${remaining}자리 · 음식점은 가까운 순으로 담아요.`}
+							: `남은 ${remaining}자리 · 후보 최대 ${lunchRoomLimits.maxCandidates}개 · 가까운 순으로 담아요.`}
 					</output>
 				)}
 				<div className="nearby-add-actions">

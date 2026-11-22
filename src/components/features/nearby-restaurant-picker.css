@@ -56,17 +56,17 @@
 	padding: 0;
 	border: 0;
 }
-.nearby-search-toolbar .ui-button {
+.nearby-search-radii .ui-button {
 	padding-inline: 10px;
 }
-.nearby-search-radii .ui-button[aria-pressed="true"] {
-	border-color: var(--ring);
-	background: var(--accent);
-	box-shadow: inset 0 -2px var(--ring);
+.nearby-map-frame {
+	position: relative;
 }
-.nearby-search-radii .ui-button[aria-pressed="true"]:focus-visible {
-	outline: 2px solid var(--ring);
-	outline-offset: 2px;
+.nearby-map-locate {
+	position: absolute;
+	inset-block-start: 8px;
+	inset-inline-start: 8px;
+	z-index: 2;
 }
 .nearby-map {
 	position: relative;
@@ -289,7 +289,7 @@
 	.ui-dialog-footer.nearby-search-footer {
 		padding-inline: 12px;
 	}
-	.nearby-search-toolbar .ui-button {
+	.nearby-search-radii .ui-button {
 		padding-inline: 7px;
 	}
 }

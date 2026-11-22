@@ -830,7 +830,7 @@
 	flex-direction: column;
 	position: sticky;
 	inset-block-start: 16px;
-	block-size: min(760px, calc(100dvh - 285px));
+	block-size: min(760px, calc(100dvh - 230px));
 	min-block-size: 420px;
 	isolation: isolate;
 }
@@ -862,6 +862,9 @@
 	justify-content: flex-end;
 	min-inline-size: 44px;
 	min-block-size: 44px;
+}
+.room-chat-header-toggle[data-pointer-focused="true"]:focus-visible {
+	outline: none;
 }
 .room-chat-unread {
 	display: inline-flex;

@@ -99,7 +99,7 @@
 	border-radius: 0;
 }
 .room-lifecycle-panel .room-wheel-stage {
-	--room-wheel-height: clamp(300px, calc(100dvh - 400px), 600px);
+	--room-wheel-height: clamp(300px, calc(100dvh - 340px), 600px);
 }
 .room-roulette-and-exclusions {
 	display: grid;

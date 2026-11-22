@@ -2,7 +2,6 @@ import { FolderOpen, LoaderCircle, Pencil, Plus, Trash2 } from "lucide-react";
 import {
 	type ReactNode,
 	type RefObject,
-	Suspense,
 	useEffect,
 	useId,
 	useRef,
@@ -826,15 +825,13 @@ export default function RoomLifecyclePanel({
 								<FolderOpen size={20} aria-hidden="true" />
 								<strong>목록 불러오기</strong>
 							</Button>
-							<Suspense fallback={null}>
-								<NearbyRestaurantEntry
-									setup
-									disabled={!editable}
-									existingIds={draftIds}
-									remaining={nearbyRemaining}
-									onAdd={appendNearby}
-								/>
-							</Suspense>
+							<NearbyRestaurantEntry
+								setup
+								disabled={!editable}
+								existingIds={draftIds}
+								remaining={nearbyRemaining}
+								onAdd={appendNearby}
+							/>
 						</section>
 					)}
 					{isHost ? (
@@ -851,14 +848,12 @@ export default function RoomLifecyclePanel({
 								headerActions={
 									<>
 										{!sharedAdd && (
-											<Suspense fallback={null}>
-												<NearbyRestaurantEntry
-													disabled={!editable}
-													existingIds={draftIds}
-													remaining={nearbyRemaining}
-													onAdd={appendNearby}
-												/>
-											</Suspense>
+										<NearbyRestaurantEntry
+											disabled={!editable}
+											existingIds={draftIds}
+											remaining={nearbyRemaining}
+											onAdd={appendNearby}
+										/>
 										)}
 										<Button
 											disabled={

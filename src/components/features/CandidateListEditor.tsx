@@ -7,7 +7,6 @@ import {
 } from "lucide-react";
 import {
 	type FormEvent,
-	Suspense,
 	useEffect,
 	useId,
 	useRef,
@@ -264,28 +263,26 @@ export function CandidateListEditor({
 						후보 편집
 					</h2>
 					<div>
-						<Suspense fallback={null}>
-							<NearbyRestaurantEntry
-								existingIds={
-									new Set(draft.items.map(({ id: itemId }) => itemId))
-								}
-								remaining={Math.max(
-									0,
-									candidateDraftLimits.items - draft.items.length,
-								)}
-								disabled={locked}
-								onAdd={(items) => {
-									if (
-										locked ||
-										draft.items.length + items.length >
-											candidateDraftLimits.items
-									)
-										return false;
-									onChange({ ...draft, items: [...draft.items, ...items] });
+						<NearbyRestaurantEntry
+							existingIds={
+								new Set(draft.items.map(({ id: itemId }) => itemId))
+							}
+							remaining={Math.max(
+								0,
+								candidateDraftLimits.items - draft.items.length,
+							)}
+							disabled={locked}
+							onAdd={(items) => {
+								if (
+									locked ||
+									draft.items.length + items.length >
+										candidateDraftLimits.items
+								)
+									return false;
+								onChange({ ...draft, items: [...draft.items, ...items] });
 									return true;
-								}}
-							/>
-						</Suspense>
+							}}
+						/>
 						{onImportTemplate && (
 							<Button
 								type="button"
