@@ -1,22 +1,37 @@
 import { useRouter } from "@tanstack/react-router";
-import { LoaderCircle, Users, X } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { ArrowLeft, ArrowRight, LoaderCircle } from "lucide-react";
+import { type FormEvent, useEffect, useId, useRef, useState } from "react";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
-	Dialog,
-	DialogClose,
-	DialogContent,
-	DialogDescription,
-	DialogTitle,
-	DialogTrigger,
-} from "@/components/ui/dialog";
+	Card,
+	CardContent,
+	CardFooter,
+	CardHeader,
+	CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { recordCandidateListUse } from "@/lib/candidateListUsage";
+import { lunchCategories } from "@/lib/lunch";
 import {
 	clampLunchRoomNickname,
+	getEligibleRoomCandidates,
 	isLunchRoomId,
 	lunchRoomLimits,
 	normalizeLunchRoomNickname,
+	type RoomCandidate,
+	type RoomGameFilter,
+	validateCreateRoomInput,
 } from "@/lib/lunchRoom";
 import {
 	prepareLunchRoomEntry,
@@ -25,27 +40,111 @@ import {
 	saveLunchRoomName,
 } from "@/lib/lunchRoomClient";
 import { beginRoomTiming } from "@/lib/roomTimings";
+import { cn } from "@/lib/utils";
+import CandidateListLoadDialog, {
+	type CandidateListSelection,
+} from "./CandidateListLoadDialog";
+import CandidateListSaveDialog from "./CandidateListSaveDialog";
+import RoomCandidateEditor from "./RoomCandidateEditor";
 import "./create-lunch-room.css";
 
-export default function CreateLunchRoom({
-	disabled = false,
-	inline = false,
-}: {
-	disabled?: boolean;
-	inline?: boolean;
-}) {
+const emptyFilter: RoomGameFilter = { categories: null, excludedIds: [] };
+
+function newCandidate(name: string): RoomCandidate {
+	return {
+		id: crypto.randomUUID(),
+		name: name.normalize("NFC").trim(),
+		category: "미분류",
+		included: true,
+	};
+}
+
+async function requestRoom(body: string, signal: AbortSignal) {
+	const finishHttp = beginRoomTiming("create_http");
+	let response: Response;
+	try {
+		response = await fetch("/api/lunch/rooms", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body,
+			signal,
+		});
+	} finally {
+		finishHttp();
+	}
+	const finishDecode = beginRoomTiming("create_decode");
+	let decoded: unknown;
+	try {
+		decoded = await response.json();
+	} finally {
+		finishDecode();
+	}
+	const value =
+		decoded && typeof decoded === "object"
+			? (decoded as Record<string, unknown>)
+			: {};
+	if (!response.ok) {
+		throw new Error(
+			typeof value.error === "string"
+				? value.error
+				: "방을 만들지 못했습니다. 다시 시도해 주세요.",
+		);
+	}
+	if (
+		!isLunchRoomId(value.roomId) ||
+		typeof value.hostToken !== "string" ||
+		!/^[a-f0-9]{64}$/.test(value.hostToken)
+	) {
+		throw new Error("방 정보를 확인할 수 없습니다. 다시 시도해 주세요.");
+	}
+	return { roomId: value.roomId, hostToken: value.hostToken };
+}
+
+export default function CreateLunchRoom() {
 	const id = useId();
 	const router = useRouter({ warn: false });
-	const [open, setOpen] = useState(false);
+	const [step, setStep] = useState<1 | 2>(1);
 	const [title, setTitle] = useState("오늘 점심 추첨");
 	const [name, setName] = useState("방장");
+	const [detailsChecked, setDetailsChecked] = useState(false);
+	const [candidates, setCandidates] = useState<RoomCandidate[]>([]);
+	const [gameFilter, setGameFilter] = useState(emptyFilter);
+	const quickAddDraft = useState("");
+	const [sourceName, setSourceName] = useState<string>();
+	const [editorGeneration, setEditorGeneration] = useState(0);
+	const [loadOpen, setLoadOpen] = useState(false);
+	const [pendingLoad, setPendingLoad] = useState<CandidateListSelection | null>(
+		null,
+	);
+	const [saveCandidates, setSaveCandidates] = useState<RoomCandidate[] | null>(
+		null,
+	);
+	const [createdRoomId, setCreatedRoomId] = useState<string>();
 	const [pending, setPending] = useState(false);
 	const [error, setError] = useState("");
-	const creating = useRef(false);
+	const headingRef = useRef<HTMLHeadingElement>(null);
+	const focusedStep = useRef(step);
+	const titleRef = useRef<HTMLInputElement>(null);
+	const nameRef = useRef<HTMLInputElement>(null);
+	const loadButtonRef = useRef<HTMLButtonElement | null>(null);
+	const saveButtonRef = useRef<HTMLButtonElement | null>(null);
 	const requestRef = useRef<AbortController | null>(null);
 	const requestTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(
 		undefined,
 	);
+	const hostName = normalizeLunchRoomNickname(name);
+	const validTitle = Boolean(
+		title.trim() && title.trim().length <= lunchRoomLimits.maxTitleLength,
+	);
+	const titleError = detailsChecked && !validTitle;
+	const nameError = detailsChecked && !hostName;
+	const eligibleCount = getEligibleRoomCandidates({
+		candidates,
+		gameFilter,
+	}).length;
+	const locked = pending || Boolean(createdRoomId);
+	const pendingLabel = createdRoomId ? "방에 입장하는 중…" : "방 만드는 중…";
+
 	useEffect(() => {
 		setName(clampLunchRoomNickname(readLunchRoomName() ?? "") || "방장");
 		return () => {
@@ -54,220 +153,373 @@ export default function CreateLunchRoom({
 		};
 	}, []);
 
-	async function create(event: React.FormEvent<HTMLFormElement>) {
+	useEffect(() => {
+		if (step === focusedStep.current) return;
+		focusedStep.current = step;
+		headingRef.current?.focus();
+	}, [step]);
+
+	function next(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
-		if (creating.current) return;
-		const hostName = normalizeLunchRoomNickname(name);
-		if (!hostName) {
-			setError(
-				`닉네임은 1~${lunchRoomLimits.maxNicknameLength}자로 입력해 주세요.`,
-			);
+		setDetailsChecked(true);
+		if (!validTitle || !hostName) {
+			(validTitle ? nameRef : titleRef).current?.focus();
 			return;
 		}
-		creating.current = true;
-		setPending(true);
+		setStep(2);
+	}
+
+	function addCandidate(name: string) {
+		if (locked) return false;
+		const candidate = newCandidate(name);
+		setCandidates((current) => [...current, candidate]);
 		setError("");
+		return true;
+	}
+
+	function openList(trigger: HTMLButtonElement | null) {
+		loadButtonRef.current = trigger;
+		setLoadOpen(true);
+	}
+
+	function importList(selection: CandidateListSelection) {
+		setCandidates(selection.candidates);
+		setGameFilter(emptyFilter);
+		setSourceName(selection.name);
+		setEditorGeneration((generation) => generation + 1);
+		setError("");
+		setLoadOpen(false);
+		setPendingLoad(null);
+		recordCandidateListUse(selection.sourceId);
+	}
+
+	async function create() {
+		if (requestRef.current || !hostName) return;
+		let body: string | undefined;
+		if (!createdRoomId) {
+			const ids = new Set(candidates.map(({ id: candidateId }) => candidateId));
+			const input = validateCreateRoomInput({
+				title,
+				hostName,
+				candidates,
+				gameFilter: {
+					...gameFilter,
+					excludedIds: gameFilter.excludedIds.filter((candidateId) =>
+						ids.has(candidateId),
+					),
+				},
+				startInWaiting: true,
+			});
+			if (!input) {
+				setError(
+					"후보 이름과 필터를 확인해 주세요. 추첨에 포함할 후보가 한 개 이상 필요합니다.",
+				);
+				return;
+			}
+			body = JSON.stringify(input);
+			if (
+				new TextEncoder().encode(body).byteLength >
+				lunchRoomLimits.maxEditMessageBytes
+			) {
+				setError(
+					"후보 목록이 너무 큽니다. 일부 후보를 줄인 뒤 다시 시도해 주세요.",
+				);
+				return;
+			}
+		}
 		const controller = new AbortController();
 		requestRef.current = controller;
-		const timeout = setTimeout(() => {
-			if (requestRef.current !== controller || controller.signal.aborted)
-				return;
-			controller.abort();
-			creating.current = false;
-			setPending(false);
-			setError(
-				"방 생성 응답이 늦어지고 있습니다. 연결을 확인한 뒤 다시 시도해 주세요.",
-			);
-		}, 15000);
-		requestTimeoutRef.current = timeout;
+		setPending(true);
+		setError("");
 		try {
-			const finishHttp = beginRoomTiming("create_http");
-			let response: Response;
-			try {
-				response = await fetch("/api/lunch/rooms", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						title: title.trim(),
-						hostName,
-						candidateIds: [],
-					}),
-					signal: controller.signal,
-				});
-			} finally {
-				finishHttp();
+			let roomId = createdRoomId;
+			if (body !== undefined) {
+				const timeout = setTimeout(() => {
+					if (requestRef.current !== controller) return;
+					controller.abort();
+					requestRef.current = null;
+					setPending(false);
+					setError(
+						"방 생성 응답이 늦어지고 있습니다. 연결을 확인한 뒤 다시 시도해 주세요.",
+					);
+				}, 15000);
+				requestTimeoutRef.current = timeout;
+				const created = await requestRoom(body, controller.signal);
+				clearTimeout(timeout);
+				if (controller.signal.aborted) return;
+				roomId = created.roomId;
+				saveLunchRoomHost(roomId, created.hostToken);
+				saveLunchRoomName(hostName);
+				setCreatedRoomId(roomId);
 			}
-			const finishDecode = beginRoomTiming("create_decode");
-			let body: unknown;
-			try {
-				body = await response.json();
-			} finally {
-				finishDecode();
-			}
-			clearTimeout(timeout);
-			if (controller.signal.aborted) return;
-			const value =
-				body && typeof body === "object"
-					? (body as Record<string, unknown>)
-					: {};
-			if (!response.ok) {
-				throw new Error(
-					typeof value.error === "string"
-						? value.error
-						: "방을 만들지 못했습니다. 다시 시도해 주세요.",
-				);
-			}
-			if (
-				!isLunchRoomId(value.roomId) ||
-				typeof value.hostToken !== "string" ||
-				!/^[a-f0-9]{64}$/.test(value.hostToken)
-			) {
-				throw new Error("방 정보를 확인할 수 없습니다. 다시 시도해 주세요.");
-			}
-			saveLunchRoomHost(value.roomId, value.hostToken);
-			saveLunchRoomName(hostName);
-			prepareLunchRoomEntry(value.roomId, hostName);
+			if (!roomId) return;
+			prepareLunchRoomEntry(roomId, hostName);
 			const finishNavigation = beginRoomTiming("room_navigation");
 			try {
 				await router.navigate({
 					to: "/lunch-room/$roomId",
-					params: { roomId: value.roomId },
+					params: { roomId },
 				});
+			} catch {
+				setError("방을 만들었습니다. 다시 입장해 주세요.");
 			} finally {
 				finishNavigation();
 			}
-			setOpen(false);
 		} catch (cause) {
-			if (controller.signal.aborted) return;
-			setError(
-				cause instanceof Error
-					? cause.message
-					: "연결을 확인한 뒤 다시 시도해 주세요.",
-			);
+			if (!controller.signal.aborted) {
+				setError(
+					cause instanceof Error && cause.name === "Error"
+						? cause.message
+						: "연결을 확인한 뒤 다시 시도해 주세요.",
+				);
+			}
 		} finally {
-			clearTimeout(timeout);
 			if (requestRef.current === controller) {
-				creating.current = false;
-				if (!controller.signal.aborted) setPending(false);
+				clearTimeout(requestTimeoutRef.current);
+				requestRef.current = null;
+				setPending(false);
 			}
 		}
 	}
 
-	const fields = (
-		<form
-			className="lunch-create-form"
-			onSubmit={(event) => void create(event)}
-			aria-busy={pending}
-		>
-			<Label htmlFor={`${id}-title`}>방 이름</Label>
-			<Input
-				id={`${id}-title`}
-				value={title}
-				onChange={(event) => setTitle(event.target.value)}
-				required
-				maxLength={60}
-				disabled={pending}
-			/>
-			<Label htmlFor={`${id}-name`}>{inline ? "닉네임" : "내 이름"}</Label>
-			<Input
-				id={`${id}-name`}
-				value={name}
-				onChange={(event) => setName(event.target.value)}
-				required
-				maxLength={lunchRoomLimits.maxNicknameLength}
-				aria-describedby={`${id}-name-help`}
-				disabled={pending}
-			/>
-			<p id={`${id}-name-help`}>
-				최대 {lunchRoomLimits.maxNicknameLength}자 · {name.length}/
-				{lunchRoomLimits.maxNicknameLength}
-			</p>
-			{inline ? (
-				<p>방을 만든 뒤 후보를 작성하거나 저장 목록을 불러올 수 있습니다.</p>
-			) : (
-				<p>방에 입장한 뒤 후보를 작성하거나 저장 목록을 불러올 수 있습니다.</p>
-			)}
-			{error && (
-				<p role="alert" className="lunch-create-error">
-					{error}
-				</p>
-			)}
-			<Button
-				variant="default"
-				size="lg"
-				type="submit"
-				className="lunch-create-submit"
-				disabled={
-					pending ||
-					!title.trim() ||
-					!name.trim() ||
-					name.trim().length > lunchRoomLimits.maxNicknameLength
-				}
-			>
-				{pending && <LoaderCircle size={18} aria-hidden="true" />}{" "}
-				{pending ? "방 만드는 중…" : "방 만들고 입장하기"}
-			</Button>
-		</form>
-	);
-	if (inline)
-		return (
-			<section
-				className="lunch-create-inline"
-				aria-labelledby={`${id}-create-title`}
-			>
-				<h2 id={`${id}-create-title`}>새 추첨방</h2>
-				{fields}
-			</section>
-		);
 	return (
-		<Dialog
-			open={open}
-			onOpenChange={(next) => {
-				if (!pending) {
-					setOpen(next);
-					setError("");
-				}
-			}}
-		>
-			<DialogTrigger asChild>
-				<Button
-					variant="secondary"
-					size="default"
-					type="button"
-					className="lunch-create-trigger"
-					disabled={disabled}
-				>
-					<Users size={17} aria-hidden="true" /> 방 만들기
-				</Button>
-			</DialogTrigger>
-			<DialogContent
-				showCloseButton={false}
-				className="lunch-create-dialog"
-				onEscapeKeyDown={(event) => {
-					if (pending) event.preventDefault();
-				}}
-				onPointerDownOutside={(event) => {
-					if (pending) event.preventDefault();
-				}}
+		<>
+			<Card
+				className={cn("min-h-0 border-border", step === 2 && "gap-4")}
+				role="region"
+				aria-labelledby={`${id}-heading`}
+				aria-busy={pending}
 			>
-				<DialogTitle>함께 점심 추첨하기</DialogTitle>
-				<DialogDescription>
-					참가 링크를 공유하면 같은 룰렛을 보며 채팅할 수 있습니다.
-				</DialogDescription>
-				<DialogClose asChild>
-					<Button
-						variant="ghost"
-						size="icon"
-						type="button"
-						className="lunch-create-close"
-						aria-label="닫기"
-						disabled={pending}
+				<CardHeader className="flex shrink-0 items-baseline">
+					<CardTitle>
+						<h1
+							id={`${id}-heading`}
+							ref={headingRef}
+							tabIndex={-1}
+							aria-describedby={`${id}-step`}
+						>
+							{step === 1 ? "방 만들기" : "후보 준비"}
+						</h1>
+					</CardTitle>
+					<p
+						id={`${id}-step`}
+						className="text-sm text-muted-foreground tabular-nums"
 					>
-						<X size={20} />
-					</Button>
-				</DialogClose>
-				{fields}
-			</DialogContent>
-		</Dialog>
+						<span aria-hidden="true">{step} / 2</span>
+						<span className="sr-only">전체 2단계 중 {step}단계</span>
+					</p>
+				</CardHeader>
+				{step === 1 ? (
+					<form
+						id={`${id}-details`}
+						aria-labelledby={`${id}-heading`}
+						className="shrink-0"
+						noValidate
+						onSubmit={next}
+						onKeyDown={(event) => {
+							if (event.key === "Enter" && event.nativeEvent.isComposing)
+								event.preventDefault();
+						}}
+					>
+						<CardContent className="grid gap-4">
+							<div className="grid gap-2">
+								<Label htmlFor={`${id}-title`}>방 이름</Label>
+								<Input
+									id={`${id}-title`}
+									ref={titleRef}
+									value={title}
+									onChange={(event) => setTitle(event.currentTarget.value)}
+									required
+									maxLength={lunchRoomLimits.maxTitleLength}
+									aria-invalid={titleError || undefined}
+									aria-describedby={
+										titleError ? `${id}-title-error` : undefined
+									}
+								/>
+								{titleError && (
+									<p
+										id={`${id}-title-error`}
+										role="alert"
+										className="text-sm text-destructive"
+									>
+										방 이름은 1~{lunchRoomLimits.maxTitleLength}자로 입력해
+										주세요.
+									</p>
+								)}
+							</div>
+							<div className="grid gap-2">
+								<Label htmlFor={`${id}-name`}>닉네임</Label>
+								<Input
+									id={`${id}-name`}
+									ref={nameRef}
+									value={name}
+									onChange={(event) => setName(event.currentTarget.value)}
+									required
+									maxLength={lunchRoomLimits.maxNicknameLength}
+									autoComplete="nickname"
+									aria-invalid={nameError || undefined}
+									aria-describedby={`${id}-name-help`}
+								/>
+								<p
+									id={`${id}-name-help`}
+									role={nameError ? "alert" : undefined}
+									className={cn(
+										"text-sm",
+										nameError ? "text-destructive" : "text-muted-foreground",
+									)}
+								>
+									{nameError
+										? `닉네임은 1~${lunchRoomLimits.maxNicknameLength}자로 입력해 주세요.`
+										: `최대 ${lunchRoomLimits.maxNicknameLength}자`}
+								</p>
+							</div>
+						</CardContent>
+					</form>
+				) : (
+					<CardContent className="flex min-h-[min(9rem,35dvh)] min-w-0 flex-col overflow-y-auto overscroll-y-contain py-1">
+						<RoomCandidateEditor
+							candidates={candidates}
+							filter={gameFilter}
+							onCandidatesChange={(next) => {
+								setCandidates(next);
+								setError("");
+							}}
+							onFilterChange={(next) => {
+								setGameFilter(next);
+								setError("");
+							}}
+							onAdd={addCandidate}
+							onAddNearby={(items) => {
+								if (locked) return false;
+								setCandidates((current) => [...current, ...items]);
+								setError("");
+								return true;
+							}}
+							onLoad={openList}
+							onSave={(trigger) => {
+								saveButtonRef.current = trigger;
+								setSaveCandidates(candidates);
+							}}
+							disabled={locked}
+							scrollableList
+							showSaveStatus={false}
+							categorySuggestions={lunchCategories}
+							preparedCount={eligibleCount}
+							eligibleCount={eligibleCount}
+							excludedIds={[]}
+							excludeDrawn={false}
+							contextKey={String(editorGeneration)}
+							sourceName={sourceName}
+							quickAddDraft={quickAddDraft}
+						/>
+					</CardContent>
+				)}
+				{step === 2 && error && (
+					<CardContent className="shrink-0">
+						<p role="alert" className="text-sm text-destructive wrap-anywhere">
+							{error}
+						</p>
+					</CardContent>
+				)}
+				<CardFooter
+					key={step}
+					role="group"
+					aria-label="방 만들기 동작"
+					className="create-room-actions shrink-0 flex-wrap justify-end gap-2"
+				>
+					{step === 1 ? (
+						<Button type="submit" form={`${id}-details`}>
+							다음 <ArrowRight size={16} aria-hidden="true" />
+						</Button>
+					) : (
+						<>
+							<Button
+								className="me-auto"
+								variant="ghost"
+								disabled={locked}
+								onClick={() => {
+									setError("");
+									setStep(1);
+								}}
+							>
+								<ArrowLeft size={16} aria-hidden="true" /> 이전
+							</Button>
+							<Button
+								disabled={pending || eligibleCount === 0}
+								onClick={() => void create()}
+							>
+								{pending && (
+									<LoaderCircle
+										size={16}
+										className="motion-safe:animate-spin"
+										aria-hidden="true"
+									/>
+								)}
+								{pending
+									? pendingLabel
+									: createdRoomId
+										? "방에 다시 입장"
+										: "방 만들기"}
+							</Button>
+						</>
+					)}
+				</CardFooter>
+			</Card>
+			<output className="sr-only">{pending ? pendingLabel : ""}</output>
+			{step === 2 && (
+				<>
+					<CandidateListLoadDialog
+						open={loadOpen}
+						onOpenChange={setLoadOpen}
+						returnFocusRef={loadButtonRef}
+						onSelect={(selection) => {
+							if (candidates.length > 0) {
+								setPendingLoad(selection);
+								return false;
+							}
+							importList(selection);
+						}}
+						disabled={locked}
+					/>
+					<CandidateListSaveDialog
+						open={saveCandidates !== null}
+						onOpenChange={(open) => {
+							if (!open) setSaveCandidates(null);
+						}}
+						name={sourceName ?? "내 후보 목록"}
+						candidates={saveCandidates ?? []}
+						disabled={locked}
+						returnFocusRef={saveButtonRef}
+					/>
+					<AlertDialog
+						open={pendingLoad !== null}
+						onOpenChange={(open) => {
+							if (!open) setPendingLoad(null);
+						}}
+					>
+						<AlertDialogContent>
+							<AlertDialogHeader>
+								<AlertDialogTitle>현재 후보 목록을 바꿀까요?</AlertDialogTitle>
+								<AlertDialogDescription>
+									편집 중인 후보가 선택한 목록으로 바뀝니다. 저장한 목록은
+									유지됩니다.
+								</AlertDialogDescription>
+							</AlertDialogHeader>
+							<AlertDialogFooter>
+								<AlertDialogCancel>목록 선택으로 돌아가기</AlertDialogCancel>
+								<AlertDialogAction
+									disabled={locked}
+									onClick={() => {
+										if (pendingLoad) importList(pendingLoad);
+									}}
+								>
+									목록 바꾸기
+								</AlertDialogAction>
+							</AlertDialogFooter>
+						</AlertDialogContent>
+					</AlertDialog>
+				</>
+			)}
+		</>
 	);
 }

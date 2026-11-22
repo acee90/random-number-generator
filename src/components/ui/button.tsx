@@ -4,7 +4,7 @@ import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
 
 // Game geometry opts into plain/auto while ordinary controls share theme tokens.
-const buttonVariants = cva("ui-button", {
+const buttonVariants = cva("ui-button gap-2", {
 	variants: {
 		variant: {
 			default: "ui-button-primary",
@@ -16,13 +16,13 @@ const buttonVariants = cva("ui-button", {
 			plain: "ui-button-plain",
 		},
 		size: {
-			default: "ui-button-default",
-			sm: "ui-button-sm",
-			lg: "ui-button-lg",
-			icon: "ui-button-icon",
-			"icon-sm": "ui-button-icon",
-			"icon-lg": "ui-button-icon-lg",
-			auto: "ui-button-auto",
+			default: "h-9 px-4 py-2 has-[>svg]:px-3",
+			sm: "h-8 gap-1.5 px-3 has-[>svg]:px-2.5",
+			lg: "h-10 px-6 has-[>svg]:px-4",
+			icon: "size-9",
+			"icon-sm": "size-8",
+			"icon-lg": "size-10",
+			auto: "",
 		},
 	},
 	defaultVariants: { variant: "default", size: "default" },

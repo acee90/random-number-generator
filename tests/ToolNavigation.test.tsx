@@ -51,7 +51,7 @@ afterEach(() => {
 
 describe("shared site and tool navigation", () => {
 	it("shows only the lunch service in the public navigation", () => {
-		render(<SiteHeader active="lunch" />);
+		const view = render(<SiteHeader active="lunch" homeCurrent />);
 		expect(
 			screen.getByRole("link", { name: "점메추 홈" }).getAttribute("href"),
 		).toBe("/");
@@ -63,6 +63,12 @@ describe("shared site and tool navigation", () => {
 				.getByRole("link", { name: "점메추" })
 				.getAttribute("aria-current"),
 		).toBe("page");
+		view.rerender(<SiteHeader active="lunch" />);
+		expect(
+			navigation
+				.getByRole("link", { name: "점메추" })
+				.hasAttribute("aria-current"),
+		).toBe(false);
 		expect(navigation.getAllByRole("link")).toHaveLength(1);
 		for (const label of ["랜덤 숫자", "로또 6/45", "연금복권 720+"])
 			expect(navigation.queryByText(label)).toBeNull();

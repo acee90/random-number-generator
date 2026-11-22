@@ -6,11 +6,12 @@ type Tool = "number" | "lotto" | "pension";
 
 interface SiteHeaderProps {
 	active?: "lunch" | Tool;
+	homeCurrent?: boolean;
 	onToolChange?: (mode: Tool) => void;
 	toolsDisabled?: boolean;
 }
 
-export default function SiteHeader({ active }: SiteHeaderProps) {
+export default function SiteHeader({ active, homeCurrent }: SiteHeaderProps) {
 	return (
 		<header className="site-header">
 			<a className="site-header-brand" href="/" aria-label="점메추 홈">
@@ -28,7 +29,7 @@ export default function SiteHeader({ active }: SiteHeaderProps) {
 					size="sm"
 					className="site-header-item"
 				>
-					<a href="/" aria-current={active === "lunch" ? "page" : undefined}>
+					<a href="/" aria-current={homeCurrent ? "page" : undefined}>
 						<UtensilsCrossed size={16} aria-hidden="true" />
 						점메추
 					</a>

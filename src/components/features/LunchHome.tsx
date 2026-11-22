@@ -15,7 +15,7 @@ import "./lunch-home.css";
 export default function LunchHome() {
 	return (
 		<div className="random-lab jeommechu-home">
-			<SiteHeader active="lunch" />
+			<SiteHeader active="lunch" homeCurrent />
 			<main id="main-content">
 				<section
 					className="lunch-home-start"

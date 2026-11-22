@@ -1,10 +1,8 @@
 import {
 	Check,
-	CircleMinus,
-	Ellipsis,
 	FolderOpen,
 	ListPlus,
-	LoaderCircle,
+	MapPin,
 	Plus,
 	RotateCcw,
 	Save,
@@ -16,6 +14,7 @@ import {
 	type RefObject,
 	useEffect,
 	useId,
+	useLayoutEffect,
 	useRef,
 	useState,
 } from "react";
@@ -53,12 +52,17 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { candidateDraftLimits } from "@/lib/candidateListDraft";
 import {
 	lunchRoomLimits,
 	type RoomCandidate,
 	type RoomGameFilter,
 } from "@/lib/lunchRoom";
-import RoomCandidateAuthor from "./RoomCandidateAuthor";
+import { NearbyRestaurantDialog } from "./NearbyRestaurantPicker";
+import RoomCandidateEditorRow from "./RoomCandidateEditorRow";
+import RoomCandidateQuickAdd, {
+	type QuickAddDraft,
+} from "./RoomCandidateQuickAdd";
 import "./room-candidate-editor.css";
 
 export type RoomCandidateEditorProps = {
@@ -66,29 +70,29 @@ export type RoomCandidateEditorProps = {
 	filter: RoomGameFilter;
 	onCandidatesChange: (candidates: RoomCandidate[]) => void;
 	onFilterChange: (filter: RoomGameFilter) => void;
-	newName: string;
-	onNewNameChange: (name: string) => void;
-	onAdd: () => void;
-	sharedAdd?: boolean;
-	sharedAddPending?: boolean;
+	onAdd: (name: string) => boolean | Promise<boolean>;
+	onAddNearby?: (items: RoomCandidate[]) => boolean;
+	addOwnerId?: string;
 	onLoad: (trigger: HTMLButtonElement | null) => void;
 	onSave: (trigger: HTMLButtonElement | null) => void;
-	onDiscard: (trigger: HTMLButtonElement | null) => void;
+	onDiscard?: (trigger: HTMLButtonElement | null) => void;
 	disabled: boolean;
-	unsaved: boolean;
-	categorySuggestions: string[];
-	newCandidateRef: RefObject<HTMLInputElement | null>;
+	unsaved?: boolean;
+	scrollableList?: boolean;
+	showSaveStatus?: boolean;
+	categorySuggestions: readonly string[];
 	preparedCount: number;
 	eligibleCount: number;
 	excludedIds: string[];
 	excludeDrawn: boolean;
 	contextKey: string;
 	sourceName?: string;
-	title: string;
+	title?: string;
 	titleRef?: RefObject<HTMLHeadingElement | null>;
 	headerActions?: ReactNode;
 	children?: ReactNode;
 	notices?: ReactNode;
+	quickAddDraft?: QuickAddDraft;
 };
 
 const normalize = (value: string) => value.normalize("NFC").trim();
@@ -106,18 +110,17 @@ export default function RoomCandidateEditor({
 	filter,
 	onCandidatesChange,
 	onFilterChange,
-	newName,
-	onNewNameChange,
 	onAdd,
-	sharedAdd = false,
-	sharedAddPending = false,
+	onAddNearby,
+	addOwnerId,
 	onLoad,
 	onSave,
 	onDiscard,
 	disabled,
-	unsaved,
+	unsaved = false,
+	scrollableList = false,
+	showSaveStatus = true,
 	categorySuggestions,
-	newCandidateRef,
 	preparedCount,
 	eligibleCount,
 	excludedIds,
@@ -129,8 +132,10 @@ export default function RoomCandidateEditor({
 	headerActions,
 	children,
 	notices,
+	quickAddDraft,
 }: RoomCandidateEditorProps) {
 	const id = useId();
+	const quickAddId = `${id}-quick-add`;
 	const [editing, setEditing] = useState<{
 		id: string;
 		original: string;
@@ -139,6 +144,7 @@ export default function RoomCandidateEditor({
 	const [filterOpen, setFilterOpen] = useState(false);
 	const [query, setQuery] = useState("");
 	const [menuOpen, setMenuOpen] = useState(false);
+	const [nearbyOpen, setNearbyOpen] = useState(false);
 	const [rowMenu, setRowMenu] = useState<string | null>(null);
 	const [categoryCandidate, setCategoryCandidate] =
 		useState<RoomCandidate | null>(null);
@@ -150,37 +156,46 @@ export default function RoomCandidateEditor({
 	const [deleted, setDeleted] = useState<DeletedCandidate | null>(null);
 	const [announcement, setAnnouncement] = useState("");
 	const [recentAdditionId, setRecentAdditionId] = useState<string | null>(null);
-	const pendingAdditionIds = useRef<Set<string> | null>(null);
+	const pendingAddition = useRef<{
+		previousIds: Set<string>;
+		name: string;
+		ownerId?: string;
+	} | null>(null);
 	const menuRef = useRef<HTMLButtonElement | null>(null);
 	const nameRef = useRef<HTMLInputElement | null>(null);
 	const searchRef = useRef<HTMLInputElement | null>(null);
+	const quickAddRef = useRef<HTMLInputElement | HTMLButtonElement>(null);
+	const listRef = useRef<HTMLUListElement>(null);
 	const categoryRef = useRef<HTMLInputElement | null>(null);
 	const bulkRef = useRef<HTMLTextAreaElement | null>(null);
-	const categoryTriggers = useRef(new Map<string, HTMLButtonElement>());
-	const categoryFocusId = useRef<string | null>(null);
+	const categoryTrigger = useRef<HTMLButtonElement | null>(null);
+	const undoRef = useRef<HTMLButtonElement | null>(null);
 	const nameTriggers = useRef(new Map<string, HTMLButtonElement>());
 	const restoreNameFocus = useRef<string | null>(null);
 	const skipNameBlur = useRef(false);
 	const overlayFromMenu = useRef(false);
-	const focusAfterDelete = useRef(false);
 	const observedContext = useRef(contextKey);
+	const isEmpty = candidates.length === 0;
 	const categories = [...new Set(candidates.map(categoryOf))];
 	const selectedCategories = filter.categories ?? categories;
 	const allCategoriesSelected =
 		categories.length > 0 &&
 		categories.every((category) => selectedCategories.includes(category));
 	const manual = new Set(filter.excludedIds);
+	const drawnIds = new Set(excludedIds);
+	const candidateIndexes = new Map(
+		candidates.map(({ id }, index) => [id, index + 1]),
+	);
 	const filterActive =
 		categories.some((category) => !selectedCategories.includes(category)) ||
 		candidates.some((candidate) => manual.has(candidate.id));
+	const searchTerm = normalize(query).toLocaleLowerCase();
 	const visible = candidates.filter(
 		(candidate) =>
 			editing?.id === candidate.id ||
 			recentAdditionId === candidate.id ||
 			(selectedCategories.includes(categoryOf(candidate)) &&
-				normalize(candidate.name)
-					.toLocaleLowerCase()
-					.includes(normalize(query).toLocaleLowerCase())),
+				normalize(candidate.name).toLocaleLowerCase().includes(searchTerm)),
 	);
 	const currentCategoryCandidate = candidates.find(
 		(candidate) => candidate.id === categoryCandidate?.id,
@@ -190,15 +205,19 @@ export default function RoomCandidateEditor({
 	];
 
 	useEffect(() => {
-		if (pendingAdditionIds.current) {
+		const pending = pendingAddition.current;
+		if (pending) {
 			const added = candidates.find(
-				(candidate) => !pendingAdditionIds.current?.has(candidate.id),
+				(candidate) =>
+					!pending.previousIds.has(candidate.id) &&
+					candidate.name === pending.name &&
+					(!pending.ownerId || candidate.ownerId === pending.ownerId),
 			);
 			if (added) {
+				pendingAddition.current = null;
 				setRecentAdditionId(added.id);
 				setAnnouncement(`${added.name} 후보를 추가했습니다.`);
 			}
-			pendingAdditionIds.current = null;
 		}
 		if (
 			recentAdditionId &&
@@ -207,26 +226,25 @@ export default function RoomCandidateEditor({
 			setRecentAdditionId(null);
 	}, [candidates, recentAdditionId]);
 
+	useLayoutEffect(() => {
+		const list = listRef.current;
+		if (recentAdditionId && !searchTerm && list)
+			list.scrollTop = list.scrollHeight;
+	}, [recentAdditionId, searchTerm]);
+
 	useEffect(() => {
 		if (!editing) {
 			if (restoreNameFocus.current) {
 				const trigger = nameTriggers.current.get(restoreNameFocus.current);
 				if (trigger?.isConnected) trigger.focus();
-				else {
-					const search = searchRef.current;
-					const fallback =
-						search && !search.closest("[hidden]")
-							? search
-							: newCandidateRef.current;
-					fallback?.focus();
-				}
+				else searchRef.current?.focus();
 			}
 			restoreNameFocus.current = null;
 			return;
 		}
 		nameRef.current?.focus();
 		nameRef.current?.select();
-	}, [editing, newCandidateRef]);
+	}, [editing]);
 
 	useEffect(() => {
 		if (disabled || observedContext.current !== contextKey) {
@@ -234,28 +252,34 @@ export default function RoomCandidateEditor({
 			setRowMenu(null);
 			setCategoryCandidate(null);
 			setBulkOpen(false);
+			setNearbyOpen(false);
 			setClearOpen(false);
 			setEditing(null);
 			setNameError("");
 		}
 		if (observedContext.current !== contextKey) {
+			setFilterOpen(false);
 			setDeleted(null);
 			setQuery("");
 			setRecentAdditionId(null);
-			pendingAdditionIds.current = null;
+			pendingAddition.current = null;
 			observedContext.current = contextKey;
 		}
 	}, [contextKey, disabled]);
 
-	function requestAdd() {
-		if (disabled || !newName.trim() || !finishName()) return;
-		if (!sharedAdd) {
-			pendingAdditionIds.current = new Set(
-				candidates.map((candidate) => candidate.id),
-			);
-		}
-		setQuery("");
-		onAdd();
+	async function requestAdd(name: string) {
+		if (disabled || !finishName()) return false;
+		pendingAddition.current = {
+			previousIds: new Set(candidateIndexes.keys()),
+			name,
+			ownerId: addOwnerId,
+		};
+		const accepted = await Promise.resolve()
+			.then(() => onAdd(name))
+			.catch(() => false);
+		if (accepted) setQuery("");
+		else pendingAddition.current = null;
+		return accepted;
 	}
 
 	function updateCandidate(
@@ -307,7 +331,7 @@ export default function RoomCandidateEditor({
 		});
 		onCandidatesChange(candidates.filter((entry) => entry.id !== candidate.id));
 		setAnnouncement(`${candidate.name} 삭제됨. 되돌릴 수 있습니다.`);
-		focusAfterDelete.current = true;
+		requestAnimationFrame(() => undoRef.current?.focus());
 	}
 
 	function undoDelete() {
@@ -327,6 +351,7 @@ export default function RoomCandidateEditor({
 				});
 		}
 		setAnnouncement(`${deleted.candidate.name} 후보를 복구했습니다.`);
+		searchRef.current?.focus();
 		setDeleted(null);
 	}
 
@@ -349,8 +374,10 @@ export default function RoomCandidateEditor({
 			bulkRef.current?.focus();
 			return;
 		}
-		if (names.some((name) => name.length > 80)) {
-			setBulkError("후보 이름은 한 줄에 80자까지 입력해 주세요.");
+		if (names.some((name) => name.length > candidateDraftLimits.itemName)) {
+			setBulkError(
+				`후보 이름은 한 줄에 ${candidateDraftLimits.itemName}자까지 입력해 주세요.`,
+			);
 			bulkRef.current?.focus();
 			return;
 		}
@@ -371,112 +398,147 @@ export default function RoomCandidateEditor({
 
 	function restoreMenuFocus(event: Event) {
 		event.preventDefault();
-		menuRef.current?.focus();
+		if (!menuRef.current?.disabled) menuRef.current?.focus();
+		else searchRef.current?.focus();
+	}
+
+	function openFromMenu(open: () => void) {
+		if (disabled || !finishName()) return;
+		overlayFromMenu.current = true;
+		open();
 	}
 
 	return (
-		<section className="room-simple-editor" aria-label="후보 편집">
-			<div className="room-simple-heading">
-				<h2 ref={titleRef} tabIndex={titleRef ? -1 : undefined}>
-					{title}
-				</h2>
-				<div className="room-simple-header-actions">
-					{children}
-					{headerActions}
-					<DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-						<DropdownMenuTrigger asChild>
-							<Button
-								ref={menuRef}
-								variant="ghost"
-								size="icon"
-								aria-label="목록 작업"
-								disabled={disabled}
-							>
-								<Ellipsis size={18} aria-hidden="true" />
-							</Button>
-						</DropdownMenuTrigger>
-						<DropdownMenuContent
-							aria-label="목록 작업"
-							onCloseAutoFocus={(event) => {
-								if (overlayFromMenu.current) {
-									event.preventDefault();
-									overlayFromMenu.current = false;
-								}
-							}}
-						>
-							<DropdownMenuLabel>{sourceName}</DropdownMenuLabel>
-							<DropdownMenuItem
-								disabled={disabled}
-								onSelect={() => {
-									overlayFromMenu.current = true;
-									onLoad(menuRef.current);
-								}}
-							>
-								<FolderOpen size={16} aria-hidden="true" /> 목록 불러오기
-							</DropdownMenuItem>
-							<DropdownMenuItem
-								disabled={disabled || (!candidates.length && !newName.trim())}
-								onSelect={() => {
-									overlayFromMenu.current = true;
-									onSave(menuRef.current);
-								}}
-							>
-								<Save size={16} aria-hidden="true" /> 내 목록에 저장
-							</DropdownMenuItem>
-							<DropdownMenuItem
-								disabled={disabled}
-								onSelect={() => {
-									overlayFromMenu.current = true;
-									setBulkError("");
-									setBulkOpen(true);
-								}}
-							>
-								<ListPlus size={16} aria-hidden="true" /> 여러 개 추가
-							</DropdownMenuItem>
-							<DropdownMenuSeparator />
-							<DropdownMenuItem
-								variant="destructive"
-								disabled={disabled || (!candidates.length && !newName.trim())}
-								onSelect={() => {
-									overlayFromMenu.current = true;
-									setClearOpen(true);
-								}}
-							>
-								<Trash2 size={16} aria-hidden="true" /> 전체 비우기
-							</DropdownMenuItem>
-							<DropdownMenuItem
-								disabled={disabled || !unsaved}
-								onSelect={() => {
-									overlayFromMenu.current = true;
-									onDiscard(menuRef.current);
-								}}
-							>
-								<RotateCcw size={16} aria-hidden="true" /> 변경 취소
-							</DropdownMenuItem>
-						</DropdownMenuContent>
-					</DropdownMenu>
+		<section
+			className="room-simple-editor"
+			aria-label="후보 편집"
+			data-scrollable-list={scrollableList || undefined}
+		>
+			{title && (
+				<div className="room-simple-heading">
+					<h2 ref={titleRef} tabIndex={titleRef ? -1 : undefined}>
+						{title}
+					</h2>
+					<div className="room-simple-header-actions">
+						{children}
+						{headerActions}
+					</div>
 				</div>
-			</div>
+			)}
 
-			<div className="room-simple-listbar">
-				<p>전체 후보 {candidates.length}개</p>
+			<div className="room-simple-toolbar">
+				<div className="room-simple-search">
+					<Label className="sr-only" htmlFor={`${id}-search`}>
+						후보 검색
+					</Label>
+					<Search size={16} aria-hidden="true" />
+					<Input
+						ref={searchRef}
+						id={`${id}-search`}
+						type="search"
+						name="candidate-search"
+						value={query}
+						placeholder="후보 검색"
+						disabled={disabled}
+						onChange={(event) => {
+							setRecentAdditionId(null);
+							setQuery(event.currentTarget.value);
+						}}
+					/>
+				</div>
 				<CategoryFilterButton
 					controls={`${id}-filters`}
-					expanded={filterOpen}
+					expanded={filterOpen && candidates.length > 0}
 					count={preparedCount}
 					total={candidates.length}
 					description={`전체 후보 ${candidates.length}개 중 필터로 ${preparedCount}개 선택`}
+					size="default"
+					showCount={false}
+					disabled={disabled || !candidates.length}
 					onClick={() => {
-						if (!finishName()) return;
-						setRecentAdditionId(null);
-						setFilterOpen(!filterOpen);
-						if (filterOpen) setQuery("");
+						if (finishName()) setFilterOpen(!filterOpen);
 					}}
 				/>
+				<DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+					<DropdownMenuTrigger asChild>
+						<Button
+							ref={menuRef}
+							variant="outline"
+							size="icon"
+							className="room-simple-actions-trigger"
+							aria-label="목록 작업"
+							disabled={disabled}
+						>
+							<Plus size={16} aria-hidden="true" />
+						</Button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent
+						aria-label="목록 작업"
+						onCloseAutoFocus={(event) => {
+							if (overlayFromMenu.current) {
+								event.preventDefault();
+								overlayFromMenu.current = false;
+							}
+						}}
+					>
+						<DropdownMenuItem
+							onSelect={() =>
+								openFromMenu(() => {
+									setBulkError("");
+									setBulkOpen(true);
+								})
+							}
+						>
+							<ListPlus size={16} aria-hidden="true" /> 여러 개 추가
+						</DropdownMenuItem>
+						<DropdownMenuItem
+							onSelect={() => openFromMenu(() => onLoad(menuRef.current))}
+						>
+							<FolderOpen size={16} aria-hidden="true" /> 목록 불러오기
+						</DropdownMenuItem>
+						{onAddNearby && (
+							<DropdownMenuItem
+								onSelect={() => openFromMenu(() => setNearbyOpen(true))}
+							>
+								<MapPin size={16} aria-hidden="true" /> 주변 음식점 가져오기
+							</DropdownMenuItem>
+						)}
+						{(candidates.length > 0 || (onDiscard && unsaved)) && (
+							<>
+								<DropdownMenuSeparator />
+								<DropdownMenuLabel>{sourceName}</DropdownMenuLabel>
+								<DropdownMenuItem
+									disabled={!candidates.length}
+									onSelect={() => openFromMenu(() => onSave(menuRef.current))}
+								>
+									<Save size={16} aria-hidden="true" /> 내 목록에 저장
+								</DropdownMenuItem>
+								{onDiscard && (
+									<DropdownMenuItem
+										disabled={!unsaved}
+										onSelect={() =>
+											openFromMenu(() => onDiscard(menuRef.current))
+										}
+									>
+										<RotateCcw size={16} aria-hidden="true" /> 변경 취소
+									</DropdownMenuItem>
+								)}
+								<DropdownMenuItem
+									variant="destructive"
+									disabled={!candidates.length}
+									onSelect={() => openFromMenu(() => setClearOpen(true))}
+								>
+									<Trash2 size={16} aria-hidden="true" /> 전체 비우기
+								</DropdownMenuItem>
+							</>
+						)}
+					</DropdownMenuContent>
+				</DropdownMenu>
 			</div>
+
 			<div
 				id={`${id}-filters`}
-				hidden={!filterOpen}
+				hidden={!filterOpen || !candidates.length}
 				className="room-simple-filters"
 			>
 				<CategoryFilterChips
@@ -503,28 +565,9 @@ export default function RoomCandidateEditor({
 						onFilterChange({ ...filter, categories: next });
 					}}
 				/>
-				<label className="room-simple-search" htmlFor={`${id}-search`}>
-					<Search size={16} aria-hidden="true" />
-					<span className="sr-only">후보 검색</span>
-					<Input
-						ref={searchRef}
-						id={`${id}-search`}
-						name="candidate-search"
-						value={query}
-						placeholder="후보 검색"
-						onChange={(event) => {
-							setRecentAdditionId(null);
-							setQuery(event.currentTarget.value);
-						}}
-					/>
-				</label>
-				<p className="room-simple-note">
-					선택은 이번 추첨에만 적용돼요. 후보 원본은 유지됩니다.
-				</p>
-			</div>
-			{filterActive && (
-				<div className="room-simple-filter-reset">
+				{filterActive && (
 					<Button
+						className="justify-self-start"
 						variant="outline"
 						size="sm"
 						disabled={disabled}
@@ -533,61 +576,27 @@ export default function RoomCandidateEditor({
 							onFilterChange({ categories: null, excludedIds: [] });
 						}}
 					>
-						<RotateCcw size={14} aria-hidden="true" />
-						필터 초기화
+						<RotateCcw size={16} aria-hidden="true" /> 필터 초기화
 					</Button>
-					{preparedCount === 0 && <span>선택된 후보 없음</span>}
-				</div>
-			)}
+				)}
+			</div>
 
 			{notices}
-			<div className="room-simple-add">
-				<Label className="sr-only" htmlFor={`${id}-new-name`}>
-					새 후보 이름
-				</Label>
-				<Input
-					ref={newCandidateRef}
-					id={`${id}-new-name`}
-					name="new-candidate-name"
-					value={newName}
-					maxLength={80}
-					placeholder="후보 이름 입력 후 Enter"
-					autoComplete="off"
-					disabled={disabled}
-					onChange={(event) => onNewNameChange(event.currentTarget.value)}
-					onKeyDown={(event) => {
-						if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-							event.preventDefault();
-							requestAdd();
-						}
-					}}
-				/>
-				<Button
-					variant="outline"
-					size="icon"
-					aria-label={sharedAddPending ? "후보 추가 중" : "후보 추가"}
-					aria-busy={sharedAddPending}
-					disabled={disabled || !newName.trim()}
-					onClick={() => {
-						requestAdd();
-						newCandidateRef.current?.focus();
-					}}
-				>
-					{sharedAddPending ? (
-						<LoaderCircle
-							size={18}
-							aria-hidden="true"
-							className="motion-safe:animate-spin"
-						/>
-					) : (
-						<Plus size={18} aria-hidden="true" />
-					)}
-				</Button>
+			<div className="room-simple-summary">
+				<p>전체 후보 {candidates.length}개</p>
+				<output>
+					{!isEmpty && searchTerm
+						? `검색 ${visible.length}개`
+						: eligibleCount !== candidates.length
+							? `추첨 ${eligibleCount}개`
+							: null}
+				</output>
 			</div>
 			{deleted && (
 				<div className="room-simple-undo">
 					<span>{deleted.candidate.name} 삭제됨</span>
 					<Button
+						ref={undoRef}
 						variant="ghost"
 						size="sm"
 						disabled={disabled}
@@ -598,299 +607,182 @@ export default function RoomCandidateEditor({
 				</div>
 			)}
 
-			<ul className="room-simple-list" aria-label="후보 편집 목록">
+			{visible.length > 0 && !disabled && (
+				<a
+					href={`#${quickAddId}`}
+					className="sr-only focus:not-sr-only focus:self-start focus:text-sm focus:underline"
+					onClick={(event) => {
+						event.preventDefault();
+						quickAddRef.current?.focus();
+					}}
+				>
+					후보 목록 건너뛰기
+				</a>
+			)}
+			<ul
+				ref={listRef}
+				className="room-simple-list"
+				data-empty={isEmpty || undefined}
+				aria-label="후보 편집 목록"
+				tabIndex={visible.length ? 0 : undefined}
+			>
 				{visible.map((candidate) => {
-					const index = candidates.findIndex(
-						(entry) => entry.id === candidate.id,
-					);
-					const manualExcluded = manual.has(candidate.id);
-					const categoryExcluded = !selectedCategories.includes(
-						categoryOf(candidate),
-					);
-					const drawn = excludeDrawn && excludedIds.includes(candidate.id);
-					const included = !manualExcluded && !categoryExcluded && !drawn;
-					const recentlyAdded = recentAdditionId === candidate.id;
-					const exclusionDescription = manualExcluded
-						? "이번 추첨에서 직접 제외된 후보입니다."
-						: categoryExcluded
-							? "선택한 분류에 속하지 않아 이번 추첨에서 제외된 후보입니다."
-							: drawn
-								? "이전에 당첨되어 이번 추첨에서 제외된 후보입니다."
-								: "";
+					const category = categoryOf(candidate);
+					const manuallyExcluded = manual.has(candidate.id);
+					const exclusion = manuallyExcluded
+						? "제외"
+						: !selectedCategories.includes(category)
+							? "분류 제외"
+							: excludeDrawn && drawnIds.has(candidate.id)
+								? "당첨 제외"
+								: undefined;
+					function editName() {
+						if (!finishName()) return;
+						setNameError("");
+						skipNameBlur.current = false;
+						setEditing({ id: candidate.id, original: candidate.name });
+					}
 					return (
-						<li
+						<RoomCandidateEditorRow
 							key={candidate.id}
-							className="room-simple-row"
-							data-candidate-id={candidate.id}
-							data-included={included}
-							data-selecting={filterOpen}
-						>
-							<label
-								className="room-simple-check"
-								htmlFor={`${id}-include-${candidate.id}`}
-							>
-								<Input
-									id={`${id}-include-${candidate.id}`}
-									type="checkbox"
-									checked={!manualExcluded}
-									disabled={disabled}
-									onChange={(event) =>
-										changeInclusion(candidate, event.currentTarget.checked)
-									}
-								/>
-								<span className="sr-only">{candidate.name} 추첨 포함</span>
-							</label>
-							<span className="room-simple-index" aria-hidden="true">
-								{index + 1}
-							</span>
-							<div className="room-simple-name-column">
-								{editing?.id === candidate.id ? (
-									<div className="room-simple-name-edit">
-										<Label className="sr-only" htmlFor={`${id}-edit-name`}>
-											{index + 1}번 후보 이름
-										</Label>
-										<Input
-											ref={nameRef}
-											id={`${id}-edit-name`}
-											name="candidate-name"
-											value={candidate.name}
-											maxLength={80}
-											autoComplete="off"
-											disabled={disabled}
-											aria-invalid={Boolean(nameError)}
-											aria-describedby={
-												nameError ? `${id}-name-error` : undefined
-											}
-											onChange={(event) => {
-												updateCandidate(candidate.id, {
-													name: event.currentTarget.value,
-												});
-												setNameError("");
-											}}
-											onBlur={() => {
-												if (skipNameBlur.current) {
-													skipNameBlur.current = false;
-													return;
+							candidate={candidate}
+							category={category}
+							exclusion={exclusion}
+							checked={!manuallyExcluded}
+							recentlyAdded={recentAdditionId === candidate.id}
+							disabled={disabled}
+							nameTriggerRef={(element) => {
+								if (element) nameTriggers.current.set(candidate.id, element);
+								else nameTriggers.current.delete(candidate.id);
+							}}
+							menuOpen={rowMenu === candidate.id}
+							onMenuOpenChange={(open) => {
+								if (open && (disabled || !finishName())) return;
+								setRowMenu(open ? candidate.id : null);
+							}}
+							onToggle={(checked) => changeInclusion(candidate, checked)}
+							onEditName={editName}
+							onEditCategory={(trigger) => {
+								categoryTrigger.current = trigger;
+								setCategory(category === "미분류" ? "" : category);
+								setCategoryCandidate(candidate);
+							}}
+							onRemove={() => deleteCandidate(candidate)}
+							nameEditor={
+								editing?.id === candidate.id ? (
+									<div className="room-simple-name-field">
+										<div className="room-simple-name-edit">
+											<Label className="sr-only" htmlFor={`${id}-edit-name`}>
+												{candidateIndexes.get(candidate.id)}번 후보 이름
+											</Label>
+											<Input
+												ref={nameRef}
+												id={`${id}-edit-name`}
+												name="candidate-name"
+												value={candidate.name}
+												maxLength={candidateDraftLimits.itemName}
+												autoComplete="off"
+												disabled={disabled}
+												aria-invalid={Boolean(nameError)}
+												aria-describedby={
+													nameError ? `${id}-name-error` : undefined
 												}
-												finishName();
-											}}
-											onKeyDown={(event) => {
-												if (event.nativeEvent.isComposing) return;
-												if (event.key === "Enter") {
-													event.preventDefault();
-													finishName(true);
-												} else if (event.key === "Escape") {
-													event.preventDefault();
-													skipNameBlur.current = true;
-													restoreNameFocus.current = candidate.id;
+												onChange={(event) => {
 													updateCandidate(candidate.id, {
-														name: editing.original,
+														name: event.currentTarget.value,
 													});
-													setEditing(null);
 													setNameError("");
-												}
-											}}
-										/>
-										<Button
-											variant="ghost"
-											size="icon"
-											aria-label="후보 이름 확인"
-											disabled={disabled}
-											onPointerDown={(event) => event.preventDefault()}
-											onClick={() => finishName(true)}
-										>
-											<Check size={16} aria-hidden="true" />
-										</Button>
-									</div>
-								) : (
-									<Button
-										ref={(element) => {
-											if (element)
-												nameTriggers.current.set(candidate.id, element);
-											else nameTriggers.current.delete(candidate.id);
-										}}
-										variant="ghost"
-										size="auto"
-										className="room-simple-name"
-										aria-label={`${candidate.name} 이름 수정`}
-										aria-describedby={
-											!included || recentlyAdded
-												? `${id}-state-${candidate.id}`
-												: undefined
-										}
-										disabled={disabled}
-										onClick={() => {
-											if (!finishName()) return;
-											setNameError("");
-											skipNameBlur.current = false;
-											setEditing({
-												id: candidate.id,
-												original: candidate.name,
-											});
-										}}
-									>
-										<span className="room-simple-name-text">
-											{candidate.name || "이름을 입력해 주세요"}
-										</span>
-										{(recentlyAdded || !included) && (
-											<span
-												className="room-simple-state-badges"
-												aria-hidden="true"
+												}}
+												onBlur={() => {
+													if (skipNameBlur.current) {
+														skipNameBlur.current = false;
+														return;
+													}
+													finishName();
+												}}
+												onKeyDown={(event) => {
+													if (event.nativeEvent.isComposing) return;
+													if (event.key === "Enter") {
+														event.preventDefault();
+														finishName(true);
+													} else if (event.key === "Escape") {
+														event.preventDefault();
+														skipNameBlur.current = true;
+														restoreNameFocus.current = candidate.id;
+														updateCandidate(candidate.id, {
+															name: editing.original,
+														});
+														setEditing(null);
+														setNameError("");
+													}
+												}}
+											/>
+											<Button
+												variant="ghost"
+												size="icon"
+												aria-label="후보 이름 확인"
+												disabled={disabled}
+												onPointerDown={(event) => event.preventDefault()}
+												onClick={() => finishName(true)}
 											>
-												{recentlyAdded && (
-													<span className="room-simple-state-badge room-simple-state-added">
-														<Check size={12} aria-hidden="true" />
-														추가됨
-													</span>
-												)}
-												{!included && (
-													<span className="room-simple-state-badge">
-														<CircleMinus size={12} aria-hidden="true" />
-														{manualExcluded
-															? "제외"
-															: categoryExcluded
-																? "분류 제외"
-																: "당첨 제외"}
-													</span>
-												)}
-											</span>
+												<Check size={16} aria-hidden="true" />
+											</Button>
+										</div>
+										{nameError && (
+											<p
+												id={`${id}-name-error`}
+												className="room-simple-error"
+												role="alert"
+											>
+												{nameError}
+											</p>
 										)}
-									</Button>
-								)}
-								{candidate.ownerName && (
-									<RoomCandidateAuthor name={candidate.ownerName} />
-								)}
-								{editing?.id === candidate.id && nameError && (
-									<p
-										id={`${id}-name-error`}
-										className="room-simple-error"
-										role="alert"
-									>
-										{nameError}
-									</p>
-								)}
-								{(!included || recentlyAdded) && (
-									<span className="sr-only" id={`${id}-state-${candidate.id}`}>
-										{recentlyAdded ? "방금 추가한 후보입니다. " : ""}
-										{exclusionDescription}
-									</span>
-								)}
-							</div>
-							<Button
-								ref={(element) => {
-									if (element)
-										categoryTriggers.current.set(candidate.id, element);
-									else categoryTriggers.current.delete(candidate.id);
-								}}
-								variant="outline"
-								size="sm"
-								className="room-simple-tag"
-								aria-label={`${candidate.name} 분류 ${categoryOf(candidate)} 변경`}
-								aria-haspopup="dialog"
-								disabled={disabled}
-								onClick={() => {
-									if (!finishName()) return;
-									setCategory(
-										categoryOf(candidate) === "미분류"
-											? ""
-											: categoryOf(candidate),
-									);
-									setCategoryCandidate(candidate);
-									categoryFocusId.current = candidate.id;
-								}}
-							>
-								{categoryOf(candidate)}
-							</Button>
-							<Button
-								variant="ghost"
-								size="icon"
-								className="room-simple-delete"
-								aria-label={`${candidate.name} 후보 삭제`}
-								disabled={disabled}
-								onClick={() => {
-									if (!finishName()) return;
-									deleteCandidate(candidate);
-									focusAfterDelete.current = false;
-									newCandidateRef.current?.focus();
-								}}
-							>
-								<CircleMinus size={18} aria-hidden="true" />
-							</Button>
-							<DropdownMenu
-								open={rowMenu === candidate.id}
-								onOpenChange={(open) => {
-									if (open && (disabled || !finishName())) return;
-									setRowMenu(open ? candidate.id : null);
-								}}
-							>
-								<DropdownMenuTrigger asChild>
-									<Button
-										variant="ghost"
-										size="icon"
-										aria-label={`${candidate.name} 후보 관리`}
-										className="room-simple-row-menu"
-										disabled={disabled}
-									>
-										<Ellipsis size={18} aria-hidden="true" />
-									</Button>
-								</DropdownMenuTrigger>
-								<DropdownMenuContent
-									aria-label={`${candidate.name} 후보 관리`}
-									onCloseAutoFocus={(event) => {
-										if (focusAfterDelete.current) {
-											event.preventDefault();
-											focusAfterDelete.current = false;
-											newCandidateRef.current?.focus();
-										}
-									}}
-								>
-									<DropdownMenuLabel>
-										등록자 · {candidate.ownerName || "방장"}
-									</DropdownMenuLabel>
-									<DropdownMenuItem
-										disabled={disabled}
-										onSelect={() => changeInclusion(candidate, manualExcluded)}
-									>
-										{manualExcluded ? (
-											<Check size={16} aria-hidden="true" />
-										) : (
-											<CircleMinus size={16} aria-hidden="true" />
-										)}
-										{manualExcluded ? "추첨에 포함" : "이번 추첨에서 제외"}
-									</DropdownMenuItem>
-									<DropdownMenuItem
-										variant="destructive"
-										disabled={disabled}
-										onSelect={() => deleteCandidate(candidate)}
-									>
-										<Trash2 size={16} aria-hidden="true" /> 후보 삭제
-									</DropdownMenuItem>
-								</DropdownMenuContent>
-							</DropdownMenu>
-						</li>
+									</div>
+								) : undefined
+							}
+						/>
 					);
 				})}
 			</ul>
-			{visible.length === 0 && (
+			{!isEmpty && visible.length === 0 && (
 				<p className="room-simple-empty">
-					{candidates.length === 0
-						? "첫 후보를 추가해 주세요."
-						: query.trim()
-							? "검색 결과가 없습니다. 다른 이름으로 검색해 주세요."
-							: "선택한 분류의 후보가 없습니다. 필터를 변경해 주세요."}
+					{searchTerm
+						? "검색 결과가 없습니다. 다른 이름으로 검색해 주세요."
+						: "선택한 분류의 후보가 없습니다. 필터를 변경해 주세요."}
 				</p>
 			)}
-			<footer className="room-simple-footer">
-				<output aria-live="polite">추첨 {eligibleCount}개</output>
-			</footer>
-			<p className="room-simple-note room-simple-save-status">
-				{unsaved
-					? "초안 변경됨 · 마감하면 저장돼요."
-					: "변경사항이 저장되어 있어요."}
-			</p>
+			<RoomCandidateQuickAdd
+				key={contextKey}
+				id={quickAddId}
+				controlRef={quickAddRef}
+				draft={quickAddDraft}
+				disabled={disabled}
+				onAdd={requestAdd}
+			/>
+			{isEmpty && <div className="room-simple-blank-row" aria-hidden="true" />}
+			{showSaveStatus && (
+				<p className="room-simple-note room-simple-save-status">
+					{unsaved
+						? "초안 변경됨 · 마감하면 저장돼요."
+						: "변경사항이 저장되어 있어요."}
+				</p>
+			)}
 			<output className="sr-only" aria-live="polite">
 				{announcement}
 			</output>
+			{onAddNearby && (
+				<NearbyRestaurantDialog
+					open={nearbyOpen}
+					onOpenChange={setNearbyOpen}
+					onCloseAutoFocus={restoreMenuFocus}
+					existingIds={new Set(candidateIndexes.keys())}
+					onAdd={(items) => {
+						if (!onAddNearby(items)) return false;
+						setQuery("");
+						return true;
+					}}
+				/>
+			)}
 
 			<Dialog
 				open={Boolean(categoryCandidate)}
@@ -906,11 +798,9 @@ export default function RoomCandidateEditor({
 					}}
 					onCloseAutoFocus={(event) => {
 						event.preventDefault();
-						const trigger = categoryFocusId.current
-							? categoryTriggers.current.get(categoryFocusId.current)
-							: null;
-						if (trigger?.isConnected) trigger.focus();
-						else newCandidateRef.current?.focus();
+						if (categoryTrigger.current?.isConnected)
+							categoryTrigger.current.focus();
+						else searchRef.current?.focus();
 					}}
 				>
 					<DialogHeader>
@@ -1038,7 +928,8 @@ export default function RoomCandidateEditor({
 								if (disabled) return;
 								onCandidatesChange([]);
 								onFilterChange({ categories: null, excludedIds: [] });
-								onNewNameChange("");
+								setQuery("");
+								setFilterOpen(false);
 								setDeleted(null);
 								setAnnouncement("편집 중인 후보를 모두 비웠습니다.");
 							}}

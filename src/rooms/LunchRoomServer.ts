@@ -35,7 +35,8 @@ import {
 	setRoomExcludeDrawn,
 	visibleRoomExclusions,
 } from "@/lib/roomDrawMetadata";
-import { consumeFromPool } from "@/services/seedPool";
+import type { EntropyBatch } from "@/services/randomCore";
+import { drawFromPreparedEntropy, fetchEntropy } from "@/services/seedPool";
 
 export type RoomEnv = Cloudflare.Env;
 
@@ -45,6 +46,8 @@ interface InitializeRoom {
 	hostTokenHash: string;
 	candidateIds?: string[];
 	candidates?: RoomSnapshot["candidates"];
+	gameFilter?: RoomSnapshot["gameFilter"];
+	startInWaiting?: true;
 	createdAt: number;
 }
 
@@ -58,6 +61,7 @@ interface StoredRoom {
 	presentParticipantIds: string[];
 	guestTokenIds: Record<string, string>;
 	processedCommands?: { key: string; fingerprint: string }[];
+	drawEntropy?: EntropyBatch & { expiresAt: number };
 }
 
 type LifecycleCommand = Extract<
@@ -101,6 +105,9 @@ interface EntryInfoResult {
 }
 
 const roomKey = "lunch-room:v1";
+const drawEntropyTtlMs = 5 * 60 * 1000;
+const drawEntropyBatchSize = 32;
+const drawEntropyWordsPerRound = 4;
 const joinTimeoutMs = 10_000;
 const chatIntervalMs = 750;
 const maxPendingConnections = 30;
@@ -129,6 +136,8 @@ export class LunchRoomServer extends Server<RoomEnv> {
 	private mutationQueue: Promise<void> = Promise.resolve();
 	private scheduledAlarmAt: number | undefined;
 	private checkedSnapshotCapacityKey: string | null = null;
+	private drawEntropyRefreshing = false;
+	private drawEntropyRetryAt = 0;
 
 	private exclusive<T>(work: () => Promise<T>): Promise<T> {
 		const task = this.mutationQueue.then(work);
@@ -227,7 +236,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			}
 			if (await this.expireIfNeeded()) return;
 			if (this.room.snapshot.status === "fetching") {
-				// An isolate restart cannot resume an external entropy request.
+				// An isolate restart cannot resume an interrupted draw.
 				this.room.snapshot.status = "waiting";
 				this.room.snapshot.revision =
 					(this.room.snapshot.revision ?? this.room.snapshot.listVersion) + 1;
@@ -260,6 +269,8 @@ export class LunchRoomServer extends Server<RoomEnv> {
 				hostName: "방장",
 				candidateIds: input.candidateIds,
 				candidates: input.candidates,
+				gameFilter: input.gameFilter,
+				startInWaiting: input.startInWaiting,
 			});
 			const candidates = validated
 				? (validated.candidates ??
@@ -298,14 +309,17 @@ export class LunchRoomServer extends Server<RoomEnv> {
 					exclusionRecords: [],
 					drawCount: 0,
 					drawCountIsExact: true,
-					gameFilter: { categories: null, excludedIds: [] },
+					gameFilter: validated.gameFilter ?? {
+						categories: null,
+						excludedIds: [],
+					},
 					candidates,
 					participants: [],
 					members: [],
 					messages: [],
 					draw: null,
 					history: [],
-					status: "editing",
+					status: validated.startInWaiting ? "waiting" : "editing",
 				},
 			};
 			await this.save();
@@ -690,6 +704,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 		}
 		const before = structuredClone(this.room);
 		this.room.snapshot.status = "closed";
+		delete this.room.drawEntropy;
 		this.room.snapshot.revision =
 			(this.room.snapshot.revision ?? this.room.snapshot.listVersion) + 1;
 		try {
@@ -1453,9 +1468,21 @@ export class LunchRoomServer extends Server<RoomEnv> {
 		}
 		const before = structuredClone(this.room);
 		const listVersion = snapshot.listVersion;
+		const requestedAt = Date.now();
+		const prepared = this.room.drawEntropy;
+		let reserved: EntropyBatch | undefined;
+		if (prepared && prepared.expiresAt > requestedAt && prepared.seeds.length) {
+			reserved = {
+				seeds: prepared.seeds.splice(0, drawEntropyWordsPerRound),
+				source: prepared.source,
+			};
+		}
+		// Consume these words in the same durable write as the start request.
+		if (prepared && (!reserved || !prepared.seeds.length))
+			delete this.room.drawEntropy;
 		const metadata = {
 			participants: this.participants(),
-			requestedAt: Date.now(),
+			requestedAt,
 			probabilities: candidates.map(() => 1 / candidates.length),
 			...(snapshot.gameFilter === undefined
 				? {}
@@ -1489,9 +1516,9 @@ export class LunchRoomServer extends Server<RoomEnv> {
 		}
 		this.publish();
 		this.send(connection, { type: "ack", requestId });
-		// Register work before alarm I/O, and release the queue while fetching entropy.
+		// Release the queue so the pending draw can commit after the start acknowledgement.
 		this.ctx.waitUntil(
-			this.completeDraw(requestId, candidates, listVersion, metadata),
+			this.completeDraw(requestId, candidates, listVersion, metadata, reserved),
 		);
 		await this.scheduleAlarm();
 	}
@@ -1509,9 +1536,13 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			| "excludedIdsBefore"
 			| "gameFilter"
 		>,
+		reserved: EntropyBatch | undefined,
 	) {
 		try {
-			const result = await consumeFromPool(0, candidates.length - 1, 1);
+			const result = await drawFromPreparedEntropy(
+				candidates.length - 1,
+				reserved,
+			);
 			if (
 				!Array.isArray(result.numbers) ||
 				result.numbers.length !== 1 ||
@@ -1854,9 +1885,9 @@ export class LunchRoomServer extends Server<RoomEnv> {
 		}
 	}
 
-	private async save() {
+	private async save({ refreshPresence = true } = {}) {
 		if (this.room) {
-			this.refreshMembers();
+			if (refreshPresence) this.refreshMembers();
 			const snapshot = this.room.snapshot;
 			const capacityKey = [
 				snapshot.listVersion,
@@ -2011,9 +2042,69 @@ export class LunchRoomServer extends Server<RoomEnv> {
 		}
 	}
 
+	private prepareDrawEntropy(now: number): number | undefined {
+		const room = this.room;
+		if (
+			!room ||
+			room.snapshot.status !== "waiting" ||
+			room.snapshot.draw ||
+			!room.snapshot.candidates.some(({ included }) => included !== false) ||
+			!room.snapshot.members?.some(
+				(member) =>
+					member.id === room.hostParticipantId && member.status !== "offline",
+			)
+		)
+			return;
+		const prepared = room.drawEntropy;
+		if (
+			prepared &&
+			prepared.expiresAt > now &&
+			prepared.seeds.length > drawEntropyWordsPerRound
+		)
+			return prepared.expiresAt;
+		if (this.drawEntropyRefreshing) return;
+		if (this.drawEntropyRetryAt > now) return this.drawEntropyRetryAt;
+		this.drawEntropyRefreshing = true;
+		this.ctx.waitUntil(this.refreshDrawEntropy());
+	}
+
+	private async refreshDrawEntropy() {
+		const batch = await fetchEntropy(drawEntropyBatchSize).catch(
+			() => undefined,
+		);
+		await this.exclusive(async () => {
+			this.drawEntropyRefreshing = false;
+			const room = this.room;
+			if (
+				!room ||
+				room.snapshot.status === "closed" ||
+				Date.now() >= room.snapshot.expiresAt
+			)
+				return;
+			this.drawEntropyRetryAt = Date.now() + drawEntropyTtlMs;
+			if (batch) {
+				const previous = room.drawEntropy;
+				room.drawEntropy = {
+					...batch,
+					seeds: [...batch.seeds],
+					expiresAt: this.drawEntropyRetryAt,
+				};
+				try {
+					await this.save({ refreshPresence: false });
+					this.drawEntropyRetryAt = 0;
+				} catch {
+					room.drawEntropy = previous;
+				}
+			}
+			await this.scheduleAlarm();
+		});
+	}
+
 	private async scheduleAlarm() {
 		if (!this.room) return;
+		const refreshAt = this.prepareDrawEntropy(Date.now());
 		let next = this.room.snapshot.expiresAt;
+		if (refreshAt !== undefined) next = Math.min(next, refreshAt);
 		const draw = this.room.snapshot.draw;
 		if (this.room.snapshot.status === "drawing" && draw)
 			next = Math.min(next, draw.startedAt + draw.durationMs);

@@ -164,6 +164,19 @@ export async function fetchEntropy(count: number): Promise<EntropyBatch> {
 	return { seeds: generateCSPRNGSeeds(count), source: "csprng" };
 }
 
+/** A room draw consumes its reserved words once, with Web Crypto on a cache miss. */
+export function drawFromPreparedEntropy(max: number, reserved?: EntropyBatch) {
+	const sampler = new RandomSampler(async (count) => {
+		const batch = reserved ?? {
+			seeds: generateCSPRNGSeeds(count),
+			source: "csprng",
+		};
+		reserved = undefined;
+		return batch;
+	});
+	return drawNumbers({ min: 0, max, count: 1 }, sampler);
+}
+
 /** Legacy manual refill is diagnostic only; these values are never used by draws. */
 export async function refillPool(): Promise<SeedPool> {
 	const batch = await fetchEntropy(POOL_SIZE);

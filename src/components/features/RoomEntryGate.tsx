@@ -8,6 +8,13 @@ import {
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import {
+	Card,
+	CardContent,
+	CardFooter,
+	CardHeader,
+	CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useNicknameAvailability } from "@/hooks/useNicknameAvailability";
@@ -95,39 +102,40 @@ export default function RoomEntryGate({
 
 	if (loading)
 		return (
-			<section
-				className="room-entry-card room-entry-loading"
-				aria-labelledby={`${id}-loading-title`}
-			>
-				<div className="room-entry-icon" aria-hidden="true">
-					<LoaderCircle className="room-entry-spinner" size={26} />
-				</div>
-				<h1 id={`${id}-loading-title`}>입장 준비 중…</h1>
-				<output className="sr-only" aria-live="polite">
-					방 연결과 참가 정보를 확인하고 있습니다.
-				</output>
+			<Card className="w-full max-w-sm border-border">
+				<CardHeader>
+					<CardTitle>
+						<h1 className="flex items-center gap-2 leading-normal">
+							<LoaderCircle
+								size={18}
+								className="motion-safe:animate-spin"
+								aria-hidden="true"
+							/>
+							입장 준비 중…
+						</h1>
+					</CardTitle>
+					<output className="sr-only">
+						방 연결과 참가 정보를 확인하고 있습니다.
+					</output>
+				</CardHeader>
 				{error && (
-					<>
-						<p className="room-entry-error" role="alert">
+					<CardContent className="grid gap-2">
+						<p className="text-sm text-destructive" role="alert">
 							{error}
 						</p>
 						{onReconnect && (
-							<Button
-								variant="default"
-								size="lg"
-								type="button"
-								className="room-entry-submit"
-								onClick={onReconnect}
-							>
+							<Button className="justify-self-start" onClick={onReconnect}>
 								다시 연결
 							</Button>
 						)}
-					</>
+					</CardContent>
 				)}
-				<Button asChild variant="link" size="sm" className="room-entry-back">
-					<a href="/">홈으로 돌아가기</a>
-				</Button>
-			</section>
+				<CardFooter>
+					<Button asChild variant="link" size="sm">
+						<a href="/">홈으로 돌아가기</a>
+					</Button>
+				</CardFooter>
+			</Card>
 		);
 
 	return (

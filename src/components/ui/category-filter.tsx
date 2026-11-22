@@ -8,6 +8,9 @@ export function CategoryFilterButton({
 	count,
 	total,
 	description,
+	size = "sm",
+	showCount = true,
+	disabled,
 	onClick,
 }: {
 	controls: string;
@@ -15,24 +18,30 @@ export function CategoryFilterButton({
 	count: number;
 	total: number;
 	description: string;
+	size?: "sm" | "default";
+	showCount?: boolean;
+	disabled?: boolean;
 	onClick: () => void;
 }) {
 	return (
 		<>
 			<Button
 				variant="outline"
-				size="sm"
+				size={size}
 				aria-label="필터"
 				aria-expanded={expanded}
 				aria-controls={controls}
 				aria-describedby={`${controls}-count`}
+				disabled={disabled}
 				onClick={onClick}
 			>
 				<SlidersHorizontal size={16} aria-hidden="true" />
 				필터
-				<span className="category-filter-count" aria-hidden="true">
-					{count}/{total}
-				</span>
+				{showCount && (
+					<span className="category-filter-count" aria-hidden="true">
+						{count}/{total}
+					</span>
+				)}
 			</Button>
 			<span className="sr-only" id={`${controls}-count`}>
 				{description}

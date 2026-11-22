@@ -1,5 +1,6 @@
 import { Check, Layers, ListPlus, LocateFixed, MapPin } from "lucide-react";
 import {
+	type ReactNode,
 	useCallback,
 	useEffect,
 	useId,
@@ -401,30 +402,49 @@ function SearchContents({ existingIds, onAdd }: SearchProps) {
 	);
 }
 export default function NearbyRestaurantPicker({
-	existingIds,
-	onAdd,
-	disabled = false,
-	setup = false,
-}: SearchProps & { disabled?: boolean; setup?: boolean }) {
+	disabled,
+	...props
+}: SearchProps & { disabled?: boolean }) {
 	const [open, setOpen] = useState(false);
-	const title = useRef<HTMLHeadingElement>(null);
 	useEffect(() => {
 		if (disabled) setOpen(false);
 	}, [disabled]);
 	return (
-		<Dialog open={open && !disabled} onOpenChange={setOpen}>
-			<DialogTrigger asChild>
-				<Button
-					variant="outline"
-					className="nearby-search-trigger"
-					disabled={disabled}
-				>
-					<MapPin size={setup ? 20 : 16} aria-hidden="true" />
-					{setup ? <strong>주변 음식점</strong> : "주변 음식점"}
-				</Button>
-			</DialogTrigger>
+		<NearbyRestaurantDialog
+			{...props}
+			open={open && !disabled}
+			onOpenChange={setOpen}
+			trigger={
+				<DialogTrigger asChild>
+					<Button variant="outline" disabled={disabled}>
+						<MapPin size={16} aria-hidden="true" /> 주변 음식점
+					</Button>
+				</DialogTrigger>
+			}
+		/>
+	);
+}
+
+export function NearbyRestaurantDialog({
+	open,
+	onOpenChange,
+	existingIds,
+	onAdd,
+	trigger,
+	onCloseAutoFocus,
+}: SearchProps & {
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
+	trigger?: ReactNode;
+	onCloseAutoFocus?: (event: Event) => void;
+}) {
+	const title = useRef<HTMLHeadingElement>(null);
+	return (
+		<Dialog open={open} onOpenChange={onOpenChange}>
+			{trigger}
 			<DialogContent
 				className="nearby-search-dialog"
+				onCloseAutoFocus={onCloseAutoFocus}
 				onOpenAutoFocus={(event) => {
 					event.preventDefault();
 					title.current?.focus();
@@ -438,12 +458,12 @@ export default function NearbyRestaurantPicker({
 						지도를 끌어 검색 위치를 바꾸세요.
 					</DialogDescription>
 				</DialogHeader>
-				{open && !disabled && (
+				{open && (
 					<SearchContents
 						existingIds={existingIds}
 						onAdd={(items) => {
 							if (!onAdd(items)) return false;
-							setOpen(false);
+							onOpenChange(false);
 							return true;
 						}}
 					/>

@@ -50,25 +50,39 @@ async function draw() {
 	await act(async () => vi.advanceTimersByTime(lunchSpinDurationMs));
 }
 
+function listAction(name: string) {
+	fireEvent.keyDown(screen.getByRole("button", { name: "목록 작업" }), {
+		key: "ArrowDown",
+	});
+	fireEvent.click(screen.getByRole("menuitem", { name }));
+}
+
+async function addCandidate(value: string) {
+	const addRow = screen.queryByRole("button", { name: "추가하기" });
+	if (addRow) fireEvent.click(addRow);
+	const quickAdd = within(screen.getByRole("form", { name: "후보 빠른 추가" }));
+	fireEvent.change(quickAdd.getByLabelText("새 후보 이름"), {
+		target: { value },
+	});
+	await act(async () =>
+		fireEvent.click(quickAdd.getByRole("button", { name: "후보 추가" })),
+	);
+}
+
 describe("shared solo game screen", () => {
-	it("starts a new solo session with the same list preparation choices as a new room", () => {
+	it("starts a new solo session in the same candidate editor as a new room", () => {
 		render(<LunchPicker />);
-		expect(screen.getByRole("button", { name: "새로 작성" })).toBeTruthy();
-		expect(screen.getByRole("button", { name: "목록 불러오기" })).toBeTruthy();
+		expect(screen.getByRole("searchbox", { name: "후보 검색" })).toBeTruthy();
+		expect(screen.getByRole("button", { name: "목록 작업" })).toBeTruthy();
+		expect(screen.getByRole("button", { name: "추가하기" })).toBeTruthy();
 		expect(screen.queryByRole("button", { name: "룰렛 돌리기" })).toBeNull();
 	});
 	it("requires writing and finalizing a list before showing the wheel", async () => {
 		render(<LunchPicker />);
-		fireEvent.click(screen.getByRole("button", { name: "새로 작성" }));
 		expect(
 			screen.getByRole("button", { name: "마감" }).hasAttribute("disabled"),
 		).toBe(true);
-		fireEvent.change(screen.getByRole("textbox", { name: "새 후보 이름" }), {
-			target: { value: "새 후보" },
-		});
-		fireEvent.keyDown(screen.getByRole("textbox", { name: "새 후보 이름" }), {
-			key: "Enter",
-		});
+		await addCandidate("새 후보");
 		expect(screen.queryByRole("button", { name: "룰렛 돌리기" })).toBeNull();
 		await act(async () =>
 			fireEvent.click(screen.getByRole("button", { name: "마감" })),
@@ -79,13 +93,13 @@ describe("shared solo game screen", () => {
 	});
 	it("opens the shared list loader directly from the solo preparation screen", () => {
 		render(<LunchPicker />);
-		fireEvent.click(screen.getByRole("button", { name: "목록 불러오기" }));
+		listAction("목록 불러오기");
 		expect(screen.getByRole("dialog", { name: "목록 불러오기" })).toBeTruthy();
 		expect(
 			screen.getByRole("button", { name: /기본 음식점 목록/ }),
 		).toBeTruthy();
 		fireEvent.click(screen.getByRole("button", { name: "취소" }));
-		expect(screen.getByRole("button", { name: "새로 작성" })).toBeTruthy();
+		expect(screen.getByRole("button", { name: "목록 작업" })).toBeTruthy();
 		expect(screen.queryByRole("button", { name: "룰렛 돌리기" })).toBeNull();
 	});
 
@@ -121,14 +135,16 @@ describe("shared solo game screen", () => {
 		expect(document.activeElement).toBe(
 			screen.getByRole("heading", { name: "후보 편집" }),
 		);
-		const name = screen.getByRole("textbox", { name: "새 후보 이름" });
-		fireEvent.change(name, { target: { value: "분식집" } });
-		fireEvent.keyDown(name, { key: "Enter" });
+		await addCandidate("분식집");
 		await act(async () =>
 			fireEvent.click(screen.getByRole("button", { name: "마감" })),
 		);
 		expect(localStorage.getItem(soloHistoryKey)).toBe(firstRecord);
 		expect(generateRandomNumbers).toHaveBeenCalledTimes(1);
+		vi.mocked(generateRandomNumbers).mockResolvedValueOnce({
+			numbers: [2],
+			source: "csprng",
+		});
 		await draw();
 		expect(generateRandomNumbers).toHaveBeenLastCalledWith({
 			data: { min: 0, max: 2, count: 1, unique: false },

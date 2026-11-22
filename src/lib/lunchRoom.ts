@@ -9,6 +9,7 @@ import {
 export const lunchRoomLimits = {
 	ttlMs: 24 * 60 * 60 * 1000,
 	drawDurationMs: lunchSpinDurationMs,
+	maxTitleLength: 60,
 	maxNicknameLength: 12,
 	maxParticipants: 30,
 	maxMembers: 60,
@@ -142,7 +143,10 @@ export function getRoomPhase(snapshot: RoomSnapshot): RoomSnapshot["status"] {
 }
 
 export function getEligibleRoomCandidates(
-	snapshot: RoomSnapshot,
+	snapshot: Pick<
+		RoomSnapshot,
+		"candidates" | "excludeDrawn" | "excludedIds" | "gameFilter"
+	>,
 ): RoomCandidate[] {
 	const excluded = new Set(
 		snapshot.excludeDrawn ? (snapshot.excludedIds ?? []) : [],
@@ -176,6 +180,8 @@ export interface CreateRoomInput {
 	hostName: string;
 	candidateIds: string[];
 	candidates?: RoomCandidate[];
+	gameFilter?: RoomGameFilter;
+	startInWaiting?: true;
 }
 
 export type ClientMessage =
@@ -457,24 +463,50 @@ export function validateCreateRoomInput(
 	value: unknown,
 ): CreateRoomInput | null {
 	if (!isRecord(value)) return null;
-	const title = text(value.title, 60);
+	const title = text(value.title, lunchRoomLimits.maxTitleLength);
 	const hostName = normalizeLunchRoomNickname(value.hostName);
 	const ids = candidateIds(
 		value.candidateIds === undefined ? [] : value.candidateIds,
 		0,
 	);
-	if (!title || !hostName || !ids) return null;
-	if (value.candidates === undefined)
-		return { title, hostName, candidateIds: ids };
-
-	const candidates = parsePlaces(value.candidates);
 	if (
-		ids.length ||
-		!candidates ||
-		candidates.some((candidate) => candidate.ownerId || candidate.ownerName)
+		!title ||
+		!hostName ||
+		!ids ||
+		(value.startInWaiting !== undefined && value.startInWaiting !== true)
 	)
 		return null;
-	return { title, hostName, candidateIds: ids, candidates };
+	const input: CreateRoomInput = { title, hostName, candidateIds: ids };
+	if (value.candidates !== undefined) {
+		const candidates = parsePlaces(value.candidates);
+		if (
+			ids.length ||
+			!candidates ||
+			candidates.some((candidate) => candidate.ownerId || candidate.ownerName)
+		)
+			return null;
+		input.candidates = candidates;
+	}
+	if (value.gameFilter !== undefined || value.startInWaiting) {
+		const candidates = input.candidates ?? resolveCandidateIds(ids, 0) ?? [];
+		if (value.gameFilter !== undefined) {
+			const filter = parseRoomGameFilter(value.gameFilter);
+			const validIds = new Set(candidates.map(({ id }) => id));
+			if (!filter || filter.excludedIds.some((id) => !validIds.has(id)))
+				return null;
+			input.gameFilter = filter;
+		}
+		if (
+			value.startInWaiting &&
+			!getEligibleRoomCandidates({ candidates, gameFilter: input.gameFilter })
+				.length
+		)
+			return null;
+	}
+	if (value.startInWaiting) {
+		input.startInWaiting = true;
+	}
+	return input;
 }
 
 export function parseClientMessage(raw: unknown): ClientMessage | null {
