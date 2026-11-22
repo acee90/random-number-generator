@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import RoomExclusionPanel from "@/components/features/RoomExclusionPanel";
+import { PicnicExclusionSwitch } from "@/components/features/RoomGameStage";
 import { sampleLunchPlaces } from "@/lib/lunch";
 import type { RoomSnapshot } from "@/lib/lunchRoom";
 
@@ -92,6 +93,7 @@ function ExclusionPanelPreview({
 				<RoomExclusionPanel
 					{...props}
 					snapshot={snapshot}
+					renderGame={(setting) => <PicnicExclusionSwitch setting={setting} />}
 					onToggle={(excludeDrawn) =>
 						setSnapshot((current) => ({ ...current, excludeDrawn }))
 					}

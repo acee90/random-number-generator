@@ -1,7 +1,6 @@
 import { Play, RotateCcw, ThumbsDown, ThumbsUp } from "lucide-react";
 import { type ComponentProps, useEffect, useId, useRef, useState } from "react";
-import { LunchWheel } from "@/components/features/LunchWheel";
-import RoomDrawResult from "@/components/features/RoomDrawResult";
+import RoomGameStage from "@/components/features/RoomGameStage";
 import { useRoomTimeline } from "@/hooks/useRoomTimeline";
 import {
 	getWheelRotation,
@@ -16,19 +15,19 @@ import {
 	previewSelfId,
 } from "./fixtures";
 
-type ResultProps = ComponentProps<typeof RoomDrawResult>;
+type ResultProps = ComponentProps<typeof RoomGameStage>;
 export function ResultFrame(props: ResultProps) {
 	return (
 		<div className="sb-result-frame">
 			<div className="room-result-overlay">
-				<RoomDrawResult {...props} />
+				<RoomGameStage {...props} />
 			</div>
 		</div>
 	);
 }
 export function VotePlayground(args: ResultProps) {
 	const sequence = useRef(1);
-	const [draw, setDraw] = useState(args.draw);
+	const [draw, setDraw] = useState(args.draw ?? createPreviewDraw());
 	const [auto, setAuto] = useState(false);
 	const available = previewGuests
 		.slice(1)
@@ -196,24 +195,31 @@ export function WheelPlayground({
 				</button>
 			</div>
 			<div className="room-draw-panel sb-wheel-panel">
-				<div className="room-wheel-stage">
-					<div className="room-wheel-area">
-						<LunchWheel
-							candidates={candidates}
-							candidateNumbers={candidates.map((_, index) => index + 1)}
-							rotation={finished ? (draw?.toRotation ?? 0) : 0}
-							phase={phase}
-							onComplete={() => {}}
-							onDraw={start}
-							buttonId={`${id}-spin`}
-							covered={false}
-							buttonRef={buttonRef}
-							rotorRef={rotorRef}
-							controlled
-							canDraw={canDraw}
-						/>
-					</div>
-				</div>
+				<RoomGameStage
+					draw={finished ? draw : null}
+					isHost={canDraw}
+					connected
+					pending={false}
+					solo
+					reducedMotion={motionOff}
+					onNext={reset}
+					canNext
+					onVote={() => false}
+					wheel={{
+						candidates,
+						candidateNumbers: candidates.map((_, index) => index + 1),
+						rotation: finished ? (draw?.toRotation ?? 0) : 0,
+						phase,
+						onComplete: () => {},
+						onDraw: start,
+						buttonId: id + "-spin",
+						covered: false,
+						buttonRef,
+						rotorRef,
+						controlled: true,
+						canDraw,
+					}}
+				/>
 				<output className="sb-wheel-status" aria-live="polite">
 					{finished && draw
 						? `추첨 결과: ${draw.candidates[draw.winnerIndex].name}`

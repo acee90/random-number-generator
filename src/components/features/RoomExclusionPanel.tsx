@@ -1,13 +1,12 @@
 import { ArrowDown, RotateCcw } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { getRoomPhase, type RoomSnapshot } from "@/lib/lunchRoom";
 import {
 	getRoomExclusionHistory,
 	roomExclusionRoundLabel,
 } from "@/lib/roomExclusionHistory";
+import type { ExclusionSetting } from "./RoomGameStage";
 import "./room-exclusion-panel.css";
 
 const dateTime = new Intl.DateTimeFormat("ko-KR", {
@@ -25,6 +24,7 @@ export default function RoomExclusionPanel({
 	busy,
 	showResult,
 	action,
+	renderGame,
 	onToggle,
 	onReset,
 }: {
@@ -34,6 +34,7 @@ export default function RoomExclusionPanel({
 	busy: boolean;
 	showResult: boolean;
 	action?: ReactNode;
+	renderGame: (setting: ExclusionSetting) => ReactNode;
 	onToggle: (checked: boolean) => void;
 	onReset: () => void;
 }) {
@@ -86,104 +87,109 @@ export default function RoomExclusionPanel({
 				? "켜면 이번 당첨부터 제외해요."
 				: null;
 
+	const setting = {
+		checked: excludeDrawn,
+		disabled,
+		descriptionId: note ? `${id}-note` : undefined,
+		onToggle,
+	};
+	const showLedger = Boolean(action || note || excludeDrawn || rows.length);
+	const showReset = isHost && (excludeDrawn || rows.length > 0);
 	return (
-		<aside
-			className="room-draw-exclusions"
-			data-result={showResult || undefined}
-			aria-label={showResult ? "다음 게임 준비" : "후보 제외 목록"}
-		>
-			<div className="room-draw-exclusion-toggle">
-				<div className="room-draw-exclusion-setting">
-					<Label htmlFor={`${id}-enabled`}>중복 없이 추첨</Label>
-					<div className="room-draw-exclusion-actions">
-						<Switch
-							id={`${id}-enabled`}
-							size="lg"
-							aria-label="중복 없이 추첨 · 뽑힌 후보 제외"
-							aria-describedby={note ? `${id}-note` : undefined}
-							checked={excludeDrawn}
-							disabled={disabled}
-							onCheckedChange={onToggle}
-						/>
-						{isHost && (
-							<Button
-								variant="ghost"
-								size="icon"
-								aria-label="제외 목록 초기화"
-								title="제외 목록 초기화"
-								disabled={
-									disabled || (snapshot?.excludedIds?.length ?? 0) === 0
-								}
-								onClick={onReset}
-							>
-								<RotateCcw size={14} aria-hidden="true" />
-							</Button>
-						)}
-					</div>
-				</div>
-				{action}
-			</div>
-			{note && (
-				<p className="room-draw-exclusion-note" id={`${id}-note`}>
-					{note}
-				</p>
-			)}
-			{(excludeDrawn || rows.length > 0) && (
-				<>
-					<div className="room-draw-exclusion-heading">
-						<h3>당첨 제외 내역</h3>
-						<span className="room-draw-exclusion-count">
-							{rows.length}
-							<span className="sr-only">개</span>
-						</span>
-					</div>
-					{rows.length > 0 && (
+		<>
+			<div className="room-lifecycle-main">{renderGame(setting)}</div>
+			{showLedger && (
+				<aside
+					className="room-draw-exclusions"
+					data-result={showResult || undefined}
+					aria-label={showResult ? "다음 게임 준비" : "후보 제외 목록"}
+				>
+					{(action || showReset) && (
+						<div className="room-draw-exclusion-toggle">
+							{showReset && (
+								<Button
+									variant="ghost"
+									size="icon"
+									aria-label="제외 목록 초기화"
+									title="제외 목록 초기화"
+									disabled={
+										disabled || (snapshot?.excludedIds?.length ?? 0) === 0
+									}
+									onClick={onReset}
+								>
+									<RotateCcw size={14} aria-hidden="true" />
+								</Button>
+							)}
+							{action}
+						</div>
+					)}
+					{note && (
+						<p className="room-draw-exclusion-note" id={`${id}-note`}>
+							{note}
+						</p>
+					)}
+					{(excludeDrawn || rows.length > 0) && (
 						<>
-							<div className="room-draw-exclusion-order">
-								<span>최근 추첨순</span>
-								{overflowing && (
-									<span id={`${id}-scroll-note`}>
-										<ArrowDown size={12} aria-hidden="true" /> 스크롤
-									</span>
-								)}
+							<div className="room-draw-exclusion-heading">
+								<h3>당첨 제외 내역</h3>
+								<span className="room-draw-exclusion-count">
+									{rows.length}
+									<span className="sr-only">개</span>
+								</span>
 							</div>
-							<section
-								className="room-draw-exclusion-scroll"
-								ref={scrollRef}
-								// biome-ignore lint/a11y/noNoninteractiveTabindex: The bounded ledger must be keyboard-scrollable.
-								tabIndex={0}
-								aria-label="당첨 제외 내역 스크롤"
-								aria-describedby={overflowing ? `${id}-scroll-note` : undefined}
-							>
-								<ol ref={listRef} aria-label="당첨 제외 내역">
-									{rows.map(({ candidate, record }) => (
-										<li key={candidate.id}>
-											<strong>{candidate.name}</strong>
-											<div className="room-draw-exclusion-meta">
-												<span>{roomExclusionRoundLabel(record)}</span>
-												{record ? (
-													<time
-														dateTime={new Date(record.drawnAt).toISOString()}
-													>
-														{dateTime.format(record.drawnAt)}
-													</time>
-												) : (
-													<span>시각 정보 없음</span>
-												)}
-											</div>
-										</li>
-									))}
-								</ol>
-							</section>
-							{partialNumbers && (
-								<p className="room-draw-exclusion-note">
-									‘기록’ 번호는 남아 있는 추첨 기록 기준입니다.
-								</p>
+							{rows.length > 0 && (
+								<>
+									<div className="room-draw-exclusion-order">
+										<span>최근 추첨순</span>
+										{overflowing && (
+											<span id={`${id}-scroll-note`}>
+												<ArrowDown size={12} aria-hidden="true" /> 스크롤
+											</span>
+										)}
+									</div>
+									<section
+										className="room-draw-exclusion-scroll"
+										ref={scrollRef}
+										// biome-ignore lint/a11y/noNoninteractiveTabindex: The bounded ledger must be keyboard-scrollable.
+										tabIndex={0}
+										aria-label="당첨 제외 내역 스크롤"
+										aria-describedby={
+											overflowing ? `${id}-scroll-note` : undefined
+										}
+									>
+										<ol ref={listRef} aria-label="당첨 제외 내역">
+											{rows.map(({ candidate, record }) => (
+												<li key={candidate.id}>
+													<strong>{candidate.name}</strong>
+													<div className="room-draw-exclusion-meta">
+														<span>{roomExclusionRoundLabel(record)}</span>
+														{record ? (
+															<time
+																dateTime={new Date(
+																	record.drawnAt,
+																).toISOString()}
+															>
+																{dateTime.format(record.drawnAt)}
+															</time>
+														) : (
+															<span>시각 정보 없음</span>
+														)}
+													</div>
+												</li>
+											))}
+										</ol>
+									</section>
+									{partialNumbers && (
+										<p className="room-draw-exclusion-note">
+											‘기록’ 번호는 남아 있는 추첨 기록 기준입니다.
+										</p>
+									)}
+								</>
 							)}
 						</>
 					)}
-				</>
+				</aside>
 			)}
-		</aside>
+		</>
 	);
 }

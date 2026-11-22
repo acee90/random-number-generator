@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import RoomDrawResult from "../src/components/features/RoomDrawResult";
+import RoomGameStage from "../src/components/features/RoomGameStage";
 import { sampleLunchPlaces } from "../src/lib/lunch";
 import type { RoomDraw, RoomDrawVote } from "../src/lib/lunchRoom";
 
@@ -66,7 +66,7 @@ function resultHarness(host = false) {
 		const [props, setProps] = useState(original);
 		updateState = (patch) => setProps((current) => ({ ...current, ...patch }));
 		return (
-			<RoomDrawResult
+			<RoomGameStage
 				{...props}
 				onVote={(id, choice) => {
 					const accepted = send(id, choice);
@@ -143,7 +143,7 @@ describe("optimistic room result voting", () => {
 		const onVote = vi.fn(() => true);
 		const longName = "아주 긴 당첨 메뉴 이름 ".repeat(6).trim();
 		render(
-			<RoomDrawResult
+			<RoomGameStage
 				{...original}
 				isHost
 				readOnly
@@ -174,9 +174,9 @@ describe("optimistic room result voting", () => {
 		).toBe("true");
 		expect(screen.getByText("3명 참여")).toBeTruthy();
 		const tally = screen.getByRole("heading", { name: /좋아요\s*2/ });
-		expect(
-			tally.closest(".room-feedback-list")?.getAttribute("data-selected"),
-		).toBe("true");
+		expect(tally.closest("[data-hit]")?.getAttribute("data-selected")).toBe(
+			"true",
+		);
 		const burst = tally.getAttribute("data-burst");
 		expect(burst).toBe("1");
 		const voters = screen.getByRole("list", { name: "좋아요 투표한 참가자" });
@@ -206,9 +206,9 @@ describe("optimistic room result voting", () => {
 		expect(screen.queryByRole("note", { name: "투표 확인 중" })).toBeNull();
 		expect(within(voters).getByText("+600ms")).toBeTruthy();
 		expect(result?.getAttribute("data-own-choice")).toBe("up");
-		expect(
-			tally.closest(".room-feedback-list")?.getAttribute("data-selected"),
-		).toBe("true");
+		expect(tally.closest("[data-hit]")?.getAttribute("data-selected")).toBe(
+			"true",
+		);
 		expect(original.draw.votes).toHaveLength(2);
 	});
 	it("rolls back a rejected or timed-out request and allows a new selection", () => {
@@ -257,13 +257,13 @@ describe("optimistic room result voting", () => {
 		expect(
 			screen
 				.getByRole("heading", { name: /좋아요\s*1/ })
-				.closest(".room-feedback-list")
+				.closest("[data-hit]")
 				?.getAttribute("data-selected"),
 		).toBeNull();
 		expect(
 			screen
 				.getByRole("heading", { name: /싫어요\s*2/ })
-				.closest(".room-feedback-list")
+				.closest("[data-hit]")
 				?.getAttribute("data-selected"),
 		).toBe("true");
 		expect(

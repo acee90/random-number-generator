@@ -1,0 +1,209 @@
+.picnic-frame {
+	position: relative;
+	isolation: isolate;
+	container-type: inline-size;
+	width: min(100%, 720px);
+	aspect-ratio: 10 / 7;
+	min-height: 352px;
+	max-height: 448px;
+	margin-inline: auto;
+	background: var(--surface);
+}
+.picnic-art {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+	visibility: hidden;
+}
+.picnic-art[data-painted] {
+	visibility: visible;
+}
+.picnic-frame > .picnic-exclusion,
+.picnic-sound,
+.picnic-ticket,
+.picnic-wheel,
+.picnic-ballots {
+	position: absolute;
+}
+.picnic-exclusion {
+	position: relative;
+	inset: var(--top) auto auto var(--pad);
+	width: var(--switch-width, 156px);
+	height: 44px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 4px;
+	padding: 0 10px;
+	border-radius: 24px;
+}
+.picnic-exclusion label {
+	font-size: 13px;
+	cursor: pointer;
+}
+.picnic-exclusion button::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	border-radius: 24px;
+}
+.picnic-sound {
+	inset: var(--top) var(--pad) auto auto;
+	width: 44px;
+	height: 44px;
+	border-radius: 50%;
+}
+.picnic-sound .draw-presentation-controls {
+	position: static;
+}
+.picnic-sound button {
+	width: 44px;
+	height: 44px;
+	border-radius: 50%;
+}
+.picnic-wheel {
+	left: 50%;
+	top: var(--wheel-y);
+	width: var(--wheel);
+	height: var(--wheel);
+	transform: translate(-50%, -50%);
+}
+.picnic-wheel .lunch-wheel {
+	width: 100%;
+	height: 100%;
+	margin: 0;
+}
+.picnic-frame .lunch-wheel-center {
+	width: var(--hub);
+	height: var(--hub);
+	min-width: 44px;
+	min-height: 44px;
+	max-width: none;
+}
+.picnic-frame .lunch-wheel-center:active {
+	scale: 1;
+}
+.picnic-ticket {
+	top: var(--ticket-top);
+	left: 50%;
+	width: var(--ticket-w);
+	height: var(--ticket-h);
+	transform: translateX(-50%);
+}
+.picnic-ticket .room-result-summary {
+	height: 100%;
+	padding: 8px;
+	gap: 4px;
+	overflow: auto;
+}
+.picnic-ticket :is(h3, p, small) {
+	margin: 0;
+	max-width: 100%;
+	overflow-wrap: anywhere;
+}
+.picnic-ticket h3 {
+	font-size: clamp(18px, 5cqi, 36px);
+	line-height: 1.16;
+}
+.picnic-ballots {
+	display: flex;
+	gap: 12px;
+	top: var(--vote-top);
+	left: 50%;
+	transform: translateX(-50%);
+	padding: 0;
+	margin: 0;
+	border: 0;
+	min-width: 0;
+}
+.picnic-ballots [data-hit] {
+	width: var(--vote-w);
+	height: var(--vote-h);
+	border-radius: 6px;
+}
+.picnic-ballots .room-feedback-tally-heading {
+	margin: 0;
+	height: 100%;
+}
+.picnic-ballots .room-feedback-tally {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	width: 100%;
+	height: 100%;
+	min-height: 44px;
+	padding: 4px;
+}
+.picnic-ballots .room-feedback-tally-number {
+	margin: 0;
+}
+.picnic-ballots .room-feedback-team-selection {
+	font-size: 10px;
+}
+.picnic-frame:has(.picnic-art[data-painted])
+	:is(
+		.picnic-exclusion label,
+		.picnic-exclusion button,
+		.picnic-sound button,
+		.lunch-wheel-center,
+		.room-result-summary,
+		.room-feedback-tally
+	) {
+	opacity: 0;
+}
+.picnic-frame:has(.picnic-art[data-painted])
+	:is(.lunch-wheel-track, .lunch-wheel-pointer) {
+	visibility: hidden;
+}
+/* Keep a visible keyboard ring while the native hit targets show the painted controls. */
+.picnic-frame [data-hit]:has(:focus-visible),
+.picnic-frame .picnic-ticket:has(h3:focus-visible),
+.picnic-frame:has(.lunch-wheel-center:focus-visible) .picnic-wheel::after {
+	outline: 3px solid #284f84;
+	outline-offset: 3px;
+}
+.picnic-frame:has(.lunch-wheel-center:focus-visible) .picnic-wheel::after {
+	content: "";
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: var(--hub);
+	height: var(--hub);
+	transform: translate(-50%, -50%);
+	border-radius: 50%;
+	pointer-events: none;
+}
+.picnic-frame:has(.picnic-art[data-painted]) .picnic-exclusion label {
+	pointer-events: none;
+}
+@media (forced-colors: none) {
+	.picnic-frame:has(.picnic-art[data-painted]) .picnic-exclusion button {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+	}
+}
+@media (forced-colors: active) {
+	.picnic-frame .picnic-art {
+		display: none;
+	}
+	.picnic-frame:has(.picnic-art[data-painted])
+		:is(
+			.picnic-exclusion label,
+			.picnic-exclusion button,
+			.picnic-sound button,
+			.lunch-wheel-center,
+			.room-result-summary,
+			.room-feedback-tally
+		) {
+		opacity: 1;
+	}
+	.picnic-frame:has(.picnic-art[data-painted])
+		:is(.lunch-wheel-track, .lunch-wheel-pointer) {
+		visibility: visible;
+	}
+}

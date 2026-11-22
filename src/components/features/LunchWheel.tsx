@@ -2,15 +2,12 @@ import { LoaderCircle, Shuffle } from "lucide-react";
 import { memo, type RefObject } from "react";
 import { Button } from "@/components/ui/button";
 import type { LunchPlace } from "@/lib/lunch";
+import { getWheelLabels, type WheelLabel } from "./picnic/layout";
 import "./lunch-wheel.css";
 
 type Phase = "idle" | "fetching" | "spinning" | "done";
 
 const wheelColors = ["#d6f266", "#edf2e3", "#ffffff", "#dce6c9"];
-const maximumReadableLabels = Math.floor((2 * Math.PI * 112) / 6);
-
-type WheelLabel = { id: string; text: string };
-
 const WheelFace = memo(
 	function WheelFace({ labels }: { labels: readonly WheelLabel[] }) {
 		const size = labels.length;
@@ -36,7 +33,7 @@ const WheelFace = memo(
 							style={{ fontSize: labelFontSize }}
 							transform={`rotate(${angle - 90 + (flipped ? 180 : 0)}, ${x}, ${y})`}
 						>
-							{label.text}
+							{label.number} {label.name}
 						</text>
 					);
 				})}
@@ -48,7 +45,8 @@ const WheelFace = memo(
 		previous.labels.every(
 			(label, index) =>
 				label.id === next.labels[index].id &&
-				label.text === next.labels[index].text,
+				label.number === next.labels[index].number &&
+				label.name === next.labels[index].name,
 		),
 );
 
@@ -86,24 +84,18 @@ export function LunchWheel({
 	drawText?: string;
 }) {
 	const size = candidates.length;
-	const labels =
-		size <= maximumReadableLabels
-			? candidates.map((place, index) => {
-					const characters = Array.from(place.name);
-					return {
-						id: place.id,
-						text: `${candidateNumbers[index]} ${characters.length > 5 ? `${characters.slice(0, 4).join("")}…` : place.name}`,
-					};
-				})
-			: [];
-	const background = size
-		? `conic-gradient(${candidates
-				.map(
-					(_, index) =>
-						`${wheelColors[index % wheelColors.length]} ${(index * 360) / size}deg ${((index + 1) * 360) / size}deg`,
-				)
-				.join(", ")})`
-		: "#edf2e3";
+	const labels = getWheelLabels(candidates, candidateNumbers);
+	const background =
+		size > 360
+			? "repeating-conic-gradient(#d6f266 0deg .5deg, #dce6c9 .5deg 1deg)"
+			: size
+				? `conic-gradient(${candidates
+						.map(
+							(_, index) =>
+								`${wheelColors[index % wheelColors.length]} ${(index * 360) / size}deg ${((index + 1) * 360) / size}deg`,
+						)
+						.join(", ")})`
+				: "#edf2e3";
 	return (
 		<div className="lunch-wheel" data-candidate-count={size}>
 			<div className="lunch-wheel-pointer" aria-hidden="true" />
@@ -133,6 +125,7 @@ export function LunchWheel({
 				id={buttonId}
 				ref={buttonRef}
 				className="lunch-wheel-center"
+				data-hit="draw"
 				data-draw-permission={canDraw ? "host" : "viewer"}
 				disabled={
 					!canDraw || covered || phase === "fetching" || phase === "spinning"

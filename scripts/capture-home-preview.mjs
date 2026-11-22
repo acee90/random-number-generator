@@ -58,6 +58,10 @@ try {
 				await page.locator(ready).fill(suggestion);
 				await page.locator(ready).blur();
 			}
+			if (view !== "guest") {
+				const phase = view === "host" ? "idle" : "result";
+				await page.locator(`canvas[data-scene="${phase}"][data-painted]`).waitFor();
+			}
 			await page.evaluate(() => document.fonts.ready);
 			const frame = await page.screenshot({ animations: "disabled" });
 			images.push([

@@ -1,24 +1,16 @@
 import { Check, ThumbsDown, ThumbsUp } from "lucide-react";
-import {
-	type CSSProperties,
-	useEffect,
-	useId,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
-	isRoomDrawVoter,
-	type RoomDraw,
-	type RoomDrawVote,
-} from "@/lib/lunchRoom";
+	type FeedbackOptions,
+	type RoomFeedback,
+	useRoomFeedback,
+	type VoteChoice,
+} from "@/hooks/useRoomFeedback";
+import type { RoomDraw } from "@/lib/lunchRoom";
 import "./room-draw-feedback.css";
 
-type VoteChoice = RoomDrawVote["vote"];
-type OptimisticVote = Pick<RoomDrawVote, "participantId" | "name" | "vote">;
-type DisplayVote = RoomDrawVote | OptimisticVote;
-const choices = [
+export const choices = [
 	{ vote: "up", label: "좋아요", Icon: ThumbsUp },
 	{ vote: "down", label: "싫어요", Icon: ThumbsDown },
 ] as const;
@@ -58,7 +50,7 @@ function VoteBurst() {
 	);
 }
 
-function VoteTally({
+export function VoteTally({
 	id,
 	choice,
 	count,
@@ -134,100 +126,54 @@ function VoteTally({
 	);
 }
 
-export default function RoomDrawFeedback({
+type FeedbackProps = Omit<FeedbackOptions, "draw"> & {
+	draw: RoomDraw;
+	isHost: boolean;
+	mode?: "full" | "results";
+};
+export default function RoomDrawFeedback(props: FeedbackProps) {
+	const feedback = useRoomFeedback(props);
+	return <RoomFeedbackDetails {...props} feedback={feedback} />;
+}
+
+export function RoomFeedbackDetails({
 	draw,
 	selfId,
 	isHost,
 	connected,
-	pending,
-	optimisticVote,
 	readOnly = false,
 	mode = "full",
-	onVote,
-}: {
-	draw: RoomDraw;
-	selfId?: string;
-	isHost: boolean;
-	connected: boolean;
-	pending: boolean;
-	optimisticVote?: OptimisticVote;
-	readOnly?: boolean;
-	mode?: "full" | "results";
-	onVote: (drawId: string, vote: VoteChoice) => boolean;
-}) {
+	feedback,
+	stageTallies = false,
+}: Pick<
+	FeedbackProps,
+	"draw" | "selfId" | "isHost" | "connected" | "readOnly" | "mode"
+> & { feedback: RoomFeedback; stageTallies?: boolean }) {
 	const id = useId();
-	const [failedSubmission, setFailedSubmission] = useState<{
-		drawId: string;
-		message: string;
-	} | null>(null);
-	const votes = useMemo(
-		() =>
-			[...(draw.votes ?? [])].sort(
-				(left, right) =>
-					left.reactionMs - right.reactionMs ||
-					left.timestamp - right.timestamp,
-			),
-		[draw.votes],
-	);
-	const eligible = isRoomDrawVoter(draw, selfId);
-	const pendingVote =
-		pending &&
-		connected &&
-		eligible &&
-		!readOnly &&
-		optimisticVote?.participantId === selfId &&
-		!votes.some((vote) => vote.participantId === optimisticVote?.participantId)
-			? optimisticVote
-			: undefined;
-	const upVotes: DisplayVote[] = votes.filter((vote) => vote.vote === "up");
-	const downVotes: DisplayVote[] = votes.filter((vote) => vote.vote === "down");
-	if (pendingVote) {
-		(pendingVote.vote === "up" ? upVotes : downVotes).push(pendingVote);
-	}
-	const ranksByParticipant = new Map(
-		votes.map((vote, index) => [vote.participantId, index + 1]),
-	);
-	const ownVote =
-		votes.find((vote) => vote.participantId === selfId) ?? pendingVote;
-	const ownChoice = choices.find((choice) => choice.vote === ownVote?.vote);
-	const submitError =
-		!readOnly && !pending && !ownVote && failedSubmission?.drawId === draw.id
-			? failedSubmission.message
-			: "";
-	const canVote = !readOnly && connected && eligible && !pending && !ownVote;
-	const statusMessage = readOnly
-		? "확정된 투표 기록입니다."
-		: !connected
-			? "다시 연결되면 투표할 수 있습니다."
-			: pendingVote
-				? "투표를 보내고 있습니다…"
-				: ownChoice
-					? `${ownChoice.label}에 투표했습니다.`
-					: pending
-						? "투표를 보내고 있습니다…"
-						: submitError ||
-							(!selfId
-								? "참가 정보를 확인하고 있습니다."
-								: !eligible
-									? "추첨 시작 후 입장해 이번 결과에는 투표할 수 없습니다. 다음 추첨부터 참여해 주세요."
-									: "");
-	const showVisibleStatus =
-		!readOnly &&
-		(!connected ||
-			(!pending && !ownVote && (Boolean(submitError) || !selfId || !eligible)));
+	const {
+		upVotes,
+		downVotes,
+		ranksByParticipant,
+		ownChoice,
+		showVisibleStatus,
+		statusMessage,
+		submitError,
+		canVote,
+		submit,
+	} = feedback;
 
 	return (
 		<section
 			className="room-draw-feedback"
 			data-mode={mode}
-			data-own-choice={ownVote?.vote}
+			data-own-choice={ownChoice}
 			aria-labelledby={`${id}-title`}
 		>
 			<div className="room-feedback-heading">
 				<h4 id={`${id}-title`}>
 					{mode === "results" ? "실시간 투표 현황" : "메뉴 투표"}
 				</h4>
-				<span>{votes.length + (pendingVote ? 1 : 0)}명 참여</span>
+				<span>{upVotes.length + downVotes.length}명 참여</span>
 			</div>
 
 			<output
@@ -309,28 +255,24 @@ export default function RoomDrawFeedback({
 							key={vote}
 							className="room-feedback-list"
 							data-choice={vote}
-							data-selected={ownVote?.vote === vote || undefined}
+							data-selected={ownChoice === vote || undefined}
 							aria-labelledby={`${id}-${vote}`}
 						>
-							<VoteTally
-								key={`${draw.id}:${vote}`}
-								id={`${id}-${vote}`}
-								choice={vote}
-								count={voters.length}
-								selected={ownVote?.vote === vote}
-								animate={mode === "results" && !readOnly && connected}
-								readOnly={readOnly}
-								canVote={canVote}
-								onVote={() => {
-									if (!canVote) return;
-									setFailedSubmission(null);
-									if (!onVote(draw.id, vote))
-										setFailedSubmission({
-											drawId: draw.id,
-											message: "투표를 보내지 못했습니다. 다시 시도해 주세요.",
-										});
-								}}
-							/>
+							{stageTallies ? (
+								<h5 id={`${id}-${vote}`}>{label}</h5>
+							) : (
+								<VoteTally
+									key={`${draw.id}:${vote}`}
+									id={`${id}-${vote}`}
+									choice={vote}
+									count={voters.length}
+									selected={ownChoice === vote}
+									animate={mode === "results" && !readOnly && connected}
+									readOnly={readOnly}
+									canVote={canVote}
+									onVote={() => submit(vote)}
+								/>
+							)}
 							{voters.length > 0 ? (
 								voterList
 							) : (

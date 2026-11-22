@@ -7,6 +7,10 @@ import {
 	within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+	PicnicExclusionSwitch,
+	type ExclusionSetting,
+} from "../src/components/features/RoomGameStage";
 import RoomExclusionPanel from "../src/components/features/RoomExclusionPanel";
 import type { RoomSnapshot } from "../src/lib/lunchRoom";
 
@@ -47,6 +51,9 @@ function snapshot(
 function props(state = snapshot()) {
 	return {
 		snapshot: state,
+		renderGame: (setting: ExclusionSetting) => (
+			<PicnicExclusionSwitch setting={setting} />
+		),
 		isHost: true,
 		locked: false,
 		busy: false,
@@ -150,7 +157,7 @@ describe("RoomExclusionPanel", () => {
 			true,
 		);
 	});
-	it("shows every exclusion including the current winner across result-time toggles and keeps reset beside the switch", () => {
+	it("shows every exclusion including the current winner across result-time toggles and keeps reset with the ledger", () => {
 		const state = snapshot(2);
 		state.status = "result";
 		state.draw = {
@@ -186,8 +193,10 @@ describe("RoomExclusionPanel", () => {
 		view.rerender(<RoomExclusionPanel {...props(state)} showResult />);
 		expect(screen.getAllByRole("listitem")).toHaveLength(2);
 		expect(
-			screen.getByRole("button", { name: "제외 목록 초기화" }).parentElement,
-		).toBe(screen.getByRole("switch").parentElement);
+			within(
+				screen.getByRole("complementary", { name: "다음 게임 준비" }),
+			).getByRole("button", { name: "제외 목록 초기화" }),
+		).toBeTruthy();
 		view.rerender(<RoomExclusionPanel {...props(state)} showResult={false} />);
 		expect(screen.getByText("후보 2")).toBeTruthy();
 	});

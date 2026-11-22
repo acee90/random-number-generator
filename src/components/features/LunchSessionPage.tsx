@@ -16,12 +16,10 @@ import {
 } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import CopyFallback from "@/components/features/CopyFallback";
-import DrawPresentationControls from "@/components/features/DrawPresentationControls";
-import { LunchWheel } from "@/components/features/LunchWheel";
 import { roomCandidateNumbers } from "@/components/features/RoomCandidateList";
 import RoomChatUnreadBadge from "@/components/features/RoomChatUnreadBadge";
 import RoomDrawDialog from "@/components/features/RoomDrawDialog";
-import RoomDrawResult from "@/components/features/RoomDrawResult";
+import RoomGameStage from "@/components/features/RoomGameStage";
 import RoomEntryGate from "@/components/features/RoomEntryGate";
 import RoomLifecyclePanel from "@/components/features/RoomLifecyclePanel";
 import RoomSettingsDialog from "@/components/features/RoomSettingsDialog";
@@ -591,10 +589,6 @@ export default function LunchSessionPage({
 									? "방장이 추첨을 시작하면 함께 룰렛을 봅니다."
 									: "방장이 오프라인입니다. 방장이 돌아오면 추첨을 시작할 수 있습니다.";
 
-	const presentationControls = !closed && (
-		<DrawPresentationControls sound={sound} />
-	);
-
 	if (awaitingEntry)
 		return (
 			<div className="random-lab lunch-room">
@@ -860,7 +854,7 @@ export default function LunchSessionPage({
 									onStart={start}
 									onHistory={() => changeView("history")}
 								>
-									{(requestStart) => (
+									{(requestStart, exclusion) => (
 										<section
 											id={`${id}-draw-panel`}
 											className="room-draw-panel"
@@ -870,75 +864,58 @@ export default function LunchSessionPage({
 											<h2 id={`${id}-wheel`} className="sr-only">
 												룰렛
 											</h2>
-											<div className="room-wheel-stage">
-												{presentationControls}
-												<div
-													className={`room-wheel-area ${showResult ? "is-covered" : ""}`}
-													aria-hidden={showResult || undefined}
-												>
-													<LunchWheel
-														candidates={places}
-														candidateNumbers={places.map(
-															(place, index) =>
-																roomCandidateNumbers.get(place.id) ?? index + 1,
-														)}
-														rotation={
-															finished ? (displayedDraw?.toRotation ?? 0) : 0
-														}
-														phase={
-															fetching
-																? "fetching"
-																: spinning
-																	? "spinning"
-																	: winner
-																		? "done"
-																		: "idle"
-														}
-														onComplete={() => {}}
-														onDraw={requestStart}
-														buttonId={`${id}-start`}
-														errorId={room.error ? `${id}-error` : undefined}
-														covered={!canStart || showResult}
-														canDraw={isHost}
-														drawLabel={
-															places.length === 1
-																? "마지막 후보 확정"
-																: "룰렛 돌리기"
-														}
-														drawText={
-															places.length === 1 ? "후보 확정" : "돌리기"
-														}
-														buttonRef={drawButtonRef}
-														rotorRef={rotorRef}
-														controlled
-													/>
-												</div>
-												{showResult && winner && displayedDraw && (
-													<div className="room-result-overlay">
-														<RoomDrawResult
-															key={displayedDraw.id}
-															showNextAction={false}
-															draw={displayedDraw}
-															solo={solo}
-															selfId={room.self?.id}
-															isHost={room.self?.isHost === true}
-															connected={connected}
-															pending={
-																room.votePendingDrawId === displayedDraw.id
-															}
-															readOnly={drawArchived}
-															nextPending={room.nextPending}
-															canNext={
-																connected && !busy && !room.candidatesPending
-															}
-															onNext={() => advanceRound()}
-															onVote={room.vote}
-															titleRef={resultTitleRef}
-															titleId={`${id}-winner`}
-														/>
-													</div>
+											<RoomGameStage
+												draw={showResult ? displayedDraw : null}
+												wheel={{
+													candidates: places,
+													candidateNumbers: places.map(
+														(place, index) =>
+															roomCandidateNumbers.get(place.id) ?? index + 1,
+													),
+													rotation: finished
+														? (displayedDraw?.toRotation ?? 0)
+														: 0,
+													phase: fetching
+														? "fetching"
+														: spinning
+															? "spinning"
+															: winner
+																? "done"
+																: "idle",
+													onComplete: () => {},
+													onDraw: requestStart,
+													buttonId: id + "-start",
+													errorId: room.error ? id + "-error" : undefined,
+													covered: !canStart,
+													canDraw: isHost,
+													drawLabel:
+														places.length === 1
+															? "마지막 후보 확정"
+															: "룰렛 돌리기",
+													drawText:
+														places.length === 1 ? "후보 확정" : "돌리기",
+													buttonRef: drawButtonRef,
+													rotorRef,
+													controlled: true,
+												}}
+												sound={sound}
+												exclusion={exclusion}
+												reducedMotion={reducedMotion}
+												showNextAction={false}
+												solo={solo}
+												selfId={room.self?.id}
+												isHost={room.self?.isHost === true}
+												connected={connected}
+												pending={Boolean(
+													displayedDraw &&
+														room.votePendingDrawId === displayedDraw.id,
 												)}
-											</div>
+												readOnly={drawArchived}
+												onNext={() => advanceRound()}
+												onVote={room.vote}
+												titleRef={resultTitleRef}
+												titleId={id + "-winner"}
+											/>
 											<output className="sr-only" aria-live="polite">
 												{status}
 											</output>
