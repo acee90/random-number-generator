@@ -1,4 +1,4 @@
-import { FolderOpen, LoaderCircle, Pencil, Plus, Trash2 } from "lucide-react";
+import { LoaderCircle, Pencil, Trash2 } from "lucide-react";
 import {
 	type ReactNode,
 	type RefObject,
@@ -43,7 +43,6 @@ import CandidateListLoadDialog, {
 	type CandidateListSelection,
 } from "./CandidateListLoadDialog";
 import CandidateListSaveDialog from "./CandidateListSaveDialog";
-import { NearbyRestaurantEntry } from "./nearbyRestaurantEntry";
 import RoomCandidateAuthor from "./RoomCandidateAuthor";
 import RoomCandidateEditor from "./RoomCandidateEditor";
 import RoomExclusionPanel from "./RoomExclusionPanel";
@@ -172,12 +171,9 @@ export default function RoomLifecyclePanel({
 		snapshot?.intakeId ?? null,
 	);
 	const [draftStageInvalid, setDraftStageInvalid] = useState(false);
-	const [newName, setNewName] = useState("");
-	const [writing, setWriting] = useState(false);
 	const [editorGeneration, setEditorGeneration] = useState(0);
 	const [loadOpen, setLoadOpen] = useState(false);
 	const loadButtonRef = useRef<HTMLButtonElement | null>(null);
-	const newCandidateRef = useRef<HTMLInputElement | null>(null);
 	const [pendingLoad, setPendingLoad] = useState<CandidateListSelection | null>(
 		null,
 	);
@@ -207,20 +203,12 @@ export default function RoomLifecyclePanel({
 		});
 	const candidatesDirty =
 		JSON.stringify(draftCandidates) !== originalCandidates;
-	const dirty = candidatesDirty || filterDirty;
-	const unsaved = dirty || Boolean(newName.trim());
+	const unsaved = candidatesDirty || filterDirty;
 	const sameDraftStage =
 		phase === draftPhase &&
 		(snapshot?.intakeId ?? null) === draftIntakeId &&
 		!draftStageInvalid;
 	const editable = isHost && editPhase && sameDraftStage && !locked;
-	const showSetupChoice =
-		isHost &&
-		phase === "editing" &&
-		candidates.length === 0 &&
-		draftCandidates.length === 0 &&
-		!writing &&
-		!unsaved;
 	const categorySuggestions = [
 		...new Set(
 			[
@@ -363,7 +351,6 @@ export default function RoomLifecyclePanel({
 		setDraftPhase(getRoomPhase(current));
 		setDraftIntakeId(current.intakeId ?? null);
 		setDraftStageInvalid(false);
-		setNewName("");
 		setEditError("");
 		lastEditAttempt.current = null;
 	}
@@ -396,21 +383,7 @@ export default function RoomLifecyclePanel({
 	async function applyEdit(): Promise<boolean> {
 		if (!editable) return false;
 		if (!unsaved) return true;
-		let items = liveDraftCandidates;
-		const pendingName = newName.trim();
-		if (pendingName) {
-			items = [
-				{
-					id: crypto.randomUUID(),
-					name: pendingName,
-					category: "미분류",
-					included: true,
-				},
-				...items,
-			];
-			setDraftCandidates(items);
-			setNewName("");
-		}
+		const items = liveDraftCandidates;
 		if (items.some((entry) => !entry.name.trim())) {
 			setEditError("모든 후보 이름을 입력해 주세요.");
 			return false;
@@ -435,7 +408,7 @@ export default function RoomLifecyclePanel({
 			);
 			return false;
 		}
-		const changedCandidates = candidatesDirty || Boolean(pendingName);
+		const changedCandidates = candidatesDirty;
 		const payload = {
 			baseVersion: changedCandidates
 				? draftBaseVersion
@@ -538,32 +511,21 @@ export default function RoomLifecyclePanel({
 		}
 		await room.resetExclusions(action.revision);
 	}
-	async function addCandidateFromEditor() {
-		const name = newName.trim();
-		if (!name || !editable) return;
-		if (sharedAdd) {
-			if (await room.addCandidate(name)) {
-				setNewName((value) => (value.trim() === name ? "" : value));
-			}
-			return;
-		}
-		setDraftCandidates((entries) => [
-			{
-				id: crypto.randomUUID(),
-				name,
-				category: "미분류",
-				included: true,
-			},
-			...entries,
-		]);
-		setNewName("");
+	function addCandidateFromEditor(name: string) {
+		if (!editable) return false;
+		if (sharedAdd) return room.addCandidate(name);
+		const candidate = {
+			id: crypto.randomUUID(),
+			name,
+			category: "미분류",
+			included: true,
+		};
+		setDraftCandidates((entries) => [...entries, candidate]);
+		return true;
 	}
 	function appendNearby(items: RoomCandidate[]) {
 		if (!editable || sharedAdd) return false;
 		setDraftCandidates((entries) => [...entries, ...items]);
-		setWriting(true);
-		if (showSetupChoice)
-			requestAnimationFrame(() => editorTitleRef.current?.focus());
 		return true;
 	}
 	function importList(selection: CandidateListSelection) {
@@ -577,18 +539,15 @@ export default function RoomLifecyclePanel({
 		);
 		setDraftFilter({ categories: null, excludedIds: [] });
 		setSourceName(selection.name);
-		setNewName("");
-		setWriting(true);
 		setEditError("");
 		setLoadOpen(false);
 		setPendingLoad(null);
 		recordCandidateListUse(selection.sourceId);
-		requestAnimationFrame(() => newCandidateRef.current?.focus());
 		return true;
 	}
 	function selectList(selection: CandidateListSelection) {
 		if (!editable) return false;
-		if (draftCandidates.length > 0 || newName.trim()) {
+		if (draftCandidates.length > 0) {
 			setPendingLoad(selection);
 			return false;
 		}
@@ -601,15 +560,7 @@ export default function RoomLifecyclePanel({
 	function openSave(trigger: HTMLButtonElement | null) {
 		if (!editable) return;
 		saveButtonRef.current = trigger;
-		const items = [...draftCandidates];
-		if (newName.trim())
-			items.unshift({
-				id: crypto.randomUUID(),
-				name: newName.trim(),
-				category: "미분류",
-				included: true,
-			});
-		setSaveCandidates(items);
+		setSaveCandidates(draftCandidates);
 		setSaveOpen(true);
 	}
 	function exclusionReason(candidate: RoomCandidate) {
@@ -635,10 +586,7 @@ export default function RoomLifecyclePanel({
 			data-phase={phase}
 			aria-label="게임 진행"
 		>
-			<div
-				className="room-lifecycle-heading"
-				hidden={isHost && listScreen && !showSetupChoice}
-			>
+			<div className="room-lifecycle-heading" hidden={isHost && listScreen}>
 				<div>
 					<h2 ref={phaseTitleRef} tabIndex={-1}>
 						{phaseLabel}
@@ -784,160 +732,92 @@ export default function RoomLifecyclePanel({
 									: "접수가 종료되었습니다. 방장이 목록을 확인하고 있습니다. 다시 열리면 추천을 이어갈 수 있어요."}
 						</p>
 					)}
-					{showSetupChoice && (
-						<section className="room-setup-paths" aria-label="후보 만들기">
-							<Button
-								variant="outline"
-								disabled={!editable}
-								onClick={() => {
-									setSourceName("직접 작성");
-									setWriting(true);
-									requestAnimationFrame(() => newCandidateRef.current?.focus());
-								}}
-							>
-								<Plus size={20} aria-hidden="true" />
-								<strong>새로 작성</strong>
-							</Button>
-							<Button
-								variant="outline"
-								disabled={!editable}
-								onClick={(event) => openLoader(event.currentTarget)}
-								aria-haspopup="dialog"
-							>
-								<FolderOpen size={20} aria-hidden="true" />
-								<strong>목록 불러오기</strong>
-							</Button>
-							<NearbyRestaurantEntry
-								setup
-								disabled={!editable}
-								existingIds={draftIds}
-								onAdd={appendNearby}
-							/>
-						</section>
-					)}
 					{isHost ? (
-						!showSetupChoice && (
-							<RoomCandidateEditor
-								titleRef={editorTitleRef}
-								title={
-									phase === "collecting"
-										? "후보 추천 접수 중"
-										: phase === "reviewing"
-											? "접수 종료 · 목록 확인"
-											: "후보 편집"
-								}
-								headerActions={
-									<>
-										{!sharedAdd && (
-											<NearbyRestaurantEntry
-												disabled={!editable}
-												existingIds={draftIds}
-												onAdd={appendNearby}
-											/>
-										)}
-										<Button
-											disabled={
-												locked ||
-												!sameDraftStage ||
-												((unsaved ? previewPreparedCount : preparedCount) ===
-													0 &&
-													!newName.trim())
-											}
-											onClick={() => void changeStage("finalize")}
-										>
-											{stagePending === "finalize" ? "마감 중…" : "마감"}
-										</Button>
-									</>
-								}
-								sourceName={sourceName}
-								candidates={draftCandidates}
-								filter={draftFilter}
-								onCandidatesChange={setDraftCandidates}
-								onFilterChange={setDraftFilter}
-								newName={newName}
-								onNewNameChange={setNewName}
-								onAdd={() => void addCandidateFromEditor()}
-								sharedAdd={sharedAdd}
-								sharedAddPending={
-									sharedAdd && room.mutationPending === "candidate"
-								}
-								onLoad={openLoader}
-								onSave={openSave}
-								onDiscard={requestReset}
-								disabled={!editable}
-								unsaved={unsaved}
-								categorySuggestions={categorySuggestions}
-								newCandidateRef={newCandidateRef}
-								preparedCount={previewPreparedCount}
-								eligibleCount={previewEligible.length}
-								excludedIds={excludedIds}
-								excludeDrawn={excludeDrawn}
-								contextKey={[
-									snapshot?.roomId,
-									phase,
-									snapshot?.intakeId,
-									sharedAdd ? null : draftBaseVersion,
-									sameDraftStage,
-									editorGeneration,
-								].join(":")}
-								notices={
-									<>
-										{candidatesDirty &&
-											snapshot?.listVersion !== draftBaseVersion && (
-												<div className="room-edit-conflict">
-													<p>
-														편집하는 동안 공유 후보가 바뀌었습니다. 현재 초안은
-														유지됩니다.
-													</p>
-													<Button
-														variant="outline"
-														size="sm"
-														disabled={locked}
-														onClick={(event) => {
-															candidateViewTriggerRef.current =
-																event.currentTarget;
-															setCandidateViewOpen(true);
-														}}
-													>
-														공유 후보 보기
-													</Button>
-													<Button
-														variant="outline"
-														size="sm"
-														disabled={locked}
-														onClick={(event) =>
-															requestReset(event.currentTarget)
-														}
-													>
-														최신 후보 불러오기
-													</Button>
-												</div>
-											)}
-										{filterDirty &&
-											liveFilterKey !== originalFilter &&
-											!draftFilterMatchesLive && (
-												<div className="room-edit-conflict">
-													<p>
-														편집하는 동안 공유 필터가 바뀌었습니다. 현재 초안은
-														유지됩니다.
-													</p>
-													<Button
-														variant="outline"
-														size="sm"
-														disabled={locked}
-														onClick={(event) =>
-															requestReset(event.currentTarget)
-														}
-													>
-														최신 조건 불러오기
-													</Button>
-												</div>
-											)}
-										{!sameDraftStage && (
+						<RoomCandidateEditor
+							titleRef={editorTitleRef}
+							title={
+								phase === "collecting"
+									? "후보 추천 접수 중"
+									: phase === "reviewing"
+										? "접수 종료 · 목록 확인"
+										: "후보 편집"
+							}
+							headerActions={
+								<Button
+									disabled={
+										locked ||
+										!sameDraftStage ||
+										(unsaved ? previewPreparedCount : preparedCount) === 0
+									}
+									onClick={() => void changeStage("finalize")}
+								>
+									{stagePending === "finalize" ? "마감 중…" : "마감"}
+								</Button>
+							}
+							sourceName={sourceName}
+							candidates={draftCandidates}
+							filter={draftFilter}
+							onCandidatesChange={setDraftCandidates}
+							onFilterChange={setDraftFilter}
+							onAdd={addCandidateFromEditor}
+							onAddNearby={sharedAdd ? undefined : appendNearby}
+							addOwnerId={sharedAdd ? room.self?.id : undefined}
+							onLoad={openLoader}
+							onSave={openSave}
+							onDiscard={requestReset}
+							disabled={!editable}
+							unsaved={unsaved}
+							categorySuggestions={categorySuggestions}
+							preparedCount={previewPreparedCount}
+							eligibleCount={previewEligible.length}
+							excludedIds={excludedIds}
+							excludeDrawn={excludeDrawn}
+							contextKey={[
+								snapshot?.roomId,
+								phase,
+								snapshot?.intakeId,
+								sharedAdd ? null : draftBaseVersion,
+								sameDraftStage,
+								editorGeneration,
+							].join(":")}
+							notices={
+								<>
+									{candidatesDirty &&
+										snapshot?.listVersion !== draftBaseVersion && (
 											<div className="room-edit-conflict">
 												<p>
-													게임 단계가 바뀌어 적용을 잠갔습니다. 초안은
-													보관됩니다. 최신 목록을 확인한 뒤 다시 편집해 주세요.
+													편집하는 동안 공유 후보가 바뀌었습니다. 현재 초안은
+													유지됩니다.
+												</p>
+												<Button
+													variant="outline"
+													size="sm"
+													disabled={locked}
+													onClick={(event) => {
+														candidateViewTriggerRef.current =
+															event.currentTarget;
+														setCandidateViewOpen(true);
+													}}
+												>
+													공유 후보 보기
+												</Button>
+												<Button
+													variant="outline"
+													size="sm"
+													disabled={locked}
+													onClick={(event) => requestReset(event.currentTarget)}
+												>
+													최신 후보 불러오기
+												</Button>
+											</div>
+										)}
+									{filterDirty &&
+										liveFilterKey !== originalFilter &&
+										!draftFilterMatchesLive && (
+											<div className="room-edit-conflict">
+												<p>
+													편집하는 동안 공유 필터가 바뀌었습니다. 현재 초안은
+													유지됩니다.
 												</p>
 												<Button
 													variant="outline"
@@ -945,48 +825,63 @@ export default function RoomLifecyclePanel({
 													disabled={locked}
 													onClick={(event) => requestReset(event.currentTarget)}
 												>
-													최신 목록으로 다시 편집
+													최신 조건 불러오기
 												</Button>
 											</div>
 										)}
-										{editError && (
-											<p role="alert" className="room-error">
-												{editError}
+									{!sameDraftStage && (
+										<div className="room-edit-conflict">
+											<p>
+												게임 단계가 바뀌어 적용을 잠갔습니다. 초안은 보관됩니다.
+												최신 목록을 확인한 뒤 다시 편집해 주세요.
 											</p>
-										)}
-										{room.error && (
-											<p role="alert" className="room-error">
-												{room.error}
-											</p>
-										)}
-									</>
-								}
-							>
-								{!solo && (
-									<div className="room-editor-stage-actions">
-										<label
-											className="room-intake-switch"
-											htmlFor={`${id}-intake-enabled`}
-										>
-											<Switch
-												id={`${id}-intake-enabled`}
-												aria-label="후보 추천받기"
-												checked={phase === "collecting"}
-												disabled={locked || !sameDraftStage}
-												aria-busy={
-													stagePending === "open" || stagePending === "close"
-												}
-												onCheckedChange={(checked) => {
-													if (checked === (phase === "collecting")) return;
-													void changeStage(checked ? "open" : "close");
-												}}
-											/>
-											<span>후보 추천받기</span>
-										</label>
-									</div>
-								)}
-							</RoomCandidateEditor>
-						)
+											<Button
+												variant="outline"
+												size="sm"
+												disabled={locked}
+												onClick={(event) => requestReset(event.currentTarget)}
+											>
+												최신 목록으로 다시 편집
+											</Button>
+										</div>
+									)}
+									{editError && (
+										<p role="alert" className="room-error">
+											{editError}
+										</p>
+									)}
+									{room.error && (
+										<p role="alert" className="room-error">
+											{room.error}
+										</p>
+									)}
+								</>
+							}
+						>
+							{!solo && (
+								<div className="room-editor-stage-actions">
+									<label
+										className="room-intake-switch"
+										htmlFor={`${id}-intake-enabled`}
+									>
+										<Switch
+											id={`${id}-intake-enabled`}
+											aria-label="후보 추천받기"
+											checked={phase === "collecting"}
+											disabled={locked || !sameDraftStage}
+											aria-busy={
+												stagePending === "open" || stagePending === "close"
+											}
+											onCheckedChange={(checked) => {
+												if (checked === (phase === "collecting")) return;
+												void changeStage(checked ? "open" : "close");
+											}}
+										/>
+										<span>후보 추천받기</span>
+									</label>
+								</div>
+							)}
+						</RoomCandidateEditor>
 					) : (
 						<>
 							{phase !== "editing" && (
@@ -1196,7 +1091,7 @@ export default function RoomLifecyclePanel({
 			<CandidateListSaveDialog
 				open={saveOpen}
 				onOpenChange={setSaveOpen}
-				name={sourceName === "직접 작성" ? "내 후보 목록" : sourceName}
+				name={sourceName}
 				candidates={saveCandidates}
 				disabled={!editable}
 				returnFocusRef={saveButtonRef}
@@ -1295,7 +1190,7 @@ export default function RoomLifecyclePanel({
 						event.preventDefault();
 						if (discardButtonRef.current?.isConnected)
 							discardButtonRef.current.focus();
-						else newCandidateRef.current?.focus();
+						else editorTitleRef.current?.focus();
 					}}
 				>
 					<AlertDialogHeader>

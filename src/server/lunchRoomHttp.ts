@@ -289,6 +289,8 @@ export async function handleLunchRoomRequest(
 				hostTokenHash,
 				candidateIds: input.candidateIds,
 				...(input.candidates && { candidates: input.candidates }),
+				...(input.gameFilter && { gameFilter: input.gameFilter }),
+				...(input.startInWaiting && { startInWaiting: input.startInWaiting }),
 				createdAt,
 			});
 			return json(

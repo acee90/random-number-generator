@@ -11,9 +11,15 @@ import {
 	type ServerMessage,
 } from "../src/lib/lunchRoom";
 import { LunchRoomServer, type RoomEnv } from "../src/rooms/LunchRoomServer";
-import { consumeFromPool } from "../src/services/seedPool";
+import {
+	drawFromPreparedEntropy,
+	fetchEntropy,
+} from "../src/services/seedPool";
 
-vi.mock("../src/services/seedPool", () => ({ consumeFromPool: vi.fn() }));
+vi.mock("../src/services/seedPool", () => ({
+	drawFromPreparedEntropy: vi.fn(),
+	fetchEntropy: vi.fn(),
+}));
 vi.mock("partyserver", () => ({
 	Server: class {
 		constructor(
@@ -98,7 +104,7 @@ class HarnessContext {
 
 const hostToken = "a".repeat(64);
 const candidates = sampleLunchPlaces.slice(0, 3);
-const entropy = vi.mocked(consumeFromPool);
+const entropy = vi.mocked(drawFromPreparedEntropy);
 
 function socketConnection(socket: TestSocket) {
 	return socket as unknown as Connection<TestSocketState>;
@@ -232,7 +238,7 @@ async function connect(
 	}
 	return socket;
 }
-async function room(prepareForDraw = true) {
+async function room(prepareForDraw = true, startInWaiting?: true) {
 	const context = new HarnessContext();
 	context.finalizeInitialEditOnHostJoin = prepareForDraw;
 	const server = createServer(context);
@@ -249,6 +255,7 @@ async function room(prepareForDraw = true) {
 		title: "오늘의 점심",
 		hostTokenHash,
 		candidateIds: candidates.map((place) => place.id),
+		startInWaiting,
 		createdAt: Date.now(),
 	};
 	await server.initialize(input);
@@ -259,10 +266,104 @@ beforeEach(() => {
 	vi.useFakeTimers();
 	vi.setSystemTime(new Date("2026-11-13T03:00:00Z"));
 	entropy.mockReset().mockResolvedValue({ numbers: [1], source: "quantum" });
+	vi.mocked(fetchEntropy)
+		.mockReset()
+		.mockRejectedValue(new Error("Entropy service unavailable"));
 });
 afterEach(() => {
 	vi.useRealTimers();
 	vi.restoreAllMocks();
+});
+
+describe("prepared room entropy", () => {
+	it("prepares once on host entry and consumes different words across rounds after waking", async () => {
+		const sample = await vi.importActual<
+			typeof import("../src/services/seedPool")
+		>("../src/services/seedPool");
+		entropy.mockImplementation(sample.drawFromPreparedEntropy);
+		const prefetch = vi
+			.mocked(fetchEntropy)
+			.mockImplementationOnce(async (count) => ({
+				seeds: Array.from({ length: count }, (_, index) => (index < 4 ? 0 : 2)),
+				source: "quantum",
+			}));
+		const { server, context } = await room(false, true);
+		expect(storedSnapshot(context).status).toBe("waiting");
+		const guest = await connect(server, context, "참가자");
+		expect(prefetch).not.toHaveBeenCalled();
+		const host = await connect(server, context, "방장", hostToken);
+		await context.drain();
+		expect(prefetch).toHaveBeenCalledOnce();
+		const restored = createServer(context);
+		await restored.onStart();
+		await send(restored, host, { type: "start", id: "prepared-first" });
+		await context.drain();
+		expect(latestSnapshot(host).snapshot.draw).toMatchObject({
+			winnerIndex: 0,
+			source: "quantum",
+		});
+
+		vi.advanceTimersByTime(1500 + lunchRoomLimits.drawDurationMs);
+		await restored.onAlarm();
+		await returnToWaiting(restored, host);
+		await send(restored, host, { type: "start", id: "prepared-second" });
+		await context.drain();
+		expect(latestSnapshot(guest).snapshot.draw).toMatchObject({
+			winnerIndex: 2,
+			source: "quantum",
+		});
+		expect(prefetch).toHaveBeenCalledOnce();
+		expect([...host.sent, ...guest.sent].join(" ")).not.toMatch(
+			/"(?:drawEntropy|seeds)"/,
+		);
+	});
+
+	it("refreshes at five minutes and starts with Web Crypto while the provider responds", async () => {
+		const sample = await vi.importActual<
+			typeof import("../src/services/seedPool")
+		>("../src/services/seedPool");
+		entropy.mockImplementation(sample.drawFromPreparedEntropy);
+		let finishRefresh!: () => void;
+		const prefetch = vi
+			.mocked(fetchEntropy)
+			.mockImplementationOnce(async (count) => ({
+				seeds: Array(count).fill(1),
+				source: "quantum",
+			}))
+			.mockImplementationOnce(
+				(count) =>
+					new Promise((resolve) => {
+						finishRefresh = () =>
+							resolve({ seeds: Array(count).fill(2), source: "atmospheric" });
+					}),
+			);
+		const { server, context } = await room(false, true);
+		const host = await connect(server, context, "방장", hostToken);
+		await context.drain();
+		const refreshAt = Date.now() + 5 * 60 * 1000;
+		expect(context.storage.alarm).toBe(refreshAt);
+		vi.setSystemTime(refreshAt);
+		await server.onAlarm();
+		expect(prefetch).toHaveBeenCalledTimes(2);
+		await send(server, host, { type: "start", id: "during-refresh" });
+		await context.tasks.at(-1);
+		expect(latestSnapshot(host).snapshot.draw).toMatchObject({
+			source: "csprng",
+		});
+		finishRefresh();
+		await context.drain();
+
+		vi.advanceTimersByTime(1500 + lunchRoomLimits.drawDurationMs);
+		await server.onAlarm();
+		await returnToWaiting(server, host);
+		await send(server, host, { type: "start", id: "after-refresh" });
+		await context.drain();
+		expect(latestSnapshot(host).snapshot.draw).toMatchObject({
+			winnerIndex: 2,
+			source: "atmospheric",
+		});
+		expect(prefetch).toHaveBeenCalledTimes(2);
+	});
 });
 
 describe("LunchRoomServer", () => {
@@ -841,9 +942,8 @@ describe("LunchRoomServer", () => {
 		});
 		await context.drain();
 		expect(entropy).toHaveBeenCalledExactlyOnceWith(
-			0,
 			candidates.length - 1,
-			1,
+			undefined,
 		);
 		expect(latestSnapshot(returningHost).snapshot).toMatchObject({
 			status: "drawing",
@@ -998,7 +1098,7 @@ describe("LunchRoomServer", () => {
 			send(server, second, { type: "start", id: "same-request" }),
 			send(server, second, { type: "start", id: "racing-request" }),
 		]);
-		expect(entropy).toHaveBeenCalledExactlyOnceWith(0, 2, 1);
+		expect(entropy).toHaveBeenCalledExactlyOnceWith(2, undefined);
 		expect(latestSnapshot(first).snapshot.status).toBe("fetching");
 		expect(storedSnapshot(context).status).toBe("fetching");
 		expect(hasError(second, "DRAW_BUSY")).toBe(true);
@@ -1590,7 +1690,7 @@ describe("LunchRoomServer", () => {
 		const { server, context } = await room();
 		const host = await connect(server, context, "방장", hostToken);
 		entropy.mockResolvedValueOnce(
-			result as Awaited<ReturnType<typeof consumeFromPool>>,
+			result as Awaited<ReturnType<typeof drawFromPreparedEntropy>>,
 		);
 		await send(server, host, { type: "start", id: "invalid-result" });
 		await context.drain();
@@ -1733,7 +1833,7 @@ describe("LunchRoomServer", () => {
 	});
 
 	it("becomes away at exactly five minutes and ping does not postpone the transition", async () => {
-		const { server, context } = await room();
+		const { server, context } = await room(false);
 		const host = await connect(server, context, "방장", hostToken);
 		const joinedAt = Date.now();
 		expect(member(host).status).toBe("online");
@@ -1754,7 +1854,7 @@ describe("LunchRoomServer", () => {
 	});
 
 	it("returns from away on real activity and does not broadcast every online activity heartbeat", async () => {
-		const { server, context } = await room();
+		const { server, context } = await room(false);
 		const host = await connect(server, context, "방장", hostToken);
 		vi.advanceTimersByTime(lunchRoomLimits.awayAfterMs);
 		await server.onAlarm();
@@ -1961,7 +2061,7 @@ describe("LunchRoomServer", () => {
 	});
 
 	it("upgrades legacy attachments and snapshots without members and does not synthesize activity on wake", async () => {
-		const { server, context } = await room();
+		const { server, context } = await room(false);
 		const host = await connect(server, context, "방장", hostToken);
 		const joinedAt = Date.now();
 		const stored = context.storage.values.get("lunch-room:v1") as {
@@ -3016,7 +3116,7 @@ describe("LunchRoomServer internal nickname HTTP", () => {
 
 describe("LunchRoomServer alarm write coalescing", () => {
 	it("keeps chat durable while skipping an unchanged alarm and writes a new activity deadline", async () => {
-		const { server, context } = await room();
+		const { server, context } = await room(false);
 		const host = await connect(server, context, "방장", hostToken);
 		const setAlarm = vi.spyOn(context.storage, "setAlarm");
 		const put = vi.spyOn(context.storage, "put");
@@ -3040,7 +3140,7 @@ describe("LunchRoomServer alarm write coalescing", () => {
 	});
 
 	it("retries failed alarm writes rather than caching their deadline", async () => {
-		const { server, context } = await room();
+		const { server, context } = await room(false);
 		const host = await connect(server, context, "방장", hostToken);
 		vi.advanceTimersByTime(1000);
 		const setAlarm = vi
@@ -4615,7 +4715,7 @@ describe("LunchRoomServer game lifecycle", () => {
 			toRotation: expect.any(Number),
 			landingFraction: expect.any(Number),
 		});
-		expect(entropy).toHaveBeenCalledExactlyOnceWith(0, 0, 1);
+		expect(entropy).toHaveBeenCalledExactlyOnceWith(0, undefined);
 	});
 
 	it.each([
@@ -5191,7 +5291,7 @@ describe("LunchRoomServer game lifecycle", () => {
 				}),
 			).resolves.toBeUndefined();
 			await context.drain();
-			expect(entropy).toHaveBeenCalledExactlyOnceWith(0, 2, 1);
+			expect(entropy).toHaveBeenCalledExactlyOnceWith(2, undefined);
 			expect(latestSnapshot(guest).snapshot.status).toBe("drawing");
 			expect(latestSnapshot(guest).snapshot.draw?.id).toBe("alarm-draw");
 			expect(storedSnapshot(context).status).toBe("drawing");

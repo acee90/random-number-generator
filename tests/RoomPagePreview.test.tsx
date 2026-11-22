@@ -78,6 +78,17 @@ function listAction(name: string) {
 	});
 	fireEvent.click(screen.getByRole("menuitem", { name }));
 }
+async function addCandidate(value: string) {
+	const addRow = screen.queryByRole("button", { name: "추가하기" });
+	if (addRow) fireEvent.click(addRow);
+	const quickAdd = within(screen.getByRole("form", { name: "후보 빠른 추가" }));
+	fireEvent.change(quickAdd.getByLabelText("새 후보 이름"), {
+		target: { value },
+	});
+	await act(async () =>
+		fireEvent.click(quickAdd.getByRole("button", { name: "후보 추가" })),
+	);
+}
 function filterButton() {
 	return screen.getByRole("button", { name: "필터" });
 }
@@ -93,20 +104,16 @@ function expectWaitingCandidateCount(count: number) {
 }
 
 describe("Storybook room page with the local transport adapter", () => {
-	it("starts an empty new room with two choices and preserves a typed candidate when loading is cancelled", async () => {
+	it("opens the editor on an empty room and preserves an added candidate when loading is cancelled", async () => {
 		renderPage(true, "editing", 0);
-		expect(screen.getByRole("heading", { name: "후보 만들기" })).toBeTruthy();
-		expect(screen.getByRole("button", { name: /^새로 작성/ })).toBeTruthy();
-		expect(screen.getByRole("button", { name: /^목록 불러오기/ })).toBeTruthy();
+		expect(screen.getByRole("heading", { name: "후보 편집" })).toBeTruthy();
+		expect(screen.getByRole("button", { name: "목록 작업" })).toBeTruthy();
 		expect(screen.queryByRole("button", { name: "룰렛 돌리기" })).toBeNull();
-		expect(screen.queryByRole("textbox", { name: "새 후보 이름" })).toBeNull();
-		fireEvent.click(screen.getByRole("button", { name: /^새로 작성/ }));
+		expect(screen.getByRole("button", { name: "추가하기" })).toBeTruthy();
 		expect(
 			screen.getByRole("button", { name: "마감" }).matches(":disabled"),
 		).toBe(true);
-		fireEvent.change(screen.getByRole("textbox", { name: "새 후보 이름" }), {
-			target: { value: "처음 작성한 후보" },
-		});
+		await addCandidate("처음 작성한 후보");
 
 		listAction("목록 불러오기");
 		const load = screen.getByRole("dialog", { name: "목록 불러오기" });
@@ -115,12 +122,8 @@ describe("Storybook room page with the local transport adapter", () => {
 		).toBeTruthy();
 		fireEvent.click(within(load).getByRole("button", { name: "취소" }));
 		expect(
-			(
-				screen.getByRole("textbox", {
-					name: "새 후보 이름",
-				}) as HTMLInputElement
-			).value,
-		).toBe("처음 작성한 후보");
+			screen.getByRole("button", { name: "처음 작성한 후보 이름 수정" }),
+		).toBeTruthy();
 
 		await act(async () => {
 			fireEvent.click(screen.getByRole("button", { name: "마감" }));
@@ -138,7 +141,7 @@ describe("Storybook room page with the local transport adapter", () => {
 	});
 	it("loads the default list through a dialog from Empty and finalizes without an extra confirmation stage", async () => {
 		renderPage(true, "editing", 0);
-		fireEvent.click(screen.getByRole("button", { name: /^목록 불러오기/ }));
+		listAction("목록 불러오기");
 		const load = screen.getByRole("dialog", { name: "목록 불러오기" });
 		await act(async () => {
 			fireEvent.click(
@@ -178,19 +181,22 @@ describe("Storybook room page with the local transport adapter", () => {
 			screen.getByRole("heading", { name: "후보 추천 접수 중" }),
 		).toBeTruthy();
 		expect(screen.queryByRole("heading", { name: "룰렛" })).toBeNull();
-		const input = screen.getByRole("textbox", { name: "새 후보 이름" });
-		fireEvent.change(input, { target: { value: "닫기 전 추가한 후보" } });
+		await addCandidate("닫기 전 추가한 후보");
 		await act(async () => {
 			fireEvent.click(screen.getByRole("switch", { name: "후보 추천받기" }));
 		});
 		expect(
 			screen.getByRole("heading", { name: "접수 종료 · 목록 확인" }),
 		).toBeTruthy();
-		expect(candidateName(1).value).toBe("닫기 전 추가한 후보");
+		expect(
+			screen.getByRole("button", { name: "닫기 전 추가한 후보 이름 수정" }),
+		).toBeTruthy();
 		await act(async () => {
 			fireEvent.click(screen.getByRole("switch", { name: "후보 추천받기" }));
 		});
-		expect(candidateName(1).value).toBe("닫기 전 추가한 후보");
+		expect(
+			screen.getByRole("button", { name: "닫기 전 추가한 후보 이름 수정" }),
+		).toBeTruthy();
 		await act(async () => {
 			fireEvent.click(screen.getByRole("button", { name: "마감" }));
 		});

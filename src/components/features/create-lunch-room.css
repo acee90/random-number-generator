@@ -1,55 +1,10 @@
-.lunch-create-trigger {
-	flex-shrink: 0;
-}
-.lunch-create-dialog {
-	inline-size: min(460px, calc(100vw - 32px));
-	max-block-size: calc(100dvh - 32px);
-	overflow: auto;
-}
-.lunch-create-dialog h2 {
-	margin: 0 28px 10px 0;
-}
-.lunch-create-dialog p {
-	margin: 0 0 16px;
-}
-.lunch-create-close {
-	position: absolute;
-	inset-block-start: 12px;
-	inset-inline-end: 12px;
-}
-.lunch-create-form {
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-}
-.lunch-create-inline {
-	border: 1px solid var(--section-line, #68715e);
-	border-radius: var(--panel-radius, 2px);
-	background: #fff;
-	padding: 24px;
-}
-.lunch-create-inline h2 {
-	font-size: 23px;
-	line-height: 1.4;
-	margin: 0 0 20px;
-	font-weight: 700;
-}
-.lunch-create-inline .lunch-create-submit {
-	margin-block-start: 6px;
-}
-.lunch-create-form input {
-	margin-block-end: 8px;
-}
-.lunch-create-submit {
-	inline-size: 100%;
-}
-.lunch-create-form .lunch-create-error {
-	color: #a13322;
-}
-.lunch-create-form p {
-	font-size: 13px;
-	line-height: 1.7;
-	overflow-wrap: anywhere;
-	color: #56634a;
-	margin: 0;
+@media (pointer: coarse) {
+	.create-room-actions > button {
+		position: relative;
+	}
+	.create-room-actions > button::after {
+		position: absolute;
+		inset: -0.25rem 0;
+		content: "";
+	}
 }

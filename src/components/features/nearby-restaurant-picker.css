@@ -8,13 +8,9 @@
 	overflow: hidden;
 }
 
-.nearby-search-dialog .ui-dialog-close,
-.nearby-search-trigger,
-.nearby-search-dialog .ui-button {
-	min-block-size: 44px;
-}
 .nearby-search-dialog .ui-dialog-close {
 	min-inline-size: 44px;
+	min-block-size: 44px;
 }
 
 .nearby-search-header {
@@ -223,6 +219,9 @@
 }
 .ui-dialog-footer.nearby-search-footer {
 	flex-shrink: 0;
+	flex-flow: row wrap;
+	align-items: center;
+	justify-content: flex-end;
 	gap: 8px 16px;
 	margin: 0;
 	padding: 10px 16px 12px;

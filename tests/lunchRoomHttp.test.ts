@@ -207,6 +207,47 @@ describe("lunch room HTTP creation", () => {
 		expect(party.initialize).toHaveBeenCalledTimes(1);
 	});
 
+	it("forwards ready-room creation only when an included candidate is present", async () => {
+		const candidate = { id: "ramen", name: "라면", category: "미분류" };
+		const ready = {
+			title: input.title,
+			hostName: input.hostName,
+			startInWaiting: true,
+		};
+		for (const invalid of [
+			{ candidates: [] },
+			{ candidates: [{ ...candidate, included: false }] },
+			{
+				candidates: [candidate],
+				gameFilter: { categories: null, excludedIds: [candidate.id] },
+			},
+			{
+				candidates: [candidate],
+				gameFilter: { categories: null, excludedIds: ["unknown"] },
+			},
+		]) {
+			expect(
+				(await responseFor(createRequest({ ...ready, ...invalid }))).status,
+			).toBe(400);
+		}
+		expect(party.initialize).not.toHaveBeenCalled();
+		const gameFilter = { categories: ["미분류"], excludedIds: [] };
+		expect(
+			(
+				await responseFor(
+					createRequest({ ...ready, candidates: [candidate], gameFilter }),
+				)
+			).status,
+		).toBe(201);
+		expect(party.initialize).toHaveBeenCalledWith(
+			expect.objectContaining({
+				startInWaiting: true,
+				candidates: [candidate],
+				gameFilter,
+			}),
+		);
+	});
+
 	it.each([
 		null,
 		[],

@@ -51,16 +51,6 @@
 	font-weight: 650;
 	letter-spacing: -0.05em;
 }
-.room-entry-loading {
-	min-block-size: 240px;
-}
-.room-entry-loading > .room-entry-icon {
-	margin-block-end: 20px;
-}
-.room-entry-loading > .room-entry-error {
-	margin-block-start: 20px;
-}
-
 .room-entry-form {
 	display: flex;
 	flex-direction: column;

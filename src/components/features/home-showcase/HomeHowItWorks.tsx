@@ -17,9 +17,9 @@ const PLAYBACK_TAIL_MS = 2600;
 const steps = [
 	{
 		scene: "create",
-		title: "내 목록으로 시작해요",
+		title: "첫 추첨 후보를 준비해요",
 		description:
-			"방을 만든 뒤 보드게임, 볼링 같은 후보를 적거나 저장한 목록을 불러와요.",
+			"보드게임, 볼링 같은 후보를 적거나 저장한 목록을 불러와 방을 만들어요.",
 	},
 	{
 		scene: "invite",
