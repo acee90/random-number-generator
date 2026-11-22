@@ -59,6 +59,7 @@ export function VoteTally({
 	readOnly,
 	canVote,
 	onVote,
+	onBoard = false,
 }: {
 	id: string;
 	choice: VoteChoice;
@@ -68,6 +69,7 @@ export function VoteTally({
 	readOnly: boolean;
 	canVote: boolean;
 	onVote: () => void;
+	onBoard?: boolean;
 }) {
 	const previous = useRef({ count, animate });
 	const [burst, setBurst] = useState(0);
@@ -84,7 +86,7 @@ export function VoteTally({
 				key={`icon:${burst}`}
 				aria-hidden="true"
 			>
-				<Icon size={28} />
+				{onBoard && selected ? <Check size={20} /> : <Icon size={28} />}
 				{animate && burst > 0 && <VoteBurst />}
 			</span>
 			<span className="room-feedback-team-label">{label}</span>
@@ -92,7 +94,7 @@ export function VoteTally({
 				<strong>{count}</strong>
 				{animate && burst > 0 && <VoteBurst />}
 			</span>
-			{selected && (
+			{selected && !onBoard && (
 				<span className="room-feedback-team-selection" aria-hidden="true">
 					<Check size={12} />내 선택
 				</span>
@@ -102,6 +104,8 @@ export function VoteTally({
 	return (
 		<h5
 			aria-label={`${label} ${count}`}
+			data-hit={onBoard ? choice : undefined}
+			data-selected={(onBoard && selected) || undefined}
 			id={id}
 			className="room-feedback-tally-heading"
 			data-burst={(animate && burst) || undefined}
@@ -144,11 +148,12 @@ export function RoomFeedbackDetails({
 	readOnly = false,
 	mode = "full",
 	feedback,
-	stageTallies = false,
+	onBoard = false,
+	reducedMotion = false,
 }: Pick<
 	FeedbackProps,
 	"draw" | "selfId" | "isHost" | "connected" | "readOnly" | "mode"
-> & { feedback: RoomFeedback; stageTallies?: boolean }) {
+> & { feedback: RoomFeedback; onBoard?: boolean; reducedMotion?: boolean }) {
 	const id = useId();
 	const {
 		upVotes,
@@ -165,7 +170,7 @@ export function RoomFeedbackDetails({
 	return (
 		<section
 			className="room-draw-feedback"
-			data-mode={mode}
+			data-mode={onBoard ? "board" : mode}
 			data-own-choice={ownChoice}
 			aria-labelledby={`${id}-title`}
 		>
@@ -258,21 +263,20 @@ export function RoomFeedbackDetails({
 							data-selected={ownChoice === vote || undefined}
 							aria-labelledby={`${id}-${vote}`}
 						>
-							{stageTallies ? (
-								<h5 id={`${id}-${vote}`}>{label}</h5>
-							) : (
-								<VoteTally
-									key={`${draw.id}:${vote}`}
-									id={`${id}-${vote}`}
-									choice={vote}
-									count={voters.length}
-									selected={ownChoice === vote}
-									animate={mode === "results" && !readOnly && connected}
-									readOnly={readOnly}
-									canVote={canVote}
-									onVote={() => submit(vote)}
-								/>
-							)}
+							<VoteTally
+								onBoard={onBoard}
+								key={`${draw.id}:${vote}`}
+								id={`${id}-${vote}`}
+								choice={vote}
+								count={voters.length}
+								selected={ownChoice === vote}
+								animate={
+									mode === "results" && !readOnly && connected && !reducedMotion
+								}
+								readOnly={readOnly}
+								canVote={canVote}
+								onVote={() => submit(vote)}
+							/>
 							{voters.length > 0 ? (
 								voterList
 							) : (
@@ -282,7 +286,7 @@ export function RoomFeedbackDetails({
 					);
 				})}
 			</fieldset>
-			{mode === "results" && isHost && !readOnly && (
+			{!onBoard && mode === "results" && isHost && !readOnly && (
 				<p className="room-feedback-timing-note">
 					후보 편집이나 다음 게임으로 이동하면 투표가 마감돼요.
 				</p>

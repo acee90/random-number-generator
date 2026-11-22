@@ -57,6 +57,18 @@ function renderPage(
 	);
 }
 
+function openExclusions() {
+	fireEvent.click(screen.getByRole("button", { name: /^중복 없이 추첨/ }));
+	return screen.getByRole("dialog", { name: "중복 없이 추첨" });
+}
+function closeExclusions() {
+	fireEvent.click(
+		within(screen.getByRole("dialog", { name: "중복 없이 추첨" })).getByRole(
+			"button",
+			{ name: "닫기" },
+		),
+	);
+}
 function candidateName(index = 1) {
 	const existing = screen.queryByRole("textbox", {
 		name: `${index}번 후보 이름`,
@@ -376,10 +388,11 @@ describe("Storybook room page with the local transport adapter", () => {
 			within(options).getAllByRole("button", { name: "닫기" })[0],
 		);
 		expect(
-			within(screen.getByRole("region", { name: "게임 보드" }))
+			within(openExclusions())
 				.getByRole("switch", { name: "중복 없이 추첨 · 뽑힌 후보 제외" })
 				.matches(":disabled"),
 		).toBe(false);
+		closeExclusions();
 		expect(
 			screen.getByRole("heading", { name: "다음 추첨 대기" }),
 		).toBeTruthy();
@@ -521,7 +534,7 @@ describe("Storybook room page with the local transport adapter", () => {
 		fireEvent.click(
 			within(settings).getAllByRole("button", { name: "닫기" })[0],
 		);
-		const options = screen.getByRole("region", { name: "게임 보드" });
+		const options = openExclusions();
 		await act(async () =>
 			fireEvent.click(
 				within(options).getByRole("switch", {
@@ -529,6 +542,7 @@ describe("Storybook room page with the local transport adapter", () => {
 				}),
 			),
 		);
+		closeExclusions();
 		expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
 			roomName,
 		);
@@ -545,11 +559,10 @@ describe("Storybook room page with the local transport adapter", () => {
 	it("can finish candidate editing with every candidate drawn and recover the same list in waiting", async () => {
 		renderPage(true, "result", 1);
 		const switchForDrawn = () =>
-			within(screen.getByRole("region", { name: "게임 보드" })).getByRole(
-				"switch",
-				{ name: "중복 없이 추첨 · 뽑힌 후보 제외" },
-			);
+			screen.getByRole("switch", { name: "중복 없이 추첨 · 뽑힌 후보 제외" });
+		openExclusions();
 		await act(async () => fireEvent.click(switchForDrawn()));
+		closeExclusions();
 		await act(async () =>
 			fireEvent.click(screen.getByRole("button", { name: "다음 게임" })),
 		);
@@ -570,8 +583,10 @@ describe("Storybook room page with the local transport adapter", () => {
 			screen.getByRole("heading", { name: "다음 추첨 대기" }),
 		).toBeTruthy();
 		expectWaitingCandidateCount(0);
+		openExclusions();
 		expect(switchForDrawn().getAttribute("aria-checked")).toBe("true");
 		await act(async () => fireEvent.click(switchForDrawn()));
+		closeExclusions();
 		expectWaitingCandidateCount(1);
 		expect(
 			screen

@@ -27,7 +27,6 @@ export type StageScene = {
 	voteMotionRound?: string;
 	toolbar?: {
 		exclude: boolean;
-		locked: boolean;
 		sound: boolean;
 		soundSupported: boolean;
 	};
@@ -54,33 +53,26 @@ export type StageScene = {
 };
 
 // Logical CSS pixels, shared by the drawing and its keyboard/pointer targets.
-export function stageLayout(width: number, height: number, hasVotes: boolean) {
+export function stageLayout(width: number, height: number) {
 	const small = width < 360;
 	const pad = small ? 8 : 14;
 	const top = small ? 8 : 11;
 	const wheelSide = Math.max(1, Math.min(width - 13, height - 61));
-	const heroWidth = Math.min(width - (small ? 28 : 48), 505);
-	const heroHeight = Math.min(177, heroWidth * 0.46);
-	const voteHeight = small ? 47 : 55;
-	const voteWidth = Math.min(166, (width - (small ? 25 : 40) - 12) / 2);
-	const gap = small ? 20 : 27;
-	const ticketTop =
-		60 + (height - 72 - heroHeight - (hasVotes ? gap + voteHeight : 0)) * 0.49;
+	const heroWidth = Math.min(width - (small ? 24 : 48), 568);
+	const heroHeight = Math.min(164, heroWidth * 0.46);
+	const ticketTop = small ? 70 : 78;
 	return {
 		width,
 		height,
 		pad,
 		top,
-		switchWidth: small ? 147 : 156,
+		optionsWidth: small ? 148 : 160,
 		wheelSide,
 		wheelY: 56 + (height - 61) / 2,
 		hubSize: Math.max(48, (wheelSide * 94) / 440),
 		heroWidth,
 		heroHeight,
 		ticketTop,
-		voteTop: ticketTop + heroHeight + gap,
-		voteWidth,
-		voteHeight,
 	};
 }
 export type StageLayout = ReturnType<typeof stageLayout>;

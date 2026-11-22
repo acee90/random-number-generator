@@ -1,15 +1,12 @@
 import {
 	type ComponentProps,
 	type CSSProperties,
-	type ReactNode,
 	type RefObject,
 	useId,
 	useLayoutEffect,
 	useRef,
 	useState,
 } from "react";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import type { useDrawSound } from "@/hooks/useDrawPresentation";
 import { type FeedbackOptions, useRoomFeedback } from "@/hooks/useRoomFeedback";
 import type { RoomDraw } from "@/lib/lunchRoom";
@@ -23,54 +20,27 @@ import {
 } from "./picnic/layout";
 import { PicnicArt } from "./picnic/PicnicArt";
 import { roomCandidateNumbers } from "./RoomCandidateList";
-import { choices, RoomFeedbackDetails, VoteTally } from "./RoomDrawFeedback";
+import { RoomFeedbackDetails } from "./RoomDrawFeedback";
+import RoomExclusionPanel, {
+	type ExclusionOptions,
+} from "./RoomExclusionPanel";
 import RoomNextGameButton from "./RoomNextGameButton";
 
-export type ExclusionSetting = {
-	checked: boolean;
-	disabled: boolean;
-	descriptionId?: string;
-	onToggle: (value: boolean) => void;
-};
 type WheelProps = ComponentProps<typeof LunchWheel>;
 type Props = Omit<FeedbackOptions, "draw"> & {
 	draw: RoomDraw | null;
 	solo?: boolean;
 	isHost: boolean;
 	wheel?: WheelProps;
-	exclusion?: ExclusionSetting;
-	preparation?: ReactNode;
+	exclusion?: ExclusionOptions;
 	sound?: ReturnType<typeof useDrawSound>;
 	reducedMotion?: boolean;
 	titleRef?: RefObject<HTMLHeadingElement | null>;
 	titleId?: string;
-	showNextAction?: boolean;
 	canNext?: boolean;
 	nextPending?: boolean;
 	onNext: () => void;
 };
-
-export function PicnicExclusionSwitch({
-	setting: exclusion,
-}: {
-	setting: ExclusionSetting;
-}) {
-	const id = useId();
-	return (
-		<div className="picnic-exclusion" data-hit="exclude">
-			<Label htmlFor={id}>중복 없이 추첨</Label>
-			<Switch
-				id={id}
-				size="lg"
-				aria-label="중복 없이 추첨 · 뽑힌 후보 제외"
-				aria-describedby={exclusion.descriptionId}
-				checked={exclusion.checked}
-				disabled={exclusion.disabled}
-				onCheckedChange={exclusion.onToggle}
-			/>
-		</div>
-	);
-}
 
 function hitTarget(target: EventTarget | null): Control | null {
 	return target instanceof Element
@@ -85,12 +55,10 @@ export default function RoomGameStage({
 	isHost,
 	wheel,
 	exclusion,
-	preparation,
 	sound,
 	reducedMotion,
 	titleRef,
 	titleId,
-	showNextAction = true,
 	canNext = false,
 	nextPending = false,
 	onNext,
@@ -168,8 +136,7 @@ export default function RoomGameStage({
 		toolbar:
 			exclusion && sound
 				? {
-						exclude: exclusion.checked,
-						locked: exclusion.disabled,
+						exclude: exclusion.snapshot?.excludeDrawn ?? false,
 						sound: sound.enabled,
 						soundSupported: sound.supported,
 					}
@@ -192,24 +159,17 @@ export default function RoomGameStage({
 		hover,
 		pressed,
 	};
-	const layout = stageLayout(
-		size.width,
-		size.mainHeight,
-		Boolean(result?.votes),
-	);
+	const layout = stageLayout(size.width, size.mainHeight);
 	const box = {
 		"--pad": `${layout.pad}px`,
 		"--top": `${layout.top}px`,
-		"--switch-width": `${layout.switchWidth}px`,
+		"--options-width": `${layout.optionsWidth}px`,
 		"--wheel": `${layout.wheelSide}px`,
 		"--wheel-y": `${layout.wheelY}px`,
 		"--hub": `${layout.hubSize}px`,
 		"--ticket-w": `${layout.heroWidth}px`,
 		"--ticket-h": `${layout.heroHeight}px`,
 		"--ticket-top": `${layout.ticketTop}px`,
-		"--vote-w": `${layout.voteWidth}px`,
-		"--vote-h": `${layout.voteHeight}px`,
-		"--vote-top": `${layout.voteTop}px`,
 	} as CSSProperties;
 	const headingId = titleId ?? `${id}-winner`;
 	return (
@@ -248,12 +208,12 @@ export default function RoomGameStage({
 					rotorRef={wheel?.rotorRef}
 					animate={!result && phase === "spinning" && !reducedMotion}
 				/>
+				{exclusion && <RoomExclusionPanel {...exclusion} />}
 				<div
 					ref={main}
 					className="picnic-main"
 					data-result={Boolean(result) || undefined}
 				>
-					{exclusion && <PicnicExclusionSwitch setting={exclusion} />}
 					{sound && (
 						<div className="picnic-sound" data-hit="sound">
 							<DrawPresentationControls sound={sound} />
@@ -276,58 +236,37 @@ export default function RoomGameStage({
 							</div>
 						</section>
 					)}
-					{result?.votes && draw && (
-						<fieldset className="picnic-ballots">
-							<legend className="sr-only">이번 추첨 결과 투표</legend>
-							{choices.map(({ vote }) => (
-								<div
-									key={vote}
-									data-hit={vote}
-									data-selected={feedback.ownChoice === vote || undefined}
-								>
-									<VoteTally
-										key={draw.id}
-										id={`${id}-${vote}`}
-										choice={vote}
-										count={
-											vote === "up"
-												? feedback.upVotes.length
-												: feedback.downVotes.length
-										}
-										selected={feedback.ownChoice === vote}
-										readOnly={Boolean(voting.readOnly)}
-										animate={
-											voting.connected && !voting.readOnly && !reducedMotion
-										}
-										canVote={feedback.canVote}
-										onVote={() => feedback.submit(vote)}
-									/>
-								</div>
-							))}
-						</fieldset>
-					)}
 				</div>
 				<div className="picnic-details">
-					{draw && !solo && (
-						<RoomFeedbackDetails
-							draw={draw}
-							{...voting}
-							isHost={isHost}
-							mode="results"
-							feedback={feedback}
-							stageTallies
-						/>
-					)}
-					{draw && showNextAction && isHost && !voting.readOnly && (
-						<div className="room-result-actions">
-							<RoomNextGameButton
-								disabled={!canNext || nextPending || voting.pending}
-								pending={nextPending}
-								onClick={onNext}
-							/>
+					{result && draw && (!solo || (isHost && !voting.readOnly)) && (
+						<div className="picnic-sheet">
+							{!solo && (
+								<RoomFeedbackDetails
+									draw={draw}
+									{...voting}
+									isHost={isHost}
+									mode="results"
+									feedback={feedback}
+									onBoard
+									reducedMotion={reducedMotion}
+								/>
+							)}
+							{isHost && !voting.readOnly && (
+								<div className="picnic-footer">
+									{!solo && (
+										<p className="room-feedback-timing-note">
+											후보 편집이나 다음 게임으로 이동하면 투표가 마감돼요.
+										</p>
+									)}
+									<RoomNextGameButton
+										disabled={!canNext || nextPending || voting.pending}
+										pending={nextPending}
+										onClick={onNext}
+									/>
+								</div>
+							)}
 						</div>
 					)}
-					{preparation}
 				</div>
 			</section>
 		</div>

@@ -48,8 +48,12 @@ try {
 	const board = page.getByRole("region", { name: "게임 보드" });
 	const idle = board.locator('canvas[data-painted][data-scene="idle"]');
 	await idle.waitFor();
-	const exclude = board.getByRole("switch");
+	const options = board.getByRole("button", { name: /^중복 없이 추첨/ });
+	const popup = page.getByRole("dialog", { name: "중복 없이 추첨" });
+	await options.click();
+	const exclude = popup.getByRole("switch");
 	if (!(await exclude.isChecked())) await exclude.click();
+	await popup.getByRole("button", { name: "닫기" }).click();
 	for (const { width, height } of [
 		{ width: 320, height: 760 },
 		{ width: 597, height: 850 },
@@ -166,22 +170,66 @@ try {
 				.getByRole("list", { name: "좋아요 투표한 참가자" })
 				.isVisible(),
 		);
-		const history = board.getByRole("button", { name: /당첨 제외 내역/ });
-		if (width === 320)
-			assert.equal(await history.getAttribute("aria-expanded"), "false");
-		if ((await history.getAttribute("aria-expanded")) === "false")
-			await history.click();
-		assert.ok(
-			await board.getByRole("list", { name: "당첨 제외 내역" }).isVisible(),
+		for (const choice of ["up", "down"]) {
+			const group = board.locator(`[data-choice="${choice}"]`);
+			const button = await group.getByRole("button").boundingBox();
+			const list = await group
+				.locator("ul, .room-feedback-empty")
+				.boundingBox();
+			assert.ok(button.height >= 44 && Math.abs(button.x - list.x) <= 1);
+			assert.ok(
+				list.y >= button.y + button.height &&
+					list.y - button.y - button.height <= 12,
+			);
+		}
+		assert.equal(
+			await board.getByRole("list", { name: "당첨 제외 내역" }).count(),
+			0,
 		);
+		await options.focus();
+		await options.press("Enter");
+		await popup.waitFor();
+		assert.ok(
+			await popup.getByRole("list", { name: "당첨 제외 내역" }).isVisible(),
+		);
+		assert.ok(
+			await popup.evaluate(
+				(el) =>
+					!!el.closest(".picnic-frame") && el.contains(document.activeElement),
+			),
+		);
+		if (width < 900) {
+			assert.ok(
+				await popup.evaluate((el) => {
+					const box = el.getBoundingClientRect();
+					const viewport = el
+						.closest(".room-primary-column")
+						.getBoundingClientRect();
+					return (
+						box.top >= viewport.top - 1 && box.bottom <= viewport.bottom + 1
+					);
+				}),
+				`${width}px: the complete popup must fit above chat`,
+			);
+		}
 		if (width === 320) {
-			await board.getByRole("button", { name: "제외 목록 초기화" }).click();
-			await page
-				.getByRole("alertdialog")
+			await popup.getByRole("button", { name: "제외 목록 초기화" }).click();
+			const confirm = page.getByRole("alertdialog");
+			assert.ok(await confirm.evaluate((el) => !!el.closest(".picnic-frame")));
+			await confirm
 				.getByRole("button", { name: "초기화", exact: true })
 				.click();
-			await board.getByText("아직 제외된 후보가 없어요.").waitFor();
+			await popup.getByText("아직 제외된 후보가 없어요.").waitFor();
 		}
+		if (width === 1440) {
+			const box = await popup.boundingBox();
+			await page.mouse.click(box.x + box.width + 12, box.y + 24);
+		} else await page.keyboard.press("Escape");
+		await popup.waitFor({ state: "detached" });
+		await page.waitForFunction(() =>
+			document.activeElement?.matches(".picnic-exclusion"),
+		);
+
 		await board.getByRole("button", { name: "다음 게임" }).click();
 		await idle.waitFor();
 		console.log(`${width}px passed`);

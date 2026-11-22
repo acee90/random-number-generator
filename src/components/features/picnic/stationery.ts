@@ -122,31 +122,35 @@ export function drawToolbar(
 ) {
 	const options = scene.toolbar;
 	if (!options) return;
-	const { width, pad, top, switchWidth } = layout;
+	const { width, pad, top, optionsWidth } = layout;
 	const ink = picnic.ink,
 		group = layer(parent, pad, top),
 		g = pen(group);
 	const paper = 0xfff7e3;
-	g.roundRect(0.8, 2.5, switchWidth, 44, 22)
+	g.roundRect(0.8, 2.5, optionsWidth, 44, 22)
 		.fill({ color: ink, alpha: 0.26 })
-		.roundRect(0, 0, switchWidth, 44, 22)
-		.fill(
-			stateFill(scene, "exclude", paper, 0xffeccc, 0xf6d9a7, !options.locked),
-		)
+		.roundRect(0, 0, optionsWidth, 44, 22)
+		.fill(stateFill(scene, "exclude", paper, 0xffeccc, 0xf6d9a7, true))
 		.stroke({ color: ink, width: 1.35 });
 	lettering(group, "중복 없이 추첨", 12, 22, width < 360 ? 12 : 13, ink, {
 		left: true,
 	});
-	const x = switchWidth - 46;
-	g.roundRect(x, 11, 34, 22, 11)
-		.fill(options.exclude ? 0x356959 : 0x937d72)
-		.stroke({ color: ink, width: 1 });
-	g.circle(x + (options.exclude ? 23 : 11), 22, 8.5).fill(0xfff6db);
-	if (options.exclude) {
-		line(g, x + 4.6, 21.5, x + 6.5, 24, 0xfff6db, 1.4);
-		line(g, x + 6.5, 24, x + 10.3, 19.5, 0xfff6db, 1.4);
-	}
-	if (options.locked) group.alpha = 0.72;
+	const badgeX = optionsWidth - 58;
+	g.roundRect(badgeX, 12, 32, 20, 10).fill(
+		options.exclude ? 0xd3e7d6 : 0xeee2d2,
+	);
+	lettering(
+		group,
+		options.exclude ? "켜짐" : "꺼짐",
+		badgeX + 16,
+		22,
+		11.5,
+		options.exclude ? 0x305d47 : 0x695951,
+	);
+	g.moveTo(optionsWidth - 20, 20)
+		.lineTo(optionsWidth - 16, 24)
+		.lineTo(optionsWidth - 12, 20)
+		.stroke({ color: ink, width: 1.6, cap: "round", join: "round" });
 	const speaker = layer(parent, width - pad - 22, top + 22),
 		icon = pen(speaker);
 	icon

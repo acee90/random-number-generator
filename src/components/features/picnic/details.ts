@@ -64,7 +64,7 @@ export function drawDetails(
 		run(value.slice(start), range.getBoundingClientRect());
 	}
 	function visit(el: Element, group: Container, clip?: DOMRect) {
-		if (el.matches(".sr-only, [hidden], legend")) return;
+		if (el.matches(".sr-only, [hidden], legend, [data-hit]")) return;
 		const box = el.getBoundingClientRect();
 		if (
 			!box.width ||
@@ -76,19 +76,42 @@ export function drawDetails(
 			y = box.top - origin.top;
 		const { width: w, height: h } = box;
 		const style = getComputedStyle(el);
-		if (
-			el.matches(
-				".room-draw-feedback, .room-draw-exclusions, .room-result-actions",
-			)
+		if (el.matches(".ui-dialog-overlay")) {
+			pen(group).rect(x, y, w, h).fill({ color: 0x392a28, alpha: 0.38 });
+			return;
+		}
+		if (el.matches(".picnic-sheet, .picnic-popup")) {
+			const g = pen(group);
+			if (el.matches(".picnic-popup"))
+				g.roundRect(x + 2, y + 4, w, h, 12).fill({
+					color: 0x392a28,
+					alpha: 0.22,
+				});
+			g.roundRect(x, y, w, h, 12)
+				.fill(style.backgroundColor)
+				.stroke({ color: style.borderTopColor, width: 1 });
+		} else if (el.matches(".picnic-setting-row")) {
+			pen(group).roundRect(x, y, w, h, 7).fill(style.backgroundColor);
+		} else if (
+			el.matches(".picnic-footer") &&
+			parseFloat(style.borderTopWidth)
 		) {
 			pen(group)
-				.roundRect(x, y, w, h, 8)
-				.fill(0xfff6e2)
-				.stroke({ color: 0xcdb197, width: 1 });
+				.moveTo(x, y)
+				.lineTo(x + w, y)
+				.stroke({ color: style.borderTopColor, width: 1 });
+		} else if (el.matches('[role="switch"]')) {
+			const checked = el.getAttribute("aria-checked") === "true";
+			const g = pen(group);
+			g.roundRect(x, y, w, h, h / 2)
+				.fill(style.backgroundColor)
+				.circle(checked ? x + w - h / 2 : x + h / 2, y + h / 2, h / 2 - 3)
+				.fill(0xfff8e9);
+			if (el.matches(":disabled")) g.alpha = 0.55;
 		} else if (el instanceof HTMLButtonElement) {
 			const active = !el.disabled && el.matches(":active");
 			const over = !el.disabled && hover && el.matches(":hover");
-			if (el.classList.contains("room-next-round")) {
+			if (el.matches('.room-next-round, [data-slot="alert-dialog-action"]')) {
 				pen(group)
 					.roundRect(x, y, w, h, 7)
 					.fill(
@@ -100,6 +123,11 @@ export function drawDetails(
 									? 0x2f544a
 									: 0x365f53,
 					);
+			} else if (el.matches('[data-slot="alert-dialog-cancel"]')) {
+				pen(group)
+					.roundRect(x, y, w, h, 6)
+					.fill(over || active ? 0xf6e6ca : 0xfff8e9)
+					.stroke({ color: 0xbba48d, width: 1 });
 			} else if (over || active) {
 				pen(group)
 					.roundRect(x, y, w, h, 6)
@@ -118,10 +146,9 @@ export function drawDetails(
 			g.scale.set(w / 24, h / 24);
 			if (el.classList.contains("lucide-arrow-right")) {
 				g.moveTo(-8, 0).lineTo(8, 0).moveTo(1, -7).lineTo(8, 0).lineTo(1, 7);
-			} else if (el.classList.contains("lucide-chevron-down")) {
-				g.moveTo(-6, -3).lineTo(0, 3).lineTo(6, -3);
-				if (el.closest('[aria-expanded="true"]')) g.rotation = Math.PI;
-			} else {
+			} else if (el.classList.contains("lucide-x")) {
+				g.moveTo(-6, -6).lineTo(6, 6).moveTo(6, -6).lineTo(-6, 6);
+			} else if (el.classList.contains("lucide-rotate-ccw")) {
 				g.moveTo(-9, -8)
 					.lineTo(-9, -2)
 					.lineTo(-3, -2)
@@ -133,7 +160,7 @@ export function drawDetails(
 			return;
 		}
 		const scrollable = el.matches(
-			".room-feedback-list ul, .room-draw-exclusion-scroll",
+			".room-feedback-list ul, .room-draw-exclusion-scroll, .picnic-popup",
 		);
 		const overflow = scrollable && el.scrollHeight > el.clientHeight + 1;
 		const content = overflow ? layer(group) : group;
@@ -154,7 +181,7 @@ export function drawDetails(
 				.roundRect(x + w - 4, y + offset, 3, thumb, 1.5)
 				.fill(0xa88970);
 		}
-		if (el.matches(":focus-visible")) {
+		if (el.matches(':focus-visible:not([tabindex="-1"])')) {
 			pen(group)
 				.roundRect(x + 1.5, y + 1.5, w - 3, h - 3, 6)
 				.stroke({ color: 0x284f84, width: 3 });
@@ -193,12 +220,14 @@ export function observeDetails(root: HTMLElement, refresh: () => void) {
 	});
 	const sizes = new ResizeObserver(schedule);
 	sizes.observe(root);
+	window.addEventListener("resize", schedule);
 	for (const event of events) root.addEventListener(event, schedule, true);
 	document.fonts.addEventListener("loadingdone", schedule);
 	return () => {
 		cancelAnimationFrame(frame);
 		mutations.disconnect();
 		sizes.disconnect();
+		window.removeEventListener("resize", schedule);
 		for (const event of events) root.removeEventListener(event, schedule, true);
 		document.fonts.removeEventListener("loadingdone", schedule);
 	};

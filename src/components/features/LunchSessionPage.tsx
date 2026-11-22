@@ -48,7 +48,6 @@ import {
 } from "@/lib/lunchRoom";
 import { getSourceDisplayName } from "@/services/randomService";
 import ClosedRoomHistory, { RoomTerminalActions } from "./ClosedRoomHistory";
-import RoomNextGameButton from "./RoomNextGameButton";
 import "./lunch-room.css";
 import "./lunch-room-mobile.css";
 
@@ -836,25 +835,10 @@ export default function LunchSessionPage({
 											? () => advanceRound(true)
 											: undefined
 									}
-									resultAction={
-										showResult && isHost && !drawArchived ? (
-											<RoomNextGameButton
-												disabled={
-													!connected ||
-													busy ||
-													room.candidatesPending ||
-													Boolean(room.mutationPending) ||
-													room.votePendingDrawId === displayedDraw?.id
-												}
-												pending={room.nextPending && !editingAfterResult}
-												onClick={() => advanceRound()}
-											/>
-										) : undefined
-									}
 									onStart={start}
 									onHistory={() => changeView("history")}
 								>
-									{(requestStart, exclusion, panel) => (
+									{(requestStart, exclusion) => (
 										<section
 											id={`${id}-draw-panel`}
 											className="room-draw-panel"
@@ -900,9 +884,14 @@ export default function LunchSessionPage({
 												}}
 												sound={sound}
 												exclusion={exclusion}
-												preparation={panel}
+												canNext={
+													connected &&
+													!busy &&
+													!room.candidatesPending &&
+													!room.mutationPending
+												}
 												reducedMotion={reducedMotion}
-												showNextAction={false}
+												nextPending={room.nextPending && !editingAfterResult}
 												solo={solo}
 												selfId={room.self?.id}
 												isHost={room.self?.isHost === true}
