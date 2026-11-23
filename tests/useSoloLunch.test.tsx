@@ -54,9 +54,7 @@ async function spin(result: ReturnType<typeof setup>["result"]) {
 describe("local game controller", () => {
 	it("restores the slot view and its winner from the local room after voting and advancing", async () => {
 		const { result } = setup();
-		await act(async () => {
-			expect(await result.current.room.updateDrawView("slot-v1")).toBe(true);
-		});
+		expect(result.current.room.snapshot.viewMode).toBe("slot-v1");
 		await spin(result);
 		const { roomId, draw } = result.current.room.snapshot;
 		assert(draw);

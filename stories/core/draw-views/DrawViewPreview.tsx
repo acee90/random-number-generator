@@ -35,8 +35,8 @@ import { sampleCandidates, sampleRound } from "./sample";
 import "./draw-views.css";
 
 const modes = {
-	wheel: "룰렛",
 	rolling: "슬롯머신",
+	wheel: "룰렛",
 	cards: "카드 뽑기",
 } as const;
 type Mode = keyof typeof modes;

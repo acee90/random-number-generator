@@ -6,6 +6,7 @@ import {
 	Shuffle,
 } from "lucide-react";
 import {
+	type ReactElement,
 	type RefObject,
 	useEffect,
 	useLayoutEffect,
@@ -30,6 +31,7 @@ type Props = {
 	host: boolean;
 	disabled: boolean;
 	onDraw: () => void;
+	nextButton: ReactElement | null;
 	buttonRef: RefObject<HTMLButtonElement | null>;
 	buttonId: string;
 	titleRef?: RefObject<HTMLHeadingElement | null>;
@@ -46,6 +48,7 @@ export default function SlotMachine({
 	host,
 	disabled,
 	onDraw,
+	nextButton,
 	buttonRef,
 	buttonId,
 	titleRef,
@@ -62,6 +65,7 @@ export default function SlotMachine({
 	const done = phase === "done";
 	const busy = phase === "fetching" || phase === "spinning";
 	const winner = draw?.winnerIndex;
+	const category = draw?.candidates[draw.winnerIndex]?.category;
 	const rows = useMemo(
 		() => slotStrip(count, preview, winner),
 		[count, preview, winner],
@@ -156,6 +160,7 @@ export default function SlotMachine({
 	]);
 
 	const browsing = phase === "idle" && count > 1;
+	const plaqueCategory = done && nextButton ? category : undefined;
 	const label = done
 		? "당첨 메뉴"
 		: phase === "spinning"
@@ -169,7 +174,10 @@ export default function SlotMachine({
 			<div className="slot-cabinet">
 				<div className="slot-plaque">
 					<span className="slot-rule" aria-hidden="true" />
-					<span>{label}</span>
+					<span className="slot-plaque-label" title={plaqueCategory}>
+						{label}
+						{plaqueCategory && ` · ${plaqueCategory}`}
+					</span>
 					<span className="slot-rule" aria-hidden="true" />
 				</div>
 				<div className="slot-bezel">
@@ -226,15 +234,18 @@ export default function SlotMachine({
 						</Button>
 					)}
 					{done ? (
-						<div className="slot-outcome">
-							<Award aria-hidden="true" />
-							<span>{draw?.candidates[draw.winnerIndex]?.category}</span>
-						</div>
+						(nextButton ?? (
+							<div className="slot-outcome">
+								<Award aria-hidden="true" />
+								<span>{category}</span>
+							</div>
+						))
 					) : host ? (
 						<Button
 							id={buttonId}
 							ref={buttonRef}
-							className="slot-start"
+							className="slot-action"
+							size="lg"
 							disabled={disabled || busy || !count}
 							aria-busy={busy}
 							onClick={onDraw}

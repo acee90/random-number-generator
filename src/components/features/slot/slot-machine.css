@@ -83,6 +83,12 @@
 	block-size: 1px;
 	background: var(--slot-brass);
 }
+.slot-plaque-label {
+	min-inline-size: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
 .slot-bezel {
 	position: relative;
 	padding: 5px;
@@ -227,12 +233,13 @@
 	--foreground: var(--slot-type);
 	--accent: var(--paper-green);
 }
-.slot-controls .slot-start {
+.slot-controls .slot-action {
 	--primary: var(--slot-highlight);
 	--primary-hover: var(--slot-brass);
 	--primary-foreground: var(--slot-shell-dark);
+	min-inline-size: 8rem;
 }
-.slot-controls .slot-start:disabled {
+.slot-machine:not([data-phase="done"]) .slot-action:disabled {
 	opacity: 1;
 	color: var(--slot-highlight);
 	background: transparent;

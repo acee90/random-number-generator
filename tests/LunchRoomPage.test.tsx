@@ -295,9 +295,12 @@ describe("local chat delivery display", () => {
 });
 
 describe("current result feedback and frozen history", () => {
-	it("lets the host cast one ballot and waits for its acknowledgement before closing the result", () => {
+	it.each([
+		"wheel",
+		"slot-v1",
+	] as const)("waits for the host ballot's acknowledgement before closing the %s result", (viewMode) => {
 		room.self = { id: "host-client", isHost: true };
-		const current = { ...draw(baseTime - 8000), votes: [] };
+		const current = { ...draw(baseTime - 8000), viewMode, votes: [] };
 		room.snapshot = snapshot({ draw: current, status: "result" });
 		const view = render(<LunchRoomPage roomId={roomId} />);
 		const next = screen.getByRole("button", {
@@ -378,6 +381,9 @@ describe("current result feedback and frozen history", () => {
 		const heading = within(stage).getByRole("heading", { name: winner });
 		expect(heading.closest(".slot-drum")).toBe(drum);
 		const vote = within(stage).getByRole("button", { name: "좋아요 투표" });
+		expect(
+			within(stage).queryByRole("button", { name: "다음 게임" }),
+		).toBeNull();
 		expect(
 			heading.compareDocumentPosition(vote) & Node.DOCUMENT_POSITION_FOLLOWING,
 		).toBeTruthy();

@@ -53,6 +53,8 @@ try {
 	await page.getByRole("textbox", { name: "닉네임" }).fill("방장");
 	await page.getByRole("button", { name: "입장하기" }).click();
 	await page.getByRole("button", { name: "마감", exact: true }).click();
+	await page.getByRole("combobox", { name: /추첨 보기/ }).click();
+	await page.getByRole("option", { name: "룰렛", exact: true }).click();
 	const board = page.getByRole("region", { name: "게임 보드" });
 	const panel = page.getByRole("region", { name: "룰렛", exact: true });
 	await board.getByText("추첨판을 불러오는 중…").waitFor();

@@ -3593,14 +3593,16 @@ describe("LunchRoomServer game lifecycle", () => {
 		return structuredClone(draw);
 	}
 
-	it("synchronizes the host's view, freezes it on the round, and keeps the archived view after switching back", async () => {
+	it("starts both clients in slot view and keeps a wheel round archived after switching back", async () => {
 		const { server, context } = await room();
 		const host = await connect(server, context, "방장", hostToken);
 		const guest = await connect(server, context, "참가자");
+		expect(latestSnapshot(host).snapshot.viewMode).toBe("slot-v1");
+		expect(latestSnapshot(guest).snapshot.viewMode).toBe("slot-v1");
 		const change = {
 			type: "draw-view",
-			id: "slot-change",
-			viewMode: "slot-v1",
+			id: "wheel-change",
+			viewMode: "wheel",
 			expectedRevision: revision(host),
 		};
 		await send(server, guest, { ...change, id: "guest-change" });
@@ -3612,24 +3614,24 @@ describe("LunchRoomServer game lifecycle", () => {
 		await send(server, host, change);
 		expect(revision(host)).toBe(change.expectedRevision + 1);
 		expect(latestSnapshot(guest).snapshot).toMatchObject({
-			viewMode: "slot-v1",
+			viewMode: "wheel",
 			candidates: pool,
 		});
 		await send(server, host, {
 			...change,
 			id: "stale-view",
-			viewMode: "wheel",
+			viewMode: "slot-v1",
 		});
 		expect(requestErrors(host, "stale-view")).toMatchObject([
 			{ code: "REVISION_CONFLICT" },
 		]);
-		const draw = await drawResult(server, context, host, "slot-draw");
-		expect(draw.viewMode).toBe("slot-v1");
+		const draw = await drawResult(server, context, host, "wheel-draw");
+		expect(draw.viewMode).toBe("wheel");
 		expect(latestSnapshot(guest).snapshot.draw).toEqual(draw);
 		await send(server, host, {
 			...change,
 			id: "result-change",
-			viewMode: "wheel",
+			viewMode: "slot-v1",
 			expectedRevision: revision(host),
 		});
 		expect(requestErrors(host, "result-change")).toMatchObject([
@@ -3637,19 +3639,19 @@ describe("LunchRoomServer game lifecycle", () => {
 		]);
 		await send(server, host, {
 			type: "next",
-			id: "after-slot",
+			id: "after-wheel",
 			drawId: draw.id,
 		});
-		expect(latestSnapshot(host).snapshot.viewMode).toBe("slot-v1");
+		expect(latestSnapshot(host).snapshot.viewMode).toBe("wheel");
 		await send(server, host, {
 			...change,
-			id: "back-to-wheel",
-			viewMode: "wheel",
+			id: "back-to-slot",
+			viewMode: "slot-v1",
 			expectedRevision: revision(host),
 		});
 		expect(latestSnapshot(guest).snapshot).toMatchObject({
-			viewMode: "wheel",
-			history: [{ id: draw.id, viewMode: "slot-v1" }],
+			viewMode: "slot-v1",
+			history: [{ id: draw.id, viewMode: "wheel" }],
 		});
 		expect(entropy).toHaveBeenCalledTimes(1);
 	});
