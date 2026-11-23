@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { type ComponentProps, createRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LunchWheel } from "../src/components/features/LunchWheel";
+import { wheelFaceRadius } from "../src/components/features/picnic/layout";
 import type { LunchPlace } from "../src/lib/lunch";
 import { sampleLunchPlaces } from "../src/lib/lunch";
 
@@ -22,6 +23,12 @@ function wheelProps(size = 2, overrides: Partial<WheelProps> = {}): WheelProps {
 		covered: false,
 		...overrides,
 	};
+}
+function firstLabel(container: HTMLElement) {
+	return Array.from(
+		container.querySelectorAll(".lunch-wheel-label:first-child text"),
+		(node) => node.textContent,
+	);
 }
 function transitionCompleted(element: Element) {
 	const event = new Event("transitionend", { bubbles: true });
@@ -49,9 +56,7 @@ describe("static wheel face rendering", () => {
 				})}
 			/>,
 		);
-		expect(view.container.querySelector("text")?.textContent).toBe(
-			`1 ${label}`,
-		);
+		expect(firstLabel(view.container)).toEqual(["1", label]);
 	});
 
 	it.each([
@@ -60,7 +65,9 @@ describe("static wheel face rendering", () => {
 		const cos = vi.spyOn(Math, "cos");
 		const initial = wheelProps(size);
 		const view = render(<LunchWheel {...initial} />);
-		expect(cos).toHaveBeenCalledTimes(size);
+		expect(cos).toHaveBeenCalledTimes(
+			view.container.querySelectorAll(".lunch-wheel-label").length,
+		);
 		const svg = view.container.querySelector(".lunch-wheel-rotor > svg");
 		expect(svg).not.toBeNull();
 		const face = svg?.outerHTML;
@@ -111,9 +118,7 @@ describe("static wheel face rendering", () => {
 		cos.mockClear();
 		view.rerender(<LunchWheel {...props} candidateNumbers={[101, 107]} />);
 		expect(cos).toHaveBeenCalledTimes(2);
-		expect(view.container.querySelector("text")?.textContent).toBe(
-			"101 한식당",
-		);
+		expect(firstLabel(view.container)).toEqual(["101", "한식당"]);
 		cos.mockClear();
 		const renamed = candidates.map((place, index) =>
 			index === 0 ? { ...place, name: "분식당" } : place,
@@ -126,9 +131,7 @@ describe("static wheel face rendering", () => {
 			/>,
 		);
 		expect(cos).toHaveBeenCalledTimes(2);
-		expect(view.container.querySelector("text")?.textContent).toBe(
-			"101 분식당",
-		);
+		expect(firstLabel(view.container)).toEqual(["101", "분식당"]);
 		cos.mockClear();
 		view.rerender(
 			<LunchWheel
@@ -155,13 +158,11 @@ describe("static wheel face rendering", () => {
 		candidates[0].name = "가나다라다른이름";
 		view.rerender(<LunchWheel {...props} />);
 		expect(cos).not.toHaveBeenCalled();
-		expect(view.container.querySelector("text")?.textContent).toBe(
-			"1 가나다라…",
-		);
+		expect(firstLabel(view.container)).toEqual(["1", "가나다라…"]);
 		candidates[0].name = "새 이름";
 		view.rerender(<LunchWheel {...props} />);
 		expect(cos).toHaveBeenCalledTimes(1);
-		expect(view.container.querySelector("text")?.textContent).toBe("1 새 이름");
+		expect(firstLabel(view.container)).toEqual(["1", "새 이름"]);
 	});
 
 	it("rebuilds geometry when candidates change identity, order or count", () => {
@@ -184,18 +185,67 @@ describe("static wheel face rendering", () => {
 			/>,
 		);
 		expect(cos).toHaveBeenCalledTimes(2);
-		expect(view.container.querySelector("text")?.textContent).toContain("2 ");
+		expect(firstLabel(view.container)[0]).toBe("2");
 		cos.mockClear();
 		view.rerender(<LunchWheel {...wheelProps(107)} />);
-		expect(cos).toHaveBeenCalledTimes(107);
-		expect(view.container.querySelectorAll("text")).toHaveLength(107);
+		const dense = view.container.querySelectorAll(".lunch-wheel-number");
+		expect(dense.length).toBeGreaterThan(0);
+		expect(dense.length).toBeLessThanOrEqual(107);
+		expect(cos).toHaveBeenCalledTimes(dense.length);
+		expect(
+			view.container
+				.querySelector(".lunch-wheel")
+				?.getAttribute("data-candidate-count"),
+		).toBe("107");
 		view.rerender(<LunchWheel {...wheelProps(0)} />);
 		expect(view.container.querySelectorAll("text")).toHaveLength(0);
 		expect(
 			view.container.querySelector(".lunch-wheel-rotor > svg"),
 		).not.toBeNull();
 		view.rerender(<LunchWheel {...wheelProps(2)} />);
-		expect(view.container.querySelectorAll("text")).toHaveLength(2);
+		expect(view.container.querySelectorAll(".lunch-wheel-number")).toHaveLength(
+			2,
+		);
+	});
+
+	it("puts each original number at the rim and anchors its name inward on either half", () => {
+		const props = wheelProps(60, {
+			candidateNumbers: [7, ...Array.from({ length: 59 }, (_, i) => 200 - i)],
+		});
+		const view = render(<LunchWheel {...props} wheelSide={480} />);
+		const rows = view.container.querySelectorAll(".lunch-wheel-label");
+		expect(rows).toHaveLength(60);
+		const outerEdges: number[] = [];
+		for (const [index, row] of rows.entries()) {
+			const [number, name] = row.querySelectorAll("text");
+			const badge = row.querySelector("rect");
+			expect(number.textContent).toBe(String(props.candidateNumbers[index]));
+			expect(badge).not.toBeNull();
+			const halfWidth = Number(badge?.getAttribute("width")) / 2;
+			const [x, y, rotation] = (
+				row.getAttribute("transform")?.match(/-?[\d.]+/g) ?? []
+			).map(Number);
+			outerEdges.push(Math.hypot(x, y) + halfWidth);
+			expect(Math.abs(rotation)).toBeLessThanOrEqual(90);
+			const nameX = Number(name.getAttribute("x"));
+			if (index < 30) {
+				expect(name.getAttribute("text-anchor")).toBe("end");
+				expect(nameX).toBeLessThan(-halfWidth);
+			} else {
+				expect(name.getAttribute("text-anchor")).toBe("start");
+				expect(nameX).toBeGreaterThan(halfWidth);
+			}
+		}
+		expect(Math.min(...outerEdges)).toBeGreaterThan(wheelFaceRadius * 0.9);
+		expect(Math.max(...outerEdges)).toBeLessThan(wheelFaceRadius);
+		expect(Math.max(...outerEdges)).toBeCloseTo(Math.min(...outerEdges), 3);
+		view.rerender(<LunchWheel {...props} wheelSide={294} />);
+		expect(view.container.querySelector(".lunch-wheel-label rect")).toBeNull();
+		const numbers = Array.from(
+			view.container.querySelectorAll(".lunch-wheel-number"),
+			(node) => Number(node.textContent),
+		);
+		expect(numbers).toEqual(props.candidateNumbers);
 	});
 
 	it("keeps every candidate in the wheel while skipping unreadable labels above 117", () => {

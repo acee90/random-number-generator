@@ -2655,11 +2655,12 @@ describe("LunchRoomServer irreversible current-result votes", () => {
 			vote: "up",
 		});
 		const frozen = structuredClone(latestSnapshot(host).snapshot.draw);
-		await returnToWaiting(server, host);
+
 		entropy.mockRejectedValueOnce(new Error("test entropy failure"));
 		await send(server, host, {
 			type: "start",
 			id: "failed-next-draw",
+			previousDrawId: draw.id,
 			expectedRevision: currentRevision(host),
 			confirmReset: true,
 		});
@@ -3593,7 +3594,7 @@ describe("LunchRoomServer game lifecycle", () => {
 		return structuredClone(draw);
 	}
 
-	it("starts both clients in slot view and keeps a wheel round archived after switching back", async () => {
+	it("switches the live result on both clients and redraws once with the original round and votes archived", async () => {
 		const { server, context } = await room();
 		const host = await connect(server, context, "방장", hostToken);
 		const guest = await connect(server, context, "참가자");
@@ -3628,30 +3629,101 @@ describe("LunchRoomServer game lifecycle", () => {
 		const draw = await drawResult(server, context, host, "wheel-draw");
 		expect(draw.viewMode).toBe("wheel");
 		expect(latestSnapshot(guest).snapshot.draw).toEqual(draw);
+		await send(server, guest, {
+			type: "vote",
+			id: "guest-wheel-vote",
+			drawId: draw.id,
+			vote: "up",
+		});
+		const voted = structuredClone(storedSnapshot(context).draw);
 		await send(server, host, {
 			...change,
 			id: "result-change",
 			viewMode: "slot-v1",
 			expectedRevision: revision(host),
 		});
-		expect(requestErrors(host, "result-change")).toMatchObject([
-			{ code: "PHASE_CONFLICT" },
-		]);
-		await send(server, host, {
-			type: "next",
-			id: "after-wheel",
-			drawId: draw.id,
-		});
-		expect(latestSnapshot(host).snapshot.viewMode).toBe("wheel");
-		await send(server, host, {
-			...change,
-			id: "back-to-slot",
-			viewMode: "slot-v1",
-			expectedRevision: revision(host),
-		});
+		expect(requestErrors(host, "result-change")).toEqual([]);
 		expect(latestSnapshot(guest).snapshot).toMatchObject({
 			viewMode: "slot-v1",
-			history: [{ id: draw.id, viewMode: "wheel" }],
+			draw: voted,
+			history: [],
+		});
+		expect(entropy).toHaveBeenCalledTimes(1);
+
+		const redraw = {
+			type: "start",
+			id: "again-in-slot",
+			previousDrawId: draw.id,
+			expectedRevision: revision(host),
+		};
+		await send(server, guest, { ...redraw, id: "guest-redraw" });
+		expect(requestErrors(guest, "guest-redraw")).toMatchObject([
+			{ code: "HOST_REQUIRED" },
+		]);
+		await send(server, host, {
+			...redraw,
+			id: "stale-revision",
+			expectedRevision: revision(host) - 1,
+		});
+		expect(requestErrors(host, "stale-revision")).toMatchObject([
+			{ code: "REVISION_CONFLICT" },
+		]);
+		expect(storedSnapshot(context).draw).toEqual(voted);
+		await send(server, host, redraw);
+		await send(server, host, redraw);
+		await context.drain();
+		expect(latestSnapshot(guest).snapshot).toMatchObject({
+			status: "drawing",
+			viewMode: "slot-v1",
+			history: [voted],
+			draw: { id: redraw.id, viewMode: "slot-v1" },
+		});
+		await send(server, host, {
+			...change,
+			id: "mid-spin",
+			expectedRevision: revision(host),
+		});
+		expect(requestErrors(host, "mid-spin")).toMatchObject([
+			{ code: "DRAW_BUSY" },
+		]);
+		vi.advanceTimersByTime(1500 + lunchRoomLimits.drawDurationMs);
+		await server.onAlarm();
+		await send(server, host, {
+			...redraw,
+			id: "delayed-double-click",
+			expectedRevision: revision(host),
+		});
+		expect(requestErrors(host, "delayed-double-click")).toMatchObject([
+			{ code: "DRAW_BUSY" },
+		]);
+		expect(storedSnapshot(context)).toMatchObject({
+			status: "result",
+			draw: { id: redraw.id, roundNumber: 2 },
+			history: [voted],
+		});
+		expect(entropy).toHaveBeenCalledTimes(2);
+	});
+
+	it("preserves the live result when a redraw has no eligible candidates", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		await replaceList(server, host, 1, "last-candidate");
+		await setExclusion(server, host, true, "exclude-last");
+		entropy.mockResolvedValueOnce({ numbers: [0], source: "csprng" });
+		const draw = await drawResult(server, context, host, "last-draw");
+		await send(server, host, {
+			type: "start",
+			id: "redraw-empty",
+			previousDrawId: draw.id,
+			expectedRevision: revision(host),
+		});
+		expect(requestErrors(host, "redraw-empty")).toMatchObject([
+			{ code: "NO_CANDIDATES" },
+		]);
+		expect(storedSnapshot(context)).toMatchObject({
+			status: "result",
+			draw,
+			history: [],
 		});
 		expect(entropy).toHaveBeenCalledTimes(1);
 	});

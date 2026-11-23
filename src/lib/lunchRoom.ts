@@ -145,6 +145,35 @@ export function getRoomPhase(snapshot: RoomSnapshot): RoomSnapshot["status"] {
 		: snapshot.status;
 }
 
+export function canChangeRoomDrawView(snapshot: RoomSnapshot) {
+	const phase = getRoomPhase(snapshot);
+	return phase === "waiting" || phase === "result";
+}
+
+export function getRoomDrawView(snapshot: RoomSnapshot | null) {
+	return readDrawView(
+		snapshot?.status === "drawing"
+			? snapshot.draw?.viewMode
+			: (snapshot?.viewMode ?? snapshot?.draw?.viewMode),
+	);
+}
+
+export function canStartRoomDraw(
+	snapshot: RoomSnapshot,
+	previousDrawId?: string,
+	now = Date.now(),
+) {
+	if (previousDrawId === undefined)
+		return snapshot.status === "waiting" && !snapshot.draw;
+	const draw = snapshot.draw;
+	return (
+		getRoomPhase(snapshot) === "result" &&
+		draw?.id === previousDrawId &&
+		now >= draw.startedAt + draw.durationMs &&
+		!snapshot.history.some((entry) => entry.id === previousDrawId)
+	);
+}
+
 export function getEligibleRoomCandidates(
 	snapshot: Pick<
 		RoomSnapshot,
@@ -203,6 +232,7 @@ export type ClientMessage =
 	| {
 			type: "start";
 			id: string;
+			previousDrawId?: string;
 			expectedRevision?: number;
 			confirmReset?: boolean;
 	  }
@@ -580,6 +610,7 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
 		}
 		case "start":
 			return isId(value.id) &&
+				(value.previousDrawId === undefined || isId(value.previousDrawId)) &&
 				(value.expectedRevision === undefined ||
 					isVersion(value.expectedRevision)) &&
 				(value.confirmReset === undefined ||
@@ -587,6 +618,9 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
 				? {
 						type: "start",
 						id: value.id,
+						...(value.previousDrawId === undefined
+							? {}
+							: { previousDrawId: value.previousDrawId as string }),
 						...(value.expectedRevision === undefined
 							? {}
 							: { expectedRevision: value.expectedRevision as number }),

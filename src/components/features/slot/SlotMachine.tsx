@@ -31,7 +31,7 @@ type Props = {
 	host: boolean;
 	disabled: boolean;
 	onDraw: () => void;
-	nextButton: ReactElement | null;
+	resultActions: ReactElement | null;
 	buttonRef: RefObject<HTMLButtonElement | null>;
 	buttonId: string;
 	titleRef?: RefObject<HTMLHeadingElement | null>;
@@ -48,7 +48,7 @@ export default function SlotMachine({
 	host,
 	disabled,
 	onDraw,
-	nextButton,
+	resultActions,
 	buttonRef,
 	buttonId,
 	titleRef,
@@ -134,7 +134,7 @@ export default function SlotMachine({
 			frame.current.width = drum.clientWidth;
 			frame.current.height = drum.clientHeight;
 			paint();
-			const name = drum.querySelector<HTMLElement>("h3");
+			const name = drum.querySelector<HTMLElement>(".slot-name-measure");
 			setShowFullName(
 				Boolean(name && name.scrollHeight > name.clientHeight + 1),
 			);
@@ -160,7 +160,7 @@ export default function SlotMachine({
 	]);
 
 	const browsing = phase === "idle" && count > 1;
-	const plaqueCategory = done && nextButton ? category : undefined;
+	const plaqueCategory = done && resultActions ? category : undefined;
 	const label = done
 		? "당첨 메뉴"
 		: phase === "spinning"
@@ -181,7 +181,11 @@ export default function SlotMachine({
 					<span className="slot-rule" aria-hidden="true" />
 				</div>
 				<div className="slot-bezel">
-					<div className="slot-drum" ref={windowRef}>
+					<div
+						className="slot-drum"
+						ref={windowRef}
+						data-full-name={(done && showFullName) || undefined}
+					>
 						<div className="slot-strip" ref={stripRef}>
 							{rows.map((index, slot) => {
 								const place = index === null ? undefined : candidates[index];
@@ -201,14 +205,22 @@ export default function SlotMachine({
 													<span className="sr-only">번</span>
 												</span>
 												{landed ? (
-													<h3
-														className="slot-name"
-														tabIndex={-1}
-														ref={titleRef}
-														id={titleId}
-													>
-														{place.name}
-													</h3>
+													<>
+														<span
+															aria-hidden="true"
+															className="slot-name slot-name-measure"
+														>
+															{place.name}
+														</span>
+														<h3
+															className="slot-name"
+															tabIndex={-1}
+															ref={titleRef}
+															id={titleId}
+														>
+															{place.name}
+														</h3>
+													</>
 												) : (
 													<span className="slot-name">{place.name}</span>
 												)}
@@ -234,7 +246,7 @@ export default function SlotMachine({
 						</Button>
 					)}
 					{done ? (
-						(nextButton ?? (
+						(resultActions ?? (
 							<div className="slot-outcome">
 								<Award aria-hidden="true" />
 								<span>{category}</span>
@@ -276,11 +288,6 @@ export default function SlotMachine({
 						</Button>
 					)}
 				</div>
-				{done && showFullName && draw && (
-					<p className="slot-full-name">
-						{draw.candidates[draw.winnerIndex].name}
-					</p>
-				)}
 				{phase === "idle" && count > 0 && (
 					<output className="sr-only" aria-live="polite">
 						후보 미리보기 · {candidates[preview % count].name}

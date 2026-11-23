@@ -1,4 +1,4 @@
-import { LoaderCircle, Pencil, Trash2 } from "lucide-react";
+import { List, LoaderCircle, Trash2 } from "lucide-react";
 import {
 	type ReactNode,
 	type RefObject,
@@ -32,11 +32,13 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import type { useLunchRoom } from "@/hooks/useLunchRoom";
 import { recordCandidateListUse } from "@/lib/candidateListUsage";
-import { drawViewLabels, readDrawView } from "@/lib/drawView";
+import { drawViewLabels } from "@/lib/drawView";
 import { lunchCategories } from "@/lib/lunch";
 import {
+	canChangeRoomDrawView,
 	type RoomGameFilter as GameFilter,
 	getEligibleRoomCandidates,
+	getRoomDrawView,
 	getRoomPhase,
 	type RoomCandidate,
 	type RoomSnapshot,
@@ -112,20 +114,11 @@ export default function RoomLifecyclePanel({
 	const pending = Boolean(room.mutationPending) || room.candidatesPending;
 	const locked = busy || pending || !connected || stagePending !== null;
 	const candidates = snapshot?.candidates ?? [];
-	const viewMode = readDrawView(
-		snapshot?.draw ? snapshot.draw.viewMode : snapshot?.viewMode,
-	);
+	const viewMode = getRoomDrawView(snapshot);
 	const eligible = snapshot ? getEligibleRoomCandidates(snapshot) : [];
 	const preparedCount = snapshot
 		? getEligibleRoomCandidates({ ...snapshot, excludeDrawn: false }).length
 		: 0;
-	const eligibleIds = new Set(eligible.map((entry) => entry.id));
-	const eligibleProbability = eligible.length
-		? new Intl.NumberFormat("ko-KR", {
-				style: "percent",
-				maximumFractionDigits: 2,
-			}).format(1 / eligible.length)
-		: "0%";
 	const excludedIds = snapshot?.excludedIds ?? [];
 	const revision = snapshot?.revision ?? snapshot?.listVersion ?? 1;
 	const excludeDrawn = snapshot?.excludeDrawn ?? false;
@@ -140,9 +133,7 @@ export default function RoomLifecyclePanel({
 	);
 	const [recommendationPending, setRecommendationPending] = useState(false);
 	const recommendationAttempt = useRef(0);
-	const [candidateViewOpen, setCandidateViewOpen] = useState(false);
-	const candidateViewTriggerRef = useRef<HTMLButtonElement | null>(null);
-	const panelRef = useRef<HTMLElement | null>(null);
+	const [guestCandidatesOpen, setGuestCandidatesOpen] = useState(false);
 	const phaseTitleRef = useRef<HTMLHeadingElement>(null);
 	const editorTitleRef = useRef<HTMLHeadingElement>(null);
 	const focusEditorRef = useRef(false);
@@ -154,8 +145,8 @@ export default function RoomLifecyclePanel({
 			(editorTitleRef.current ?? phaseTitleRef.current)?.focus();
 	}, [locked, phase]);
 	useEffect(() => {
-		if (candidates.length === 0) setCandidateViewOpen(false);
-	}, [candidates.length]);
+		if (listScreen || !candidates.length) setGuestCandidatesOpen(false);
+	}, [listScreen, candidates.length]);
 	const [discardOpen, setDiscardOpen] = useState(false);
 	const discardButtonRef = useRef<HTMLButtonElement | null>(null);
 	const [draftCandidates, setDraftCandidates] = useState<RoomCandidate[]>(() =>
@@ -566,10 +557,37 @@ export default function RoomLifecyclePanel({
 		return "추첨 포함";
 	}
 
+	function renderCandidateList() {
+		const eligibleIds = new Set(eligible.map((entry) => entry.id));
+		const eligibleProbability = eligible.length
+			? new Intl.NumberFormat("ko-KR", {
+					style: "percent",
+					maximumFractionDigits: 2,
+				}).format(1 / eligible.length)
+			: "0%";
+		return (
+			<ul className="room-options-readonly">
+				{candidates.map((candidate) => (
+					<li key={candidate.id}>
+						<strong>{candidate.name}</strong>
+						<span>{exclusionReason(candidate)}</span>
+						<small>
+							{candidate.ownerName
+								? `${candidate.ownerName} 추천`
+								: candidate.category}
+						</small>
+						<small>
+							추첨 확률{" "}
+							{eligibleIds.has(candidate.id) ? eligibleProbability : "0%"}
+						</small>
+					</li>
+				))}
+			</ul>
+		);
+	}
+
 	return (
 		<section
-			ref={panelRef}
-			tabIndex={-1}
 			className="room-lifecycle-panel"
 			data-phase={phase}
 			aria-label="게임 진행"
@@ -592,8 +610,7 @@ export default function RoomLifecyclePanel({
 								pending={room.mutationPending === "draw-view"}
 								disabled={
 									(locked && room.mutationPending !== "draw-view") ||
-									phase !== "waiting" ||
-									Boolean(snapshot.draw)
+									!canChangeRoomDrawView(snapshot)
 								}
 							/>
 						) : (
@@ -604,110 +621,50 @@ export default function RoomLifecyclePanel({
 						))}
 				</div>
 				<div className="room-lifecycle-tools">
-					{candidates.length > 0 && (
-						<Dialog
-							open={candidateViewOpen}
-							onOpenChange={setCandidateViewOpen}
+					{!listScreen && snapshot && (isHost || candidates.length > 0) && (
+						<Button
+							variant="outline"
+							size="touch"
+							className="room-candidates-trigger"
+							aria-describedby={`${id}-candidate-count`}
+							title={
+								isHost && onEditResult ? "투표를 마감하고 후보 편집" : undefined
+							}
+							aria-expanded={isHost ? undefined : guestCandidatesOpen}
+							aria-controls={isHost ? undefined : `${id}-guest-candidates`}
+							aria-busy={editPending || undefined}
+							disabled={
+								isHost &&
+								(locked ||
+									(phase !== "waiting" && !onEditResult) ||
+									Boolean(
+										snapshot.draw &&
+											room.votePendingDrawId === snapshot.draw.id,
+									))
+							}
+							onClick={
+								isHost
+									? openEditor
+									: () => setGuestCandidatesOpen(!guestCandidatesOpen)
+							}
 						>
-							<Button
-								variant="outline"
-								size="sm"
-								aria-haspopup="dialog"
-								aria-describedby={`${id}-candidate-count`}
-								onClick={(event) => {
-									candidateViewTriggerRef.current = event.currentTarget;
-									setCandidateViewOpen(true);
-								}}
-							>
-								후보 보기{" "}
-								<span className="room-candidate-count-badge" aria-hidden="true">
-									{eligible.length}
-								</span>
-							</Button>
-							<span className="sr-only" id={`${id}-candidate-count`}>
-								전체 후보 {candidates.length}개 중 이번 추첨 {eligible.length}개
-							</span>
-							<DialogContent
-								className="room-options-dialog"
-								aria-labelledby={`${id}-options-title`}
-								onCloseAutoFocus={(event) => {
-									event.preventDefault();
-									const trigger = candidateViewTriggerRef.current;
-									if (trigger?.isConnected && !trigger.closest("[hidden]"))
-										trigger.focus();
-									else panelRef.current?.focus();
-								}}
-								onOpenAutoFocus={(event) => {
-									event.preventDefault();
-									document.getElementById(`${id}-options-title`)?.focus();
-								}}
-							>
-								<DialogHeader>
-									<DialogTitle id={`${id}-options-title`} tabIndex={-1}>
-										후보 보기
-									</DialogTitle>
-									<DialogDescription>
-										전체 {candidates.length}개 · 이번 추첨 {eligible.length}개.
-										후보, 제외 사유와 적용 확률을 확인하세요.
-									</DialogDescription>
-								</DialogHeader>
-								<ul className="room-options-readonly">
-									{candidates.map((candidate) => (
-										<li key={candidate.id}>
-											<strong>{candidate.name}</strong>
-											<span>{exclusionReason(candidate)}</span>
-											<small>
-												{candidate.ownerName
-													? `${candidate.ownerName} 추천`
-													: candidate.category}
-											</small>
-											<small>
-												추첨 확률{" "}
-												{eligibleIds.has(candidate.id)
-													? eligibleProbability
-													: "0%"}
-											</small>
-										</li>
-									))}
-								</ul>
-								<DialogFooter>
-									<Button
-										variant="outline"
-										onClick={() => setCandidateViewOpen(false)}
-									>
-										닫기
-									</Button>
-								</DialogFooter>
-							</DialogContent>
-						</Dialog>
+							{editPending ? (
+								<LoaderCircle
+									className="motion-safe:animate-spin"
+									aria-hidden="true"
+								/>
+							) : (
+								<List aria-hidden="true" />
+							)}
+							후보
+						</Button>
 					)}
-					{isHost &&
-						snapshot &&
-						(onEditResult || (phase === "waiting" && !showResult && !busy)) && (
-							<Button
-								variant="outline"
-								size="sm"
-								disabled={
-									locked || room.votePendingDrawId === snapshot.draw?.id
-								}
-								aria-busy={editPending || undefined}
-								onClick={openEditor}
-							>
-								{editPending ? (
-									<LoaderCircle
-										size={16}
-										className="motion-safe:animate-spin"
-										aria-hidden="true"
-									/>
-								) : (
-									<Pencil size={16} aria-hidden="true" />
-								)}
-								후보 편집
-							</Button>
-						)}
+					<span className="sr-only" id={`${id}-candidate-count`}>
+						전체 후보 {candidates.length}개 중 이번 추첨 {eligible.length}개
+					</span>
 					<Button
 						variant="ghost"
-						size="sm"
+						size="touch"
 						onClick={onHistory}
 						ref={historyButtonRef}
 					>
@@ -716,6 +673,16 @@ export default function RoomLifecyclePanel({
 				</div>
 			</div>
 
+			{!isHost && !listScreen && (
+				<section
+					id={`${id}-guest-candidates`}
+					aria-label="후보 목록"
+					className="room-guest-candidates"
+					hidden={!guestCandidatesOpen}
+				>
+					{guestCandidatesOpen && renderCandidateList()}
+				</section>
+			)}
 			<datalist id={`${id}-categories`}>
 				{categorySuggestions.map((category) => (
 					<option key={category} value={category} />
@@ -795,18 +762,10 @@ export default function RoomLifecyclePanel({
 													편집하는 동안 공유 후보가 바뀌었습니다. 현재 초안은
 													유지됩니다.
 												</p>
-												<Button
-													variant="outline"
-													size="sm"
-													disabled={locked}
-													onClick={(event) => {
-														candidateViewTriggerRef.current =
-															event.currentTarget;
-														setCandidateViewOpen(true);
-													}}
-												>
-													공유 후보 보기
-												</Button>
+												<details>
+													<summary>공유 후보 확인</summary>
+													{renderCandidateList()}
+												</details>
 												<Button
 													variant="outline"
 													size="sm"
@@ -1016,10 +975,10 @@ export default function RoomLifecyclePanel({
 							})}
 						</div>
 					</div>
-					{!showResult && !busy && eligible.length === 0 && (
+					{!busy && eligible.length === 0 && (
 						<output className="room-waiting-empty">
 							{isHost
-								? "추첨할 후보가 없습니다. 후보 편집에서 필터를 변경하거나 당첨 제외 목록을 초기화해 주세요."
+								? "추첨할 후보가 없습니다. ‘후보’에서 필터를 변경하거나 당첨 제외 목록을 초기화해 주세요."
 								: "추첨할 후보가 없습니다. 방장이 후보를 준비할 때까지 기다려 주세요."}
 						</output>
 					)}

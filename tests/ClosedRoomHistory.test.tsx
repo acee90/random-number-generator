@@ -77,7 +77,9 @@ it("reads with a saved private proof and shows immutable details and votes witho
 	expect(screen.getByText("추첨 요청 시 참가자")).toBeTruthy();
 	expect(screen.getByText("후보와 확률")).toBeTruthy();
 	expect(screen.queryByRole("button", { name: "좋아요 투표" })).toBeNull();
-	expect(screen.queryByRole("button", { name: "다음 게임" })).toBeNull();
+	expect(
+		screen.queryByRole("button", { name: "대기화면으로 이동" }),
+	).toBeNull();
 });
 it("downloads the current archive as BOM UTF-8 text with candidates, participants and votes", async () => {
 	vi.useRealTimers();

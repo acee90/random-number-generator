@@ -17,9 +17,13 @@ import {
 	moveMapPosition,
 	seonjeongneungStation,
 } from "@/lib/nearbyRestaurants";
-import { getPublicNearbyRestaurants } from "@/services/publicNearbyRestaurants";
+import {
+	getPublicNearbyRestaurants,
+	getRestaurantIndex,
+} from "@/services/publicNearbyRestaurants";
 
 vi.mock("@/services/publicNearbyRestaurants", () => ({
+	getRestaurantIndex: vi.fn().mockResolvedValue({}),
 	getPublicNearbyRestaurants: vi.fn(),
 }));
 vi.mock("@/components/features/NearbyRestaurantMap", () => ({
@@ -56,6 +60,18 @@ vi.mock("@/components/features/NearbyRestaurantMap", () => ({
 }));
 
 const lookup = vi.mocked(getPublicNearbyRestaurants);
+const originalGeolocation = Object.getOwnPropertyDescriptor(
+	navigator,
+	"geolocation",
+);
+function mockGeolocation(
+	getCurrentPosition: Geolocation["getCurrentPosition"],
+) {
+	Object.defineProperty(navigator, "geolocation", {
+		configurable: true,
+		value: { getCurrentPosition },
+	});
+}
 const button = (name: string) => screen.getByRole("button", { name });
 const rows = () =>
 	within(screen.getByRole("list", { name: "음식점 목록" })).getAllByRole(
@@ -83,7 +99,9 @@ function pendingLookup() {
 	return finish;
 }
 function openPicker() {
-	const add = vi.fn(() => true);
+	const add = vi.fn<ComponentProps<typeof NearbyRestaurantPicker>["onAdd"]>(
+		() => true,
+	);
 	render(<NearbyRestaurantPicker existingIds={new Set()} onAdd={add} />);
 	fireEvent.click(button("주변 음식점"));
 	return add;
@@ -91,6 +109,49 @@ function openPicker() {
 afterEach(() => {
 	cleanup();
 	lookup.mockReset();
+	vi.mocked(getRestaurantIndex).mockClear();
+	if (originalGeolocation)
+		Object.defineProperty(navigator, "geolocation", originalGeolocation);
+	else Reflect.deleteProperty(navigator, "geolocation");
+});
+
+it("shows progress from opening and reports zero only for a completed search at the current pin", async () => {
+	let found!: PositionCallback;
+	mockGeolocation((success) => {
+		found = success;
+	});
+	const first = pendingLookup();
+	const second = pendingLookup();
+	openPicker();
+	const results = screen.getByRole("region", { name: "음식점 검색 결과" });
+	const empty = "이 반경에 등록된 일반음식점이 없어요.";
+	function expectLoading(message: string) {
+		expect(results.getAttribute("aria-busy")).toBe("true");
+		expect(screen.getByText(message)).toBeTruthy();
+		expect(screen.queryByText(empty)).toBeNull();
+		expect(screen.queryByText("0곳 · 가까운 순")).toBeNull();
+		expect(button("음식점 추가").matches(":disabled")).toBe(true);
+	}
+	expectLoading("현재 위치를 확인하는 중이에요.");
+	expect(getRestaurantIndex).toHaveBeenCalledOnce();
+	expect(lookup).not.toHaveBeenCalled();
+	const locateAt = (coords: MapPosition) =>
+		act(() => found({ coords } as GeolocationPosition));
+	const offshore = { latitude: 0, longitude: 0 };
+	await locateAt(offshore);
+	expect(lookup).toHaveBeenCalledTimes(1);
+	expectLoading("주변 음식점을 찾는 중이에요.");
+	await act(() => first(data(offshore, 0, "")));
+	expect(screen.getByText(empty)).toBeTruthy();
+
+	fireEvent.click(button("내 위치"));
+	expectLoading("현재 위치를 확인하는 중이에요.");
+	await locateAt(seonjeongneungStation);
+	expectLoading("주변 음식점을 찾는 중이에요.");
+	await act(() => second(data(seonjeongneungStation, 1, "새 식당")));
+	expect(results.getAttribute("aria-busy")).toBe("false");
+	expect(screen.getByText("새 식당 0")).toBeTruthy();
+	expect(button("음식점 1곳 추가").matches(":disabled")).toBe(false);
 });
 
 it("adds every matching restaurant when the result set exceeds 200", async () => {
@@ -171,28 +232,13 @@ it("preserves the previous result on a failed refresh and shows empty only when 
 
 it("passes the geolocated coordinates to the map as the user's location", async () => {
 	const position = { latitude: 37.51, longitude: 127.04 };
-	const original = Object.getOwnPropertyDescriptor(navigator, "geolocation");
-	Object.defineProperty(navigator, "geolocation", {
-		configurable: true,
-		value: {
-			getCurrentPosition: (success: PositionCallback) =>
-				success({
-					coords: {
-						latitude: position.latitude,
-						longitude: position.longitude,
-					} as GeolocationCoordinates,
-				} as GeolocationPosition),
-		},
-	});
+	mockGeolocation((success) =>
+		success({ coords: position } as GeolocationPosition),
+	);
 	lookup.mockResolvedValueOnce(data(position, 1, "위치 식당"));
-	try {
-		openPicker();
-		await screen.findByText("1곳 · 가까운 순");
-		expect(screen.getByTestId("nearby-map-location").dataset.userLocation).toBe(
-			"37.51,127.04",
-		);
-	} finally {
-		if (original) Object.defineProperty(navigator, "geolocation", original);
-		else Reflect.deleteProperty(navigator, "geolocation");
-	}
+	openPicker();
+	await screen.findByText("1곳 · 가까운 순");
+	expect(screen.getByTestId("nearby-map-location").dataset.userLocation).toBe(
+		"37.51,127.04",
+	);
 });

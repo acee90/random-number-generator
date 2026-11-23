@@ -50,6 +50,7 @@ function initialProps() {
 		readOnly: false,
 		canNext: false,
 		onNext: vi.fn(),
+		onRedraw: vi.fn(),
 	};
 }
 function resultHarness(host = false) {
@@ -101,7 +102,7 @@ describe("optimistic room result voting", () => {
 	it("lets the host vote optimistically and keeps next-game navigation separate until the vote settles", () => {
 		const { original, send, update, container } = resultHarness(true);
 		const next = screen.getByRole("button", {
-			name: "다음 게임",
+			name: "대기화면으로 이동",
 		}) as HTMLButtonElement;
 		update({ canNext: true });
 		expect(next.disabled).toBe(false);
@@ -115,6 +116,11 @@ describe("optimistic room result voting", () => {
 		fireEvent.click(screen.getByRole("button", { name: "좋아요 투표" }));
 		expect(send).toHaveBeenCalledExactlyOnceWith("optimistic-round", "up");
 		expect(next.disabled).toBe(true);
+		expect(
+			screen
+				.getByRole("button", { name: "바로 다시 뽑기" })
+				.matches(":disabled"),
+		).toBe(true);
 		expect(screen.getByText("3명 참여")).toBeTruthy();
 		expect(
 			container
@@ -158,7 +164,9 @@ describe("optimistic room result voting", () => {
 			longName,
 		);
 		expect(screen.queryByRole("button", { name: "좋아요 투표" })).toBeNull();
-		expect(screen.queryByRole("button", { name: "다음 게임" })).toBeNull();
+		expect(
+			screen.queryByRole("button", { name: "대기화면으로 이동" }),
+		).toBeNull();
 		expect(onVote).not.toHaveBeenCalled();
 	});
 	it("updates selection, count and own row immediately, then confirms without duplication or a second burst", () => {

@@ -25,7 +25,7 @@ import { RoomFeedbackDetails } from "./RoomDrawFeedback";
 import RoomExclusionPanel, {
 	type ExclusionOptions,
 } from "./RoomExclusionPanel";
-import RoomNextGameButton from "./RoomNextGameButton";
+import RoomResultActions from "./RoomResultActions";
 
 import SlotMachine from "./slot/SlotMachine";
 
@@ -47,6 +47,8 @@ type Props = Omit<FeedbackOptions, "draw"> & {
 	canNext?: boolean;
 	nextPending?: boolean;
 	onNext: () => void;
+	canRedraw?: boolean;
+	onRedraw: () => void;
 };
 
 function hitTarget(target: EventTarget | null): Control | null {
@@ -72,6 +74,8 @@ export default function RoomGameStage({
 	canNext = false,
 	nextPending = false,
 	onNext,
+	canRedraw = true,
+	onRedraw,
 	...voting
 }: Props) {
 	const id = useId();
@@ -134,13 +138,14 @@ export default function RoomGameStage({
 			: null;
 	const headingId = titleId ?? `${id}-winner`;
 	const showNext = isHost && !voting.readOnly;
-	const nextButton =
+	const resultActions =
 		result && showNext ? (
-			<RoomNextGameButton
-				className={slot ? "slot-action" : undefined}
+			<RoomResultActions
+				canRedraw={canRedraw}
 				disabled={!canNext || nextPending || voting.pending}
-				pending={nextPending}
-				onClick={onNext}
+				nextPending={nextPending}
+				onNext={onNext}
+				onRedraw={onRedraw}
 			/>
 		) : null;
 	const details = (
@@ -161,7 +166,7 @@ export default function RoomGameStage({
 					/>
 				</div>
 			)}
-			{!slot && nextButton}
+			{!slot && resultActions}
 		</div>
 	);
 	const options = exclusion && <RoomExclusionPanel {...exclusion} />;
@@ -187,16 +192,21 @@ export default function RoomGameStage({
 							host={isHost}
 							disabled={wheel.covered || wheel.canDraw === false}
 							onDraw={wheel.onDraw}
-							nextButton={nextButton}
+							resultActions={resultActions}
 							buttonRef={wheel.buttonRef}
 							buttonId={wheel.buttonId}
 							titleRef={titleRef}
 							titleId={headingId}
 						/>
 					</div>
-					<div className="slot-reveal" data-open={Boolean(result) || undefined}>
-						<div>{details}</div>
-					</div>
+					{showVoting && (
+						<div
+							className="slot-reveal"
+							data-open={Boolean(result) || undefined}
+						>
+							{details}
+						</div>
+					)}
 				</section>
 			</div>
 		);
@@ -294,7 +304,7 @@ export default function RoomGameStage({
 					{soundControl}
 					{!result && wheel && (
 						<div className="picnic-wheel">
-							<LunchWheel {...wheel} />
+							<LunchWheel {...wheel} wheelSide={layout.wheelSide} />
 						</div>
 					)}
 					{result && (

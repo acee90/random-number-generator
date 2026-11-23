@@ -25,6 +25,15 @@
 	--picnic-sheet-padding: 16px;
 	--picnic-voters-height: calc(3 * var(--voter-row-height));
 	--voter-row-height: 36px;
+	--picnic-vote-sheet-height: calc(
+		2 *
+		(var(--picnic-sheet-padding) + 1px) +
+		var(--picnic-summary-height) +
+		var(--picnic-summary-gap) +
+		var(--picnic-ballot-height) +
+		var(--picnic-voter-gap) +
+		var(--picnic-voters-height)
+	);
 }
 /* Reserve the ticket, vote sheet and optional host action during the draw. */
 .picnic-frame[data-voting] .picnic-main:not([data-result]) {
@@ -33,13 +42,7 @@
 	max-height: none;
 	height: calc(
 		var(--picnic-ticket-area) +
-		2 *
-		(var(--picnic-sheet-padding) + 1px) +
-		var(--picnic-summary-height) +
-		var(--picnic-summary-gap) +
-		var(--picnic-ballot-height) +
-		var(--picnic-voter-gap) +
-		var(--picnic-voters-height) +
+		var(--picnic-vote-sheet-height) +
 		var(--picnic-footer-height) +
 		var(--picnic-bottom-padding)
 	);
@@ -190,11 +193,11 @@
 	background: #d7e8d7;
 	color: #305d57;
 }
-.picnic-details > .room-next-round {
+.picnic-details .room-next-round {
 	--primary: #ffebba;
 	--primary-hover: #ffe0a1;
 	--primary-foreground: var(--paper-ink);
-	justify-self: center;
+	border-radius: 999px;
 	block-size: auto;
 	min-block-size: var(--picnic-next-height);
 	padding-block: 8px;
@@ -202,14 +205,11 @@
 	flex-wrap: nowrap;
 	transition: none;
 }
-.picnic-details > .room-next-round:dir(rtl) svg {
-	transform: scaleX(-1);
-}
-.picnic-details > .room-next-round:not(:disabled):active {
+.picnic-details .room-next-round:not(:disabled):active {
 	background: #f6d9a7;
 	border-color: var(--paper-ink);
 }
-.picnic-details > .room-next-round:disabled {
+.picnic-details .room-next-round:disabled {
 	background: var(--surface);
 	color: var(--muted);
 	border-color: var(--line);

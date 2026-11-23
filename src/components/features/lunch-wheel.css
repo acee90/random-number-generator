@@ -30,6 +30,21 @@
 	font-weight: 700;
 }
 
+.lunch-wheel-label rect {
+	fill: var(--paper);
+	stroke: var(--muted);
+	stroke-width: 0.8;
+}
+@media (forced-colors: active) {
+	.lunch-wheel-label rect {
+		fill: Canvas;
+		stroke: CanvasText;
+	}
+	.lunch-wheel-label text {
+		fill: CanvasText;
+	}
+}
+
 .lunch-wheel-pointer {
 	position: absolute;
 	top: -10px;

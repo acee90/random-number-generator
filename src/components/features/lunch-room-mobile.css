@@ -131,11 +131,6 @@
 	.lunch-room.room-live .room-result-category {
 		font-size: 13px;
 	}
-	.lunch-room.room-live .room-result-actions {
-		margin: 0;
-		padding: 0 16px 16px;
-	}
-
 	.lunch-room.room-live .room-draw-feedback[data-mode="results"] {
 		padding: 0 16px 16px;
 	}

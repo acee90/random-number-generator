@@ -21,6 +21,7 @@ const meta = {
 		readOnly: false,
 		canNext: true,
 		onNext: () => {},
+		onRedraw: () => {},
 		onVote: () => false,
 	},
 	argTypes: {
@@ -32,6 +33,7 @@ const meta = {
 		draw: { table: { disable: true } },
 		selfId: { table: { disable: true } },
 		onNext: { table: { disable: true } },
+		onRedraw: { table: { disable: true } },
 		onVote: { table: { disable: true } },
 		titleRef: { table: { disable: true } },
 		titleId: { table: { disable: true } },

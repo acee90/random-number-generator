@@ -2,6 +2,7 @@ import { type Connection, Server, type WSMessage } from "partyserver";
 import {
 	type ChatTrace,
 	type ClientMessage,
+	canStartRoomDraw,
 	clampLunchRoomNickname,
 	hasInvalidLunchRoomJoinNickname,
 	isLunchRoomId,
@@ -24,13 +25,13 @@ import {
 	roomHistoryPath,
 } from "@/lib/lunchRoomRequest.server";
 import {
-	clearDisabledRoomExclusions,
 	hydrateRoomDrawMetadata,
 	visibleRoomExclusions,
 } from "@/lib/roomDrawMetadata";
 import {
 	advanceRoomRound,
 	applyRoomCommand,
+	beginRoomDraw,
 	castRoomVote,
 	createRoomSnapshot,
 	getRoomArchiveDraws,
@@ -1151,11 +1152,13 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			this.send(connection, { type: "ack", requestId });
 			return;
 		}
-		if (snapshot.status !== "waiting" || snapshot.draw) {
+		if (!canStartRoomDraw(snapshot, message.previousDrawId)) {
 			this.sendError(
 				connection,
 				"DRAW_BUSY",
-				"대기 화면에서 추첨을 시작해 주세요.",
+				message.previousDrawId
+					? "현재 결과를 확인한 뒤 다시 뽑아 주세요."
+					: "대기 화면에서 추첨을 시작해 주세요.",
 				requestId,
 			);
 			return;
@@ -1200,9 +1203,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			-maxProcessedStarts,
 		);
 		this.room.pendingStartId = requestId;
-		clearDisabledRoomExclusions(snapshot);
-		snapshot.status = "fetching";
-		snapshot.revision = (snapshot.revision ?? snapshot.listVersion) + 1;
+		beginRoomDraw(snapshot);
 		this.recordActivity(connection);
 		this.appendSystemEvent(
 			"draw-started",

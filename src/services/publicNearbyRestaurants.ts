@@ -17,18 +17,26 @@ type RestaurantRow = [string, string, string, number, number, string];
 const base = "/nearby-restaurants/";
 const recentCells = new Map<string, NearbyRestaurant[]>();
 let cachedIndex: { index: RestaurantIndex; time: number } | undefined;
+let pendingIndex: Promise<RestaurantIndex> | undefined;
 
-async function getIndex(signal: AbortSignal) {
-	if (cachedIndex && Date.now() - cachedIndex.time < 300_000)
-		return cachedIndex.index;
+async function fetchIndex() {
 	const response = await fetch(`${base}index.json`, {
 		cache: "no-cache",
-		signal,
 	});
 	if (!response.ok) throw new Error("음식점 자료를 불러오지 못했어요.");
 	const index: RestaurantIndex = await response.json();
 	cachedIndex = { index, time: Date.now() };
 	return index;
+}
+
+// The index is shared by all locations. Only the subsequent cell reads belong to a pin.
+export function getRestaurantIndex() {
+	if (cachedIndex && Date.now() - cachedIndex.time < 300_000)
+		return Promise.resolve(cachedIndex.index);
+	pendingIndex ??= fetchIndex().finally(() => {
+		pendingIndex = undefined;
+	});
+	return pendingIndex;
 }
 
 export function nearbyCells(
@@ -113,7 +121,8 @@ export async function getPublicNearbyRestaurants(
 	center: MapPosition,
 	signal: AbortSignal,
 ) {
-	const index = await getIndex(signal);
+	const index = await getRestaurantIndex();
+	signal.throwIfAborted();
 	// Fetch once for all three radii. Only nearby public data cells leave the server.
 	const cells = nearbyCells(index, center, 700);
 	const results = await Promise.all(

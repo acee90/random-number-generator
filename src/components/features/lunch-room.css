@@ -391,24 +391,6 @@
 	line-height: 1.5;
 	overflow-wrap: anywhere;
 }
-.room-result-actions {
-	display: flex;
-	justify-content: center;
-	gap: 8px;
-	margin: 0;
-	padding: 0 24px 24px;
-}
-.room-next-round {
-	min-inline-size: 160px;
-	min-block-size: 48px;
-	padding-inline: 24px;
-	border-radius: 999px;
-	font-size: 16px;
-	max-inline-size: 100%;
-	flex-wrap: wrap;
-	margin: 0;
-	white-space: normal;
-}
 @keyframes room-result-reveal {
 	from {
 		opacity: 0.65;
