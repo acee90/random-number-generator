@@ -1,6 +1,5 @@
 import { type Container, Text, type TextStyleFontWeight } from "pixi.js";
 import { layer, pen } from "./stationery";
-import { coupon } from "./ticket";
 
 // The native lists own wrapping, tab order and scrolling. Paint their visible
 // rows at those same coordinates so names, hit targets and the printed sheet agree.
@@ -93,20 +92,20 @@ export function drawDetails(
 				.stroke({ color: style.borderTopColor, width: 1 });
 		} else if (
 			el.matches(
-				".picnic-exclusion, .picnic-history-button, .picnic-options-error",
+				".picnic-exclusion, .picnic-history-button, .picnic-options-error, .room-next-round",
 			)
 		) {
-			const radius = Number.parseFloat(style.borderTopLeftRadius);
+			const radius = Math.min(
+				h / 2,
+				Number.parseFloat(style.borderTopLeftRadius),
+			);
 			pen(group)
 				.roundRect(x, y, w, h, radius)
 				.fill(style.backgroundColor)
-				.stroke({ color: style.borderTopColor, width: 1.25 });
-		} else if (el.matches(".picnic-next-stub")) {
-			const cut = style.direction === "rtl" ? x + w : x;
-			const g = pen(group);
-			for (let dash = y + 1; dash < y + h; dash += 6)
-				g.moveTo(cut, dash).lineTo(cut, Math.min(y + h, dash + 3));
-			g.stroke({ color: style.borderInlineStartColor, width: 1 });
+				.stroke({
+					color: style.borderTopColor,
+					width: Number.parseFloat(style.borderTopWidth),
+				});
 		} else if (el.matches('[role="switch"]')) {
 			const checked = el.getAttribute("aria-checked") === "true";
 			const thumbAtRight = checked !== (style.direction === "rtl");
@@ -119,19 +118,7 @@ export function drawDetails(
 		} else if (el instanceof HTMLButtonElement) {
 			const active = !el.disabled && el.matches(":active");
 			const over = !el.disabled && hover && el.matches(":hover");
-			if (el.matches(".room-next-round")) {
-				const g = pen(group);
-				g.position.set(x + w / 2, y + h / 2);
-				coupon(
-					g,
-					w - 1.5,
-					h - 1.5,
-					style.backgroundColor,
-					style.borderTopColor,
-					1.25,
-					1,
-				);
-			} else if (el.matches('[data-slot="alert-dialog-action"]')) {
+			if (el.matches('[data-slot="alert-dialog-action"]')) {
 				pen(group)
 					.roundRect(x, y, w, h, 7)
 					.fill(
@@ -221,7 +208,9 @@ export function drawDetails(
 					y + 1.5,
 					w - 3,
 					h - 3,
-					el.matches(".picnic-exclusion, .picnic-history-button")
+					el.matches(
+						".picnic-exclusion, .picnic-history-button, .room-next-round",
+					)
 						? h / 2 - 1.5
 						: 6,
 				)

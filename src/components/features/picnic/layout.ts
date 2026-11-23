@@ -53,7 +53,7 @@ export function stageLayout(width: number, height: number) {
 	const small = width < 360;
 	const pad = small ? 8 : 14;
 	const top = small ? 8 : 11;
-	const wheelSide = Math.max(1, Math.min(width - 13, height - 61));
+	const wheelSide = Math.max(1, Math.min(width, height - 61, 480));
 	const heroWidth = Math.min(width - (small ? 24 : 48), 568);
 	const heroHeight = Math.min(164, heroWidth * 0.46);
 	const ticketTop = small ? 70 : 78;

@@ -46,6 +46,7 @@ try {
 	await page.getByRole("button", { name: "입장하기" }).click();
 	await page.getByRole("button", { name: "마감", exact: true }).click();
 	const board = page.getByRole("region", { name: "게임 보드" });
+	const panel = page.getByRole("region", { name: "룰렛", exact: true });
 	const idle = board.locator('canvas[data-painted][data-scene="idle"]');
 	await idle.waitFor();
 	const history = board.getByRole("button", { name: "당첨 제외 내역 열기" });
@@ -117,6 +118,8 @@ try {
 			center.aligned,
 			`${width}px: the painted hub must receive the click`,
 		);
+		const idleHeight = (await board.boundingBox()).height;
+		const panelHeight = (await panel.boundingBox()).height;
 		const before = await idle.evaluate(wheelPixels);
 		if (width < 700) await page.touchscreen.tap(center.x, center.y);
 		else await page.mouse.click(center.x, center.y);
@@ -138,6 +141,11 @@ try {
 		);
 		const during = await spinning.evaluate(wheelPixels);
 		assert.equal(
+			(await board.boundingBox()).height,
+			idleHeight,
+			`${width}px: spinning must keep the waiting layout height`,
+		);
+		assert.equal(
 			during.rim,
 			before.rim,
 			`${width}px: the rim and background must stay fixed`,
@@ -151,6 +159,12 @@ try {
 		const result = board.locator('canvas[data-painted][data-scene="result"]');
 		await result.waitFor();
 		assert.equal(
+			(await board.boundingBox()).height,
+			idleHeight,
+			`${width}px: revealing the result must keep the waiting layout height`,
+		);
+		assert.equal((await panel.boundingBox()).height, panelHeight);
+		assert.equal(
 			await board.getByRole("heading", { name: "실시간 투표 현황" }).count(),
 			0,
 		);
@@ -160,12 +174,22 @@ try {
 		);
 		const next = board.getByRole("button", { name: "다음 게임" });
 		const nextBox = await next.boundingBox(),
-			winnerBox = await board.locator(".picnic-ticket").boundingBox(),
 			sheetBox = await board.locator(".picnic-sheet").boundingBox();
 		assert.ok(
-			nextBox.y >= winnerBox.y + winnerBox.height &&
-				nextBox.y + nextBox.height <= sheetBox.y,
+			nextBox.y >= sheetBox.y + sheetBox.height + 8 && nextBox.height >= 44,
+			`${width}px: the next game button must fit below both voter lists`,
 		);
+		assert.ok(
+			Math.abs(
+				nextBox.x + nextBox.width / 2 - (sheetBox.x + sheetBox.width / 2),
+			) <= 1,
+			`${width}px: the next game button must be centered`,
+		);
+		assert.equal(await board.getByText("아직 없어요").count(), 0);
+		for (const list of await board.getByRole("list").all()) {
+			assert.equal(await list.getByRole("listitem").count(), 0);
+			assert.equal(await list.locator('li[aria-hidden="true"]').count(), 3);
+		}
 		const like = board.getByRole("button", { name: "좋아요 투표" });
 		await like.click();
 		await board
@@ -206,9 +230,22 @@ try {
 		for (const choice of ["up", "down"]) {
 			const group = board.locator(`[data-choice="${choice}"]`);
 			const button = await group.getByRole("button").boundingBox();
-			const list = await group
-				.locator("ul, .room-feedback-empty")
-				.boundingBox();
+			const voters = group.getByRole("list");
+			const list = await voters.boundingBox();
+			const rows = await voters.locator("li").all();
+			assert.equal(rows.length, 3);
+			assert.equal(
+				await voters.getByRole("listitem").count(),
+				choice === "up" ? 1 : 0,
+			);
+			const first = await rows[0].boundingBox(),
+				last = await rows[2].boundingBox();
+			assert.ok(
+				first.height >= 36 &&
+					Math.abs(first.height - last.height) <= 1 &&
+					last.y + last.height <= list.y + list.height + 1,
+				`${width}px: all three voter slots must be fully visible`,
+			);
 			assert.ok(button.height >= 70 && Math.abs(button.x - list.x) <= 1);
 			assert.ok(
 				list.y >= button.y + button.height &&
@@ -265,7 +302,8 @@ try {
 
 		await board.getByRole("button", { name: "다음 게임" }).click();
 		await idle.waitFor();
-		console.log(`${width}px passed`);
+		assert.equal((await board.boundingBox()).height, idleHeight);
+		console.log(`${width}px passed (board height: ${idleHeight}px)`);
 	}
 } finally {
 	await browser.close();
