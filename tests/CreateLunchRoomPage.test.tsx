@@ -141,6 +141,63 @@ describe("room creation steps", () => {
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
+	it("keeps list numbers when searching and restores a directly deleted candidate to its place", async () => {
+		render(<CreateLunchRoomPage />);
+		next();
+		await setCandidates("라면", "김치찌개", "비빔밥");
+		const list = within(screen.getByRole("list", { name: "후보 편집 목록" }));
+		fireEvent.change(input("후보 검색"), { target: { value: "김치" } });
+		expect(within(list.getByRole("listitem")).getByText("2")).toBeTruthy();
+		expect(list.queryByRole("button", { name: /후보 관리$/ })).toBeNull();
+		fireEvent.click(list.getByRole("button", { name: "김치찌개 후보 삭제" }));
+		expect(
+			list.queryByRole("button", { name: "김치찌개 이름 수정" }),
+		).toBeNull();
+		expect(screen.getByText("김치찌개 삭제됨", { exact: true })).toBeTruthy();
+		fireEvent.click(button("되돌리기"));
+		expect(within(list.getByRole("listitem")).getByText("2")).toBeTruthy();
+		expect(document.activeElement).toBe(input("후보 검색"));
+	});
+
+	it("changes category filters in a dialog and shows when a filter is applied", () => {
+		const candidates = sampleLunchPlaces.slice(0, 3);
+		saveCandidateList({
+			id: "filter-menu",
+			name: "분류 검증 목록",
+			items: candidates.map((candidate) => ({ ...candidate, included: true })),
+		});
+		render(<CreateLunchRoomPage />);
+		next();
+		listAction("목록 불러오기");
+		fireEvent.click(
+			screen.getByRole("button", { name: /^분류 검증 목록\s*후보/ }),
+		);
+		const filter = button("필터");
+		expect(filter.getAttribute("aria-haspopup")).toBe("dialog");
+		expect(screen.queryByText(/^필터 적용 중\./)).toBeNull();
+		fireEvent.click(filter);
+		const dialog = within(screen.getByRole("dialog", { name: "후보 필터" }));
+		const category = candidates[0].category;
+		fireEvent.click(
+			dialog.getByRole("button", { name: `${category} 분류 포함` }),
+		);
+		fireEvent.click(dialog.getByRole("button", { name: "완료" }));
+		expect(screen.queryByRole("dialog")).toBeNull();
+		expect(screen.getByText(/^필터 적용 중\./)).toBeTruthy();
+		const list = within(screen.getByRole("list", { name: "후보 편집 목록" }));
+		expect(
+			list.queryByRole("button", { name: `${candidates[0].name} 이름 수정` }),
+		).toBeNull();
+
+		fireEvent.click(filter);
+		fireEvent.click(screen.getByRole("button", { name: "필터 초기화" }));
+		expect(screen.queryByText(/^필터 적용 중\./)).toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: "완료" }));
+		expect(
+			list.getByRole("button", { name: `${candidates[0].name} 이름 수정` }),
+		).toBeTruthy();
+	});
+
 	it("creates a ready room with the included candidate list and stores the host credentials before navigation", async () => {
 		const savedCandidates = sampleLunchPlaces.slice(0, 3);
 		saveCandidateList({
@@ -243,6 +300,7 @@ describe("room creation steps", () => {
 		expect(button("이전").disabled).toBe(true);
 		expect(button("방 만드는 중…").disabled).toBe(true);
 		expect(button("목록 작업").disabled).toBe(true);
+		expect(button("라면 후보 삭제").disabled).toBe(true);
 		expect(input("후보 검색").disabled).toBe(true);
 		expect(input("새 후보 이름").disabled).toBe(true);
 		await act(async () =>

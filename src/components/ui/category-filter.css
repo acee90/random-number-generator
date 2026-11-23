@@ -4,6 +4,24 @@
 	padding: 0;
 	border: 0;
 }
+.category-filter-trigger[data-active] {
+	position: relative;
+	border-color: var(--ring);
+}
+.category-filter-active {
+	position: absolute;
+	inset-block-start: -3px;
+	inset-inline-end: -3px;
+	display: grid;
+	place-items: center;
+	inline-size: 16px;
+	block-size: 16px;
+	border: 1px solid var(--ring);
+	border-radius: 50%;
+	background: var(--lime);
+	color: var(--ink);
+	pointer-events: none;
+}
 .category-filter-chips {
 	display: flex;
 	flex-wrap: wrap;

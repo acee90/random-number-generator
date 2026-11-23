@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/category-filter";
 import {
 	Dialog,
+	DialogClose,
 	DialogContent,
 	DialogDescription,
 	DialogFooter,
@@ -77,6 +78,7 @@ export type RoomCandidateEditorProps = {
 	onSave: (trigger: HTMLButtonElement | null) => void;
 	onDiscard?: (trigger: HTMLButtonElement | null) => void;
 	disabled: boolean;
+	rowLayout?: "managed" | "setup";
 	unsaved?: boolean;
 	scrollableList?: boolean;
 	showSaveStatus?: boolean;
@@ -117,6 +119,7 @@ export default function RoomCandidateEditor({
 	onSave,
 	onDiscard,
 	disabled,
+	rowLayout = "managed",
 	unsaved = false,
 	scrollableList = false,
 	showSaveStatus = true,
@@ -162,6 +165,7 @@ export default function RoomCandidateEditor({
 		ownerId?: string;
 	} | null>(null);
 	const menuRef = useRef<HTMLButtonElement | null>(null);
+	const filterRef = useRef<HTMLButtonElement>(null);
 	const nameRef = useRef<HTMLInputElement | null>(null);
 	const searchRef = useRef<HTMLInputElement | null>(null);
 	const quickAddRef = useRef<HTMLInputElement | HTMLButtonElement>(null);
@@ -176,6 +180,7 @@ export default function RoomCandidateEditor({
 	const overlayFromMenu = useRef(false);
 	const observedContext = useRef(contextKey);
 	const isEmpty = candidates.length === 0;
+	const filterIsModal = rowLayout === "setup";
 	const categories = [...new Set(candidates.map(categoryOf))];
 	const selectedCategories = filter.categories ?? categories;
 	const allCategoriesSelected =
@@ -254,6 +259,7 @@ export default function RoomCandidateEditor({
 			setBulkOpen(false);
 			setNearbyOpen(false);
 			setClearOpen(false);
+			if (filterIsModal) setFilterOpen(false);
 			setEditing(null);
 			setNameError("");
 		}
@@ -265,7 +271,7 @@ export default function RoomCandidateEditor({
 			pendingAddition.current = null;
 			observedContext.current = contextKey;
 		}
-	}, [contextKey, disabled]);
+	}, [contextKey, disabled, filterIsModal]);
 
 	async function requestAdd(name: string) {
 		if (disabled || !finishName()) return false;
@@ -408,6 +414,39 @@ export default function RoomCandidateEditor({
 		open();
 	}
 
+	function resetFilter() {
+		setRecentAdditionId(null);
+		onFilterChange({ categories: null, excludedIds: [] });
+	}
+
+	const filterExpanded = filterOpen && !isEmpty;
+	const filterChips = (
+		<CategoryFilterChips
+			legend="이번 추첨에 넣을 분류"
+			options={categories.map((value) => ({ value }))}
+			selected={selectedCategories}
+			allSelected={allCategoriesSelected}
+			disabled={disabled}
+			onToggleAll={() => {
+				setRecentAdditionId(null);
+				onFilterChange({
+					...filter,
+					categories: allCategoriesSelected ? [] : null,
+				});
+			}}
+			onSelect={(value) => {
+				setRecentAdditionId(null);
+				const next =
+					value === null
+						? null
+						: selectedCategories.includes(value)
+							? selectedCategories.filter((entry) => entry !== value)
+							: [...new Set([...selectedCategories, value])];
+				onFilterChange({ ...filter, categories: next });
+			}}
+		/>
+	);
+
 	return (
 		<section
 			className="room-simple-editor"
@@ -447,13 +486,16 @@ export default function RoomCandidateEditor({
 					/>
 				</div>
 				<CategoryFilterButton
+					ref={filterRef}
 					controls={`${id}-filters`}
-					expanded={filterOpen && candidates.length > 0}
+					expanded={filterExpanded}
 					count={preparedCount}
 					total={candidates.length}
 					description={`전체 후보 ${candidates.length}개 중 필터로 ${preparedCount}개 선택`}
 					size="default"
 					showCount={false}
+					active={filterIsModal && filterActive}
+					popup={filterIsModal ? "dialog" : undefined}
 					disabled={disabled || !candidates.length}
 					onClick={() => {
 						if (finishName()) setFilterOpen(!filterOpen);
@@ -536,50 +578,60 @@ export default function RoomCandidateEditor({
 				</DropdownMenu>
 			</div>
 
-			<div
-				id={`${id}-filters`}
-				hidden={!filterOpen || !candidates.length}
-				className="room-simple-filters"
-			>
-				<CategoryFilterChips
-					legend="이번 추첨에 넣을 분류"
-					options={categories.map((value) => ({ value }))}
-					selected={selectedCategories}
-					allSelected={allCategoriesSelected}
-					disabled={disabled}
-					onToggleAll={() => {
-						setRecentAdditionId(null);
-						onFilterChange({
-							...filter,
-							categories: allCategoriesSelected ? [] : null,
-						});
-					}}
-					onSelect={(value) => {
-						setRecentAdditionId(null);
-						const next =
-							value === null
-								? null
-								: selectedCategories.includes(value)
-									? selectedCategories.filter((entry) => entry !== value)
-									: [...new Set([...selectedCategories, value])];
-						onFilterChange({ ...filter, categories: next });
-					}}
-				/>
-				{filterActive && (
-					<Button
-						className="justify-self-start"
-						variant="outline"
-						size="sm"
-						disabled={disabled}
-						onClick={() => {
-							setRecentAdditionId(null);
-							onFilterChange({ categories: null, excludedIds: [] });
+			{filterIsModal ? (
+				<Dialog open={filterExpanded} onOpenChange={setFilterOpen}>
+					<DialogContent
+						id={`${id}-filters`}
+						className="room-simple-filter-dialog"
+						onCloseAutoFocus={(event) => {
+							event.preventDefault();
+							if (!filterRef.current?.disabled) filterRef.current?.focus();
+							else searchRef.current?.focus();
 						}}
 					>
-						<RotateCcw size={16} aria-hidden="true" /> 필터 초기화
-					</Button>
-				)}
-			</div>
+						<DialogHeader>
+							<DialogTitle>후보 필터</DialogTitle>
+							<DialogDescription>
+								<output>
+									전체 {candidates.length}개 중 {preparedCount}개 추첨
+								</output>
+							</DialogDescription>
+						</DialogHeader>
+						{filterChips}
+						<DialogFooter>
+							<Button
+								variant="outline"
+								disabled={disabled || !filterActive}
+								onClick={resetFilter}
+							>
+								<RotateCcw size={16} aria-hidden="true" /> 필터 초기화
+							</Button>
+							<DialogClose asChild>
+								<Button>완료</Button>
+							</DialogClose>
+						</DialogFooter>
+					</DialogContent>
+				</Dialog>
+			) : (
+				<div
+					id={`${id}-filters`}
+					hidden={!filterExpanded}
+					className="room-simple-filters"
+				>
+					{filterChips}
+					{filterActive && (
+						<Button
+							className="justify-self-start"
+							variant="outline"
+							size="sm"
+							disabled={disabled}
+							onClick={resetFilter}
+						>
+							<RotateCcw size={16} aria-hidden="true" /> 필터 초기화
+						</Button>
+					)}
+				</div>
+			)}
 
 			{notices}
 			<div className="room-simple-summary">
@@ -646,6 +698,8 @@ export default function RoomCandidateEditor({
 						<RoomCandidateEditorRow
 							key={candidate.id}
 							candidate={candidate}
+							number={candidateIndexes.get(candidate.id)}
+							layout={rowLayout}
 							category={category}
 							exclusion={exclusion}
 							checked={!manuallyExcluded}
@@ -663,11 +717,14 @@ export default function RoomCandidateEditor({
 							onToggle={(checked) => changeInclusion(candidate, checked)}
 							onEditName={editName}
 							onEditCategory={(trigger) => {
+								if (!finishName()) return;
 								categoryTrigger.current = trigger;
 								setCategory(category === "미분류" ? "" : category);
 								setCategoryCandidate(candidate);
 							}}
-							onRemove={() => deleteCandidate(candidate)}
+							onRemove={() => {
+								if (finishName()) deleteCandidate(candidate);
+							}}
 							nameEditor={
 								editing?.id === candidate.id ? (
 									<div className="room-simple-name-field">

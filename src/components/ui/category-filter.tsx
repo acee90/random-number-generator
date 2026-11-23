@@ -1,4 +1,5 @@
 import { Check, SlidersHorizontal } from "lucide-react";
+import type { ComponentProps } from "react";
 import { Button } from "./button";
 import "./category-filter.css";
 
@@ -10,6 +11,9 @@ export function CategoryFilterButton({
 	description,
 	size = "sm",
 	showCount = true,
+	active = false,
+	popup,
+	ref,
 	disabled,
 	onClick,
 }: {
@@ -20,18 +24,25 @@ export function CategoryFilterButton({
 	description: string;
 	size?: "sm" | "default";
 	showCount?: boolean;
+	active?: boolean;
+	popup?: "dialog";
+	ref?: ComponentProps<"button">["ref"];
 	disabled?: boolean;
 	onClick: () => void;
 }) {
 	return (
 		<>
 			<Button
+				ref={ref}
+				className="category-filter-trigger"
 				variant="outline"
 				size={size}
 				aria-label="필터"
 				aria-expanded={expanded}
-				aria-controls={controls}
+				aria-controls={popup && !expanded ? undefined : controls}
+				aria-haspopup={popup}
 				aria-describedby={`${controls}-count`}
+				data-active={active || undefined}
 				disabled={disabled}
 				onClick={onClick}
 			>
@@ -42,8 +53,14 @@ export function CategoryFilterButton({
 						{count}/{total}
 					</span>
 				)}
+				{active && (
+					<span className="category-filter-active" aria-hidden="true">
+						<Check size={10} strokeWidth={3} />
+					</span>
+				)}
 			</Button>
 			<span className="sr-only" id={`${controls}-count`}>
+				{active && "필터 적용 중. "}
 				{description}
 			</span>
 		</>
