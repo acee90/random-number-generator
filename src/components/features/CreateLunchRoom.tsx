@@ -401,6 +401,7 @@ export default function CreateLunchRoom() {
 								setSaveCandidates(candidates);
 							}}
 							disabled={locked}
+							rowLayout="setup"
 							scrollableList
 							showSaveStatus={false}
 							categorySuggestions={lunchCategories}

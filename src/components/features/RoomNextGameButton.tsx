@@ -12,20 +12,17 @@ export default function RoomNextGameButton({
 }) {
 	return (
 		<Button
-			variant="outline"
+			variant="default"
 			size="lg"
 			type="button"
 			className="room-next-round"
 			disabled={disabled}
 			aria-busy={pending || undefined}
+			aria-label={pending ? "대기 화면으로 이동 중…" : undefined}
 			onClick={onClick}
 		>
-			<span className="picnic-next-label">
-				{pending ? "대기 화면으로 이동 중…" : "다음 게임"}
-			</span>
-			<span className="picnic-next-stub" aria-hidden>
-				<ArrowRight size={17} />
-			</span>
+			<span>{pending ? "이동 중…" : "다음 게임"}</span>
+			<ArrowRight size={18} aria-hidden />
 		</Button>
 	);
 }

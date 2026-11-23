@@ -164,6 +164,7 @@ export default function RoomGameStage({
 		"--ticket-top": `${layout.ticketTop}px`,
 	} as CSSProperties;
 	const headingId = titleId ?? `${id}-winner`;
+	const showNext = isHost && !voting.readOnly;
 	return (
 		<div
 			className={result ? "room-result-layout" : undefined}
@@ -172,6 +173,8 @@ export default function RoomGameStage({
 			<section
 				aria-label="게임 보드"
 				className="picnic-frame"
+				data-multiplayer={!solo || undefined}
+				data-next={showNext || undefined}
 				ref={frame}
 				style={box}
 				onPointerOver={(e) =>
@@ -230,24 +233,11 @@ export default function RoomGameStage({
 					)}
 				</div>
 				<div className="picnic-details">
-					{result && (result.votes || (isHost && !voting.readOnly)) && (
-						<div className="picnic-result-tools">
-							{result.votes && (
-								<span className="picnic-participation">
-									{result.votes.up + result.votes.down}명 참여
-								</span>
-							)}
-							{isHost && !voting.readOnly && (
-								<RoomNextGameButton
-									disabled={!canNext || nextPending || voting.pending}
-									pending={nextPending}
-									onClick={onNext}
-								/>
-							)}
-						</div>
-					)}
 					{result?.votes && draw && (
 						<div className="picnic-sheet">
+							<span className="picnic-participation">
+								{result.votes.up + result.votes.down}명 참여
+							</span>
 							<RoomFeedbackDetails
 								draw={draw}
 								{...voting}
@@ -258,6 +248,13 @@ export default function RoomGameStage({
 								reducedMotion={reducedMotion}
 							/>
 						</div>
+					)}
+					{result && showNext && (
+						<RoomNextGameButton
+							disabled={!canNext || nextPending || voting.pending}
+							pending={nextPending}
+							onClick={onNext}
+						/>
 					)}
 				</div>
 			</section>

@@ -21,6 +21,8 @@ import RoomCandidateAuthor from "./RoomCandidateAuthor";
 
 export default function RoomCandidateEditorRow({
 	candidate,
+	number,
+	layout,
 	category,
 	exclusion,
 	checked,
@@ -36,6 +38,8 @@ export default function RoomCandidateEditorRow({
 	onRemove,
 }: {
 	candidate: RoomCandidate;
+	number?: number;
+	layout: "managed" | "setup";
 	category: string;
 	exclusion?: "제외" | "분류 제외" | "당첨 제외";
 	checked: boolean;
@@ -59,6 +63,7 @@ export default function RoomCandidateEditorRow({
 			className="room-simple-row"
 			data-candidate-id={candidate.id}
 			data-included={!exclusion}
+			data-layout={layout}
 		>
 			<label className="room-simple-check" htmlFor={`${stateId}-include`}>
 				<Input
@@ -71,6 +76,9 @@ export default function RoomCandidateEditorRow({
 					onChange={(event) => onToggle(event.currentTarget.checked)}
 				/>
 			</label>
+			{layout === "setup" && (
+				<span className="room-simple-number">{number}</span>
+			)}
 			<div className="room-simple-item">
 				<div className="room-simple-identity">
 					{nameEditor ?? (
@@ -104,60 +112,86 @@ export default function RoomCandidateEditorRow({
 						</div>
 					)}
 				</div>
-				<span className="room-simple-category">{category}</span>
-			</div>
-			<DropdownMenu open={menuOpen} onOpenChange={onMenuOpenChange}>
-				<DropdownMenuTrigger asChild>
+				{layout === "setup" ? (
 					<Button
-						ref={triggerRef}
 						variant="ghost"
-						size="icon"
-						aria-label={`${name} 후보 관리`}
+						size="auto"
+						className="room-simple-category"
+						aria-label={`${name} 분류 변경 (${category})`}
 						disabled={disabled}
+						onClick={(event) => onEditCategory(event.currentTarget)}
 					>
-						<Ellipsis size={16} aria-hidden="true" />
+						{category}
 					</Button>
-				</DropdownMenuTrigger>
-				<DropdownMenuContent
-					aria-label={`${name} 후보 관리`}
-					onCloseAutoFocus={(event) => {
-						const action = actionSelected.current;
-						if (!action) return;
-						event.preventDefault();
-						actionSelected.current = null;
-						if (action === "rename") onEditName();
-					}}
+				) : (
+					<span className="room-simple-category">{category}</span>
+				)}
+			</div>
+			{layout === "setup" ? (
+				<Button
+					variant="ghost"
+					size="icon"
+					className="room-simple-delete"
+					aria-label={`${name} 후보 삭제`}
+					disabled={disabled}
+					onClick={onRemove}
 				>
-					<DropdownMenuItem
-						disabled={disabled}
-						onSelect={() => {
-							actionSelected.current = "rename";
+					<Trash2 size={16} aria-hidden="true" />
+				</Button>
+			) : (
+				<DropdownMenu open={menuOpen} onOpenChange={onMenuOpenChange}>
+					<DropdownMenuTrigger asChild>
+						<Button
+							ref={triggerRef}
+							variant="ghost"
+							size="icon"
+							aria-label={`${name} 후보 관리`}
+							disabled={disabled}
+						>
+							<Ellipsis size={16} aria-hidden="true" />
+						</Button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent
+						aria-label={`${name} 후보 관리`}
+						onCloseAutoFocus={(event) => {
+							const action = actionSelected.current;
+							if (!action) return;
+							event.preventDefault();
+							actionSelected.current = null;
+							if (action === "rename") onEditName();
 						}}
 					>
-						<Pencil size={16} aria-hidden="true" /> 이름 수정
-					</DropdownMenuItem>
-					<DropdownMenuItem
-						disabled={disabled}
-						onSelect={() => {
-							actionSelected.current = "move-focus";
-							onEditCategory(triggerRef.current);
-						}}
-					>
-						<Tag size={16} aria-hidden="true" /> 분류 변경
-					</DropdownMenuItem>
-					<DropdownMenuSeparator />
-					<DropdownMenuItem
-						variant="destructive"
-						disabled={disabled}
-						onSelect={() => {
-							actionSelected.current = "move-focus";
-							onRemove();
-						}}
-					>
-						<Trash2 size={16} aria-hidden="true" /> 후보 삭제
-					</DropdownMenuItem>
-				</DropdownMenuContent>
-			</DropdownMenu>
+						<DropdownMenuItem
+							disabled={disabled}
+							onSelect={() => {
+								actionSelected.current = "rename";
+							}}
+						>
+							<Pencil size={16} aria-hidden="true" /> 이름 수정
+						</DropdownMenuItem>
+						<DropdownMenuItem
+							disabled={disabled}
+							onSelect={() => {
+								actionSelected.current = "move-focus";
+								onEditCategory(triggerRef.current);
+							}}
+						>
+							<Tag size={16} aria-hidden="true" /> 분류 변경
+						</DropdownMenuItem>
+						<DropdownMenuSeparator />
+						<DropdownMenuItem
+							variant="destructive"
+							disabled={disabled}
+							onSelect={() => {
+								actionSelected.current = "move-focus";
+								onRemove();
+							}}
+						>
+							<Trash2 size={16} aria-hidden="true" /> 후보 삭제
+						</DropdownMenuItem>
+					</DropdownMenuContent>
+				</DropdownMenu>
+			)}
 		</li>
 	);
 }

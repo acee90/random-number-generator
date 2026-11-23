@@ -241,17 +241,6 @@
 			calc(var(--room-viewport-height, 100dvh) - 80px)
 		);
 	}
-	.lunch-room.room-live .room-chat-list {
-		min-block-size: 0;
-		padding-block: 4px;
-	}
-	.lunch-room.room-live .room-chat-list li.room-chat-bubble {
-		margin-block-start: 4px;
-	}
-	.lunch-room.room-live .room-message-content {
-		padding: 4px 6px;
-		font-size: 13px;
-	}
 	.lunch-room.room-live .room-profile-trigger {
 		min-block-size: 44px;
 		padding-block: 4px;

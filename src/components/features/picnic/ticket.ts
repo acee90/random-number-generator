@@ -1,18 +1,18 @@
-import type { ColorSource, Container, Graphics } from "pixi.js";
+import type { Container, Graphics } from "pixi.js";
 import { rosette } from "./board";
 import type { StageLayout, StageScene, VoteChoice } from "./layout";
 import { picnic } from "./palette";
 import { layer, lettering, line, pen, stateFill } from "./stationery";
 
-export function coupon(
+function coupon(
 	g: Graphics,
 	w: number,
 	h: number,
-	fill: ColorSource,
-	edge: ColorSource,
+	fill: number,
+	edge: number,
 	stroke = 1.7,
-	notches = 5,
 ) {
+	const notches = 5;
 	const l = -w / 2,
 		r = w / 2,
 		t = -h / 2,

@@ -1,7 +1,7 @@
 .picnic-frame {
 	position: relative;
 	isolation: isolate;
-	container-type: inline-size;
+	container: picnic-board / inline-size;
 	width: min(100%, 720px);
 	margin-inline: auto;
 	background: var(--surface);
@@ -15,7 +15,7 @@
 }
 .picnic-main[data-result] {
 	aspect-ratio: auto;
-	height: calc(var(--ticket-top) + var(--ticket-h) + 16px);
+	height: var(--picnic-ticket-area);
 	min-height: 0;
 }
 .picnic-art {

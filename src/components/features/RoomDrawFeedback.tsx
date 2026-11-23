@@ -203,7 +203,7 @@ export function RoomFeedbackDetails({
 					const voterList = (
 						<ul
 							aria-label={`${label} 투표한 참가자`}
-							tabIndex={mode === "results" ? 0 : undefined}
+							tabIndex={mode === "results" && voters.length > 0 ? 0 : undefined}
 						>
 							{voters.map((entry) => {
 								const confirmed = "reactionMs" in entry;
@@ -256,6 +256,10 @@ export function RoomFeedbackDetails({
 									</li>
 								);
 							})}
+							{onBoard &&
+								[1, 2, 3]
+									.slice(voters.length)
+									.map((slot) => <li key={slot} aria-hidden="true" />)}
 						</ul>
 					);
 
@@ -281,7 +285,7 @@ export function RoomFeedbackDetails({
 								canVote={canVote}
 								onVote={() => submit(vote)}
 							/>
-							{voters.length > 0 ? (
+							{onBoard || voters.length > 0 ? (
 								voterList
 							) : (
 								<p className="room-feedback-empty">아직 없어요</p>
