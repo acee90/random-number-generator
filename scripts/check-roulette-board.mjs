@@ -41,14 +41,29 @@ try {
 			localStorage.setItem(`randomlab:lunch-room-host:${roomId}`, hostToken),
 		{ roomId, hostToken },
 	);
+	// Hold the lazy renderer so the first frame can be inspected even on localhost.
+	const painterModule =
+		/\/(?:picnic\/paint\.ts|assets\/paint-[\w-]+\.js)(?:\?|$)/;
+	const { promise: paintGate, resolve: releasePaint } = Promise.withResolvers();
+	await page.route(painterModule, async (route) => {
+		await paintGate;
+		await route.continue();
+	});
 	await page.goto(new URL(joinPath, origin).href);
 	await page.getByRole("textbox", { name: "닉네임" }).fill("방장");
 	await page.getByRole("button", { name: "입장하기" }).click();
 	await page.getByRole("button", { name: "마감", exact: true }).click();
 	const board = page.getByRole("region", { name: "게임 보드" });
 	const panel = page.getByRole("region", { name: "룰렛", exact: true });
+	await board.getByText("추첨판을 불러오는 중…").waitFor();
+	const loadingHeight = (await board.boundingBox()).height;
+	assert.equal(await board.getByRole("button").count(), 0);
+	assert.equal(await board.locator(".lunch-wheel-rotor").isVisible(), false);
+	releasePaint();
 	const idle = board.locator('canvas[data-painted][data-scene="idle"]');
 	await idle.waitFor();
+	assert.equal(await board.locator("output.picnic-loading").count(), 0);
+	assert.equal((await board.boundingBox()).height, loadingHeight);
 	const history = board.getByRole("button", { name: "당첨 제외 내역 열기" });
 	const popup = page.getByRole("dialog", { name: "당첨 제외 내역" });
 	const switchName = /중복 없이 추첨/;

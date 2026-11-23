@@ -1,13 +1,4 @@
-import {
-	Check,
-	ChevronRight,
-	Copy,
-	Crown,
-	Info,
-	Wifi,
-	WifiOff,
-	X,
-} from "lucide-react";
+import { ChevronRight, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import CopyFallback from "@/components/features/CopyFallback";
 import { roomCandidateNumbers } from "@/components/features/RoomCandidateList";
@@ -15,8 +6,8 @@ import RoomChatPanel from "@/components/features/RoomChatPanel";
 import RoomDrawDialog from "@/components/features/RoomDrawDialog";
 import RoomEntryGate from "@/components/features/RoomEntryGate";
 import RoomGameStage from "@/components/features/RoomGameStage";
+import RoomHeader from "@/components/features/RoomHeader";
 import RoomLifecyclePanel from "@/components/features/RoomLifecyclePanel";
-import RoomSettingsDialog from "@/components/features/RoomSettingsDialog";
 import SiteHeader from "@/components/layout/SiteHeader";
 import { Button } from "@/components/ui/button";
 import {
@@ -69,8 +60,6 @@ export default function LunchSessionPage({
 	const [inviteUrl, setInviteUrl] = useState("");
 	const [selectedDraw, setSelectedDraw] = useState<RoomDraw | null>(null);
 	const roomViewportRef = useRef<HTMLDivElement>(null);
-	const [roomInfoOpen, setRoomInfoOpen] = useState(false);
-	const [roomInfoDismissed, setRoomInfoDismissed] = useState(false);
 	const primaryColumnRef = useRef<HTMLDivElement>(null);
 	const selectedDrawTriggerRef = useRef<HTMLButtonElement>(null);
 	const rotorRef = useRef<HTMLDivElement>(null);
@@ -368,7 +357,14 @@ export default function LunchSessionPage({
 			ref={roomViewportRef}
 			className={`random-lab lunch-room${closed ? "" : " room-live"}`}
 		>
-			<SiteHeader active="lunch" />
+			<RoomHeader
+				room={room}
+				solo={solo}
+				busy={busy}
+				canInvite={Boolean(inviteUrl)}
+				copied={copied === "invite"}
+				onCopyInvite={(button) => void copy(inviteUrl, "invite", button)}
+			/>
 			<main id="main-content" className="room-main">
 				{solo && storageFailed && (
 					<output className="room-error" aria-live="polite">
@@ -376,149 +372,6 @@ export default function LunchSessionPage({
 						추첨을 계속할 수 있습니다.
 					</output>
 				)}
-				<div className="room-heading">
-					<div className="room-title-block">
-						<div className="room-title-row">
-							<h1>
-								{closed ? "점심 추첨방" : (snapshot?.title ?? "점심 추첨방")}
-							</h1>
-							{!closed && !solo && snapshot && (
-								<div
-									className="room-info"
-									data-open={roomInfoOpen || undefined}
-									data-dismissed={roomInfoDismissed || undefined}
-									onPointerEnter={() => setRoomInfoDismissed(false)}
-									onFocusCapture={() => setRoomInfoDismissed(false)}
-									onBlurCapture={(event) => {
-										if (
-											!event.currentTarget.contains(
-												event.relatedTarget as Node | null,
-											)
-										)
-											setRoomInfoOpen(false);
-									}}
-								>
-									<button
-										className="room-info-trigger"
-										type="button"
-										aria-label="방 정보"
-										aria-controls={`${id}-room-info`}
-										aria-describedby={`${id}-room-info`}
-										aria-expanded={roomInfoOpen}
-										onClick={() => {
-											setRoomInfoDismissed(false);
-											setRoomInfoOpen((open) => !open);
-										}}
-										onKeyDown={(event) => {
-											if (event.key === "Escape") {
-												event.preventDefault();
-												setRoomInfoOpen(false);
-												setRoomInfoDismissed(true);
-											}
-										}}
-									>
-										<Info size={14} aria-hidden="true" />
-									</button>
-									<div
-										id={`${id}-room-info`}
-										className="room-lifetime"
-										role="tooltip"
-									>
-										<span>
-											생성{" "}
-											<time
-												dateTime={new Date(snapshot.createdAt).toISOString()}
-											>
-												{new Date(snapshot.createdAt).toLocaleString("ko-KR", {
-													month: "2-digit",
-													day: "2-digit",
-													hour: "2-digit",
-													minute: "2-digit",
-												})}
-											</time>
-										</span>
-										<span>
-											종료{" "}
-											<time
-												dateTime={new Date(snapshot.expiresAt).toISOString()}
-											>
-												{new Date(snapshot.expiresAt).toLocaleString("ko-KR", {
-													month: "2-digit",
-													day: "2-digit",
-													hour: "2-digit",
-													minute: "2-digit",
-												})}
-											</time>
-										</span>
-										<p>
-											방장이 나가도 생성 후 24시간, 표시된 종료 시각까지 방이
-											유지됩니다.
-										</p>
-									</div>
-								</div>
-							)}
-						</div>
-						{!closed && !solo && (
-							<div className="room-connection" data-connected={connected}>
-								{connected ? (
-									<Wifi size={15} aria-hidden="true" />
-								) : (
-									<WifiOff size={15} aria-hidden="true" />
-								)}
-								<span>
-									{connected
-										? "연결됨"
-										: room.connection === "reconnecting"
-											? "연결 끊김 · 다시 연결 중"
-											: "연결 중"}
-								</span>
-								<span>참가 {participants.length}명</span>
-								{room.self?.isHost && (
-									<span className="room-host-badge">
-										<Crown size={13} aria-hidden="true" /> 방장
-									</span>
-								)}
-								{!connected && (
-									<Button
-										variant="ghost"
-										size="sm"
-										type="button"
-										className="room-text-action"
-										onClick={room.reconnect}
-									>
-										다시 연결
-									</Button>
-								)}
-							</div>
-						)}
-					</div>
-					{!closed && (
-						<div className="room-heading-actions">
-							{!solo && (
-								<>
-									<Button
-										variant="outline"
-										size="default"
-										type="button"
-										className="room-outline-button"
-										disabled={!inviteUrl}
-										onClick={(event) =>
-											void copy(inviteUrl, "invite", event.currentTarget)
-										}
-									>
-										{copied === "invite" ? (
-											<Check size={17} aria-hidden="true" />
-										) : (
-											<Copy size={17} aria-hidden="true" />
-										)}
-										{copied === "invite" ? "링크 복사됨" : "초대 링크 복사"}
-									</Button>
-									<RoomSettingsDialog room={room} busy={busy} />
-								</>
-							)}
-						</div>
-					)}
-				</div>
 				{closed ? (
 					<section className="room-terminal" aria-labelledby={`${id}-terminal`}>
 						<h2 id={`${id}-terminal`} ref={terminalTitleRef} tabIndex={-1}>

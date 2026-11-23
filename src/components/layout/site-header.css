@@ -35,21 +35,6 @@
 	color: #718437;
 }
 
-.site-header-nav {
-	display: flex;
-	align-items: center;
-	gap: 0;
-	min-inline-size: 0;
-	max-inline-size: 100%;
-	padding: 0;
-	overflow-x: auto;
-	scrollbar-width: thin;
-	scrollbar-color: #9ba78a transparent;
-}
-.site-header-item:focus-visible {
-	outline-offset: calc(-1 * var(--focus-ring-offset));
-}
-
 @media (max-width: 760px) {
 	.site-header {
 		gap: 12px;
@@ -59,9 +44,5 @@
 	.site-header-brand {
 		inline-size: fit-content;
 		font-size: 20px;
-	}
-
-	.site-header-nav {
-		inline-size: auto;
 	}
 }

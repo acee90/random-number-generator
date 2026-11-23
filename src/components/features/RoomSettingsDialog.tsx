@@ -9,6 +9,7 @@ import {
 	AlertDialogFooter,
 	AlertDialogHeader,
 	AlertDialogTitle,
+	AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -155,7 +156,7 @@ export default function RoomSettingsDialog({
 
 	return (
 		<>
-			<Dialog open={open && !confirmClose} onOpenChange={changeOpen}>
+			<Dialog open={open} onOpenChange={changeOpen}>
 				<DialogTrigger asChild>
 					<Button
 						variant="outline"
@@ -169,9 +170,6 @@ export default function RoomSettingsDialog({
 				</DialogTrigger>
 				<DialogContent
 					className="room-settings-dialog"
-					onCloseAutoFocus={(event) => {
-						if (confirmClose) event.preventDefault();
-					}}
 					aria-labelledby={`${id}-settings-title`}
 					onOpenAutoFocus={(event) => {
 						if (!showEditor) {
@@ -250,6 +248,56 @@ export default function RoomSettingsDialog({
 						</p>
 					)}
 					<DialogFooter>
+						<AlertDialog
+							open={confirmClose}
+							onOpenChange={(next) => {
+								if (!savingRef.current) {
+									setConfirmClose(next);
+									setError("");
+								}
+							}}
+						>
+							{isHost && (
+								<AlertDialogTrigger asChild>
+									<Button
+										variant="destructive"
+										className="sm:me-auto"
+										disabled={!editable}
+									>
+										<LogOut aria-hidden="true" />방 종료
+									</Button>
+								</AlertDialogTrigger>
+							)}
+							<AlertDialogContent>
+								<AlertDialogHeader>
+									<AlertDialogTitle>방을 종료할까요?</AlertDialogTitle>
+									<AlertDialogDescription>
+										모든 참가자의 이용이 종료되며 이 링크로 다시 입장할 수
+										없습니다. 저장하지 않은 변경은 사라집니다. 추첨 기록은 원래
+										만료 시각까지 확인하고 저장할 수 있어요.
+									</AlertDialogDescription>
+								</AlertDialogHeader>
+								{error && (
+									<p role="alert" className="room-error">
+										{error}
+									</p>
+								)}
+								<AlertDialogFooter>
+									<AlertDialogCancel disabled={closing}>취소</AlertDialogCancel>
+									<AlertDialogAction
+										data-variant="destructive"
+										className="ui-button-destructive"
+										disabled={!editable}
+										onClick={(event) => {
+											event.preventDefault();
+											void closeRoom();
+										}}
+									>
+										{closing ? "종료 중…" : "방 종료"}
+									</AlertDialogAction>
+								</AlertDialogFooter>
+							</AlertDialogContent>
+						</AlertDialog>
 						<Button
 							variant="outline"
 							disabled={saving || closing}
@@ -268,61 +316,6 @@ export default function RoomSettingsDialog({
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>
-			{isHost && (
-				<Button
-					variant="destructive"
-					size="icon"
-					type="button"
-					title="방 종료"
-					aria-label="방 종료"
-					disabled={!editable}
-					onClick={() => {
-						setError("");
-						setConfirmClose(true);
-					}}
-				>
-					<LogOut size={18} aria-hidden="true" />
-				</Button>
-			)}
-			<AlertDialog
-				open={confirmClose}
-				onOpenChange={(next) => {
-					if (!savingRef.current) {
-						setConfirmClose(next);
-						setError("");
-					}
-				}}
-			>
-				<AlertDialogContent>
-					<AlertDialogHeader>
-						<AlertDialogTitle>방을 종료할까요?</AlertDialogTitle>
-						<AlertDialogDescription>
-							모든 참가자의 이용이 종료되며 이 링크로 다시 입장할 수 없습니다.
-							저장하지 않은 변경은 사라집니다. 추첨 기록은 원래 만료 시각까지
-							확인하고 저장할 수 있어요.
-						</AlertDialogDescription>
-					</AlertDialogHeader>
-					{error && (
-						<p role="alert" className="room-error">
-							{error}
-						</p>
-					)}
-					<AlertDialogFooter>
-						<AlertDialogCancel disabled={closing}>취소</AlertDialogCancel>
-						<AlertDialogAction
-							data-variant="destructive"
-							className="ui-button-destructive"
-							disabled={!editable}
-							onClick={(event) => {
-								event.preventDefault();
-								void closeRoom();
-							}}
-						>
-							{closing ? "종료 중…" : "방 종료"}
-						</AlertDialogAction>
-					</AlertDialogFooter>
-				</AlertDialogContent>
-			</AlertDialog>
 			<AlertDialog
 				open={discard !== null}
 				onOpenChange={(next) => {

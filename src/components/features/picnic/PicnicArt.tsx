@@ -1,3 +1,4 @@
+import { LoaderCircle } from "lucide-react";
 import {
 	type RefObject,
 	useEffect,
@@ -27,12 +28,17 @@ export function PicnicArt({
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const painter = useRef<Painter | null>(null);
 	const [ready, setReady] = useState(false);
-	const [painted, setPainted] = useState(false);
+	const [status, setStatus] = useState<"loading" | "painted" | "fallback">(
+		"loading",
+	);
+	const painted = status === "painted";
 
 	useEffect(() => {
 		const canvas = canvasRef.current;
-		if (import.meta.env.SSR || !canvas || !window.CanvasRenderingContext2D)
+		if (import.meta.env.SSR || !canvas || !window.CanvasRenderingContext2D) {
+			setStatus("fallback");
 			return;
+		}
 		let active = true;
 		void import("./paint")
 			.then(async ({ createPicnicPainter }) => {
@@ -45,7 +51,7 @@ export function PicnicArt({
 				}
 			})
 			.catch(() => {
-				if (active) setPainted(false);
+				if (active) setStatus("fallback");
 			});
 		return () => {
 			active = false;
@@ -57,9 +63,9 @@ export function PicnicArt({
 		if (!ready || !painter.current || !width || !height) return;
 		try {
 			painter.current.paint(scene, width, height);
-			setPainted(true);
+			setStatus("painted");
 		} catch {
-			setPainted(false);
+			setStatus("fallback");
 		}
 	}, [ready, scene, width, height]);
 	useEffect(() => {
@@ -74,19 +80,31 @@ export function PicnicArt({
 				painter.current.rotate(Math.atan2(matrix.b, matrix.a));
 				frame = requestAnimationFrame(tick);
 			} catch {
-				setPainted(false);
+				setStatus("fallback");
 			}
 		}
 		frame = requestAnimationFrame(tick);
 		return () => cancelAnimationFrame(frame);
 	}, [animate, painted, rotorRef]);
 	return (
-		<canvas
-			className="picnic-art"
-			ref={canvasRef}
-			data-scene={scene.result ? "result" : scene.wheel.phase}
-			data-painted={painted || undefined}
-			inert
-		/>
+		<>
+			<canvas
+				className="picnic-art"
+				ref={canvasRef}
+				data-scene={scene.result ? "result" : scene.wheel.phase}
+				data-painted={painted || undefined}
+				inert
+			/>
+			{status === "loading" && (
+				<output className="picnic-loading">
+					<LoaderCircle
+						size={20}
+						className="motion-safe:animate-spin"
+						aria-hidden="true"
+					/>
+					추첨판을 불러오는 중…
+				</output>
+			)}
+		</>
 	);
 }
