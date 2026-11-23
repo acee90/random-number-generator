@@ -44,12 +44,11 @@ async function checkPage(path, canonical) {
 	assert.equal(meta("og:image:width"), "1200");
 	assert.equal(meta("og:image:height"), "630");
 	assert.deepEqual(
-		[
-			...document.querySelectorAll(
-				".site-header-nav a,.site-header-nav button",
-			),
-		].map((element) => element.textContent.trim()),
-		["점메추"],
+		[...document.querySelectorAll(".site-header a")].map((link) => [
+			link.getAttribute("href"),
+			link.getAttribute("aria-label"),
+		]),
+		[["/", "점메추 홈"]],
 	);
 	report("page", {
 		path,

@@ -8,10 +8,12 @@ import {
 	screen,
 	within,
 } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import CreateLunchRoomPage from "../src/components/features/CreateLunchRoomPage";
 import { saveCandidateList } from "../src/lib/candidateLibrary";
 import { sampleLunchPlaces } from "../src/lib/lunch";
+import { readSoloRoom } from "../src/lib/soloRoom";
 
 const mocks = vi.hoisted(() => ({
 	navigate: vi.fn(),
@@ -84,6 +86,22 @@ afterEach(() => {
 });
 
 describe("room creation steps", () => {
+	it.each([
+		false,
+		true,
+	])("preserves early input when the setup page hydrates (solo=%s)", (solo) => {
+		mocks.readName.mockReturnValue("지난 닉네임");
+		const container = document.body.appendChild(document.createElement("div"));
+		const page = <CreateLunchRoomPage solo={solo} />;
+		container.innerHTML = renderToString(page);
+		input("방 이름").value = "먼저 입력한 이름";
+		input("닉네임").value = "준희";
+		render(page, { container, hydrate: true });
+		next();
+		fireEvent.click(button("이전"));
+		expect(input("방 이름").value).toBe("먼저 입력한 이름");
+		expect(input("닉네임").value).toBe("준희");
+	});
 	it("groups required fields together and retains both steps' input after going back", async () => {
 		mocks.readName.mockReturnValue(`${"가".repeat(11)}😀옛이름`);
 		render(<CreateLunchRoomPage />);
@@ -277,6 +295,33 @@ describe("room creation steps", () => {
 		});
 	});
 
+	it("uses the same two steps to open a private room with the selected host, candidates and filter", async () => {
+		render(<CreateLunchRoomPage solo />);
+		fireEvent.change(input("방 이름"), { target: { value: "혼자 먹는 점심" } });
+		fireEvent.change(input("닉네임"), { target: { value: "준희" } });
+		next();
+		expect(button("방 만들기").disabled).toBe(true);
+		await setCandidates("국밥", "우동");
+		fireEvent.click(screen.getByRole("checkbox", { name: "우동 추첨 포함" }));
+		await create();
+		expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith({
+			to: "/solo/$roomId",
+			params: { roomId: expect.any(String) },
+		});
+		const saved = readSoloRoom(
+			mocks.navigate.mock.calls[0][0].params.roomId,
+		)?.snapshot;
+		expect(saved).toMatchObject({
+			title: "혼자 먹는 점심",
+			participants: [{ name: "준희", isHost: true }],
+			status: "waiting",
+			candidates: [{ name: "국밥" }, { name: "우동" }],
+			gameFilter: { excludedIds: [saved?.candidates[1].id] },
+		});
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(mocks.saveHost).not.toHaveBeenCalled();
+		expect(mocks.prepareEntry).not.toHaveBeenCalled();
+	});
 	it("locks the candidate step while submitting once, then keeps the draft available after a server error", async () => {
 		let resolve!: (value: Response) => void;
 		fetchMock.mockReturnValueOnce(

@@ -1,19 +1,14 @@
 import { type Connection, Server, type WSMessage } from "partyserver";
-import { getWheelRotation, randomWheelLandingFraction } from "@/lib/lunch";
 import {
 	type ChatTrace,
 	type ClientMessage,
 	clampLunchRoomNickname,
-	getEligibleRoomCandidates,
 	hasInvalidLunchRoomJoinNickname,
 	isLunchRoomId,
-	isRoomDrawVoter,
 	lunchRoomLimits,
 	normalizeLunchRoomNickname,
 	parseClientMessage,
 	parseRoomSnapshot,
-	type RoomDraw,
-	type RoomDrawVote,
 	type RoomMember,
 	type RoomParticipant,
 	type RoomSnapshot,
@@ -31,10 +26,19 @@ import {
 import {
 	clearDisabledRoomExclusions,
 	hydrateRoomDrawMetadata,
-	recordRoomDrawMetadata,
-	setRoomExcludeDrawn,
 	visibleRoomExclusions,
 } from "@/lib/roomDrawMetadata";
+import {
+	advanceRoomRound,
+	applyRoomCommand,
+	castRoomVote,
+	createRoomSnapshot,
+	getRoomArchiveDraws,
+	type LifecycleCommand,
+	prepareRoomDraw,
+	startRoomSpin,
+	validateRoomCommand,
+} from "@/lib/roomGame";
 import type { EntropyBatch } from "@/services/randomCore";
 import { drawFromPreparedEntropy, fetchEntropy } from "@/services/seedPool";
 
@@ -63,20 +67,6 @@ interface StoredRoom {
 	processedCommands?: { key: string; fingerprint: string }[];
 	drawEntropy?: EntropyBatch & { expiresAt: number };
 }
-
-type LifecycleCommand = Extract<
-	ClientMessage,
-	{
-		type:
-			| "intake"
-			| "recommend"
-			| "remove-candidate"
-			| "room-edit"
-			| "options"
-			| "game-filter"
-			| "reset-exclusions";
-	}
->;
 
 interface SocketState {
 	socketId: string;
@@ -296,31 +286,12 @@ export class LunchRoomServer extends Server<RoomEnv> {
 				pendingStartId: null,
 				presentParticipantIds: [],
 				guestTokenIds: {},
-				snapshot: {
-					roomId: input.roomId,
-					title: validated.title,
-					createdAt: input.createdAt,
-					expiresAt: input.createdAt + lunchRoomLimits.ttlMs,
-					listVersion: 1,
-					revision: 1,
-					intakeId: null,
-					excludeDrawn: false,
-					excludedIds: [],
-					exclusionRecords: [],
-					drawCount: 0,
-					drawCountIsExact: true,
-					gameFilter: validated.gameFilter ?? {
-						categories: null,
-						excludedIds: [],
-					},
+				snapshot: createRoomSnapshot(
+					input.roomId,
+					input.createdAt,
+					validated,
 					candidates,
-					participants: [],
-					members: [],
-					messages: [],
-					draw: null,
-					history: [],
-					status: validated.startInWaiting ? "waiting" : "editing",
-				},
+				),
 			};
 			await this.save();
 			await this.scheduleAlarm();
@@ -474,13 +445,8 @@ export class LunchRoomServer extends Server<RoomEnv> {
 					status: 409,
 					body: { error: "진행 중인 방의 기록은 방 안에서 확인해 주세요." },
 				};
-			const { title, expiresAt, draw, history } = this.room.snapshot;
-			const draws = [...(draw ? [draw] : []), ...history]
-				.filter(
-					(entry, index, all) =>
-						all.findIndex((other) => other.id === entry.id) === index,
-				)
-				.slice(0, lunchRoomLimits.maxHistory);
+			const { title, expiresAt } = this.room.snapshot;
+			const draws = getRoomArchiveDraws(this.room.snapshot);
 			return {
 				status: 200,
 				body: { title, expiresAt, draws: structuredClone(draws) },
@@ -774,207 +740,19 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			return;
 		}
 		const snapshot = this.room.snapshot;
-		if (["fetching", "drawing", "closed"].includes(snapshot.status)) {
-			fail("DRAW_BUSY", "추첨이 끝난 뒤 변경할 수 있습니다.");
-			return;
-		}
-		if (
-			"expectedRevision" in message &&
-			message.expectedRevision !== (snapshot.revision ?? snapshot.listVersion)
-		) {
-			fail(
-				"REVISION_CONFLICT",
-				"게임 조건이 바뀌었어요. 목록을 확인한 뒤 다시 진행해 주세요.",
-			);
-			return;
-		}
-		if (message.type === "intake") {
-			const allowed =
-				message.action === "edit"
-					? ["waiting"]
-					: message.action === "open"
-						? ["waiting", "editing", "reviewing"]
-						: message.action === "close"
-							? ["collecting"]
-							: ["editing", "collecting", "reviewing"];
-			if (!allowed.includes(snapshot.status)) {
-				fail(
-					"PHASE_CONFLICT",
-					"게임 단계가 바뀌었습니다. 현재 화면을 확인해 주세요.",
-				);
-				return;
-			}
-			if (
-				message.action === "finalize" &&
-				// Drawn exclusions are a waiting-screen game option. Finalizing the
-				// selected pool must still allow returning there to recover it.
-				getEligibleRoomCandidates({ ...snapshot, excludeDrawn: false })
-					.length === 0
-			) {
-				fail("NO_CANDIDATES", "추첨에 포함할 후보가 한 개 이상 필요합니다.");
-				return;
-			}
-		}
-		if (
-			message.type === "room-edit" &&
-			message.candidates !== undefined &&
-			!["editing", "collecting", "reviewing"].includes(snapshot.status)
-		) {
-			fail(
-				"PHASE_CONFLICT",
-				"후보는 편집 단계에서 변경할 수 있습니다. 대기 화면에서 후보 편집을 선택해 주세요.",
-			);
-			return;
-		}
-		if (
-			message.type === "game-filter" &&
-			!["editing", "collecting", "reviewing"].includes(snapshot.status)
-		) {
-			fail(
-				"PHASE_CONFLICT",
-				"게임 필터는 후보 편집 단계에서 변경할 수 있습니다. 대기 화면에서 후보 편집을 선택해 주세요.",
-			);
-			return;
-		}
-		if (
-			message.type === "game-filter" &&
-			message.filter.excludedIds.some(
-				(id) => !snapshot.candidates.some((candidate) => candidate.id === id),
-			)
-		) {
-			fail(
-				"FILTER_CANDIDATES_CHANGED",
-				"후보 목록이 바뀌었습니다. 최신 후보를 확인하고 필터를 다시 적용해 주세요.",
-			);
-			return;
-		}
-		if (message.type === "recommend" || message.type === "remove-candidate") {
-			if (
-				snapshot.status !== "collecting" ||
-				snapshot.intakeId !== message.intakeId
-			) {
-				fail(
-					"INTAKE_CLOSED",
-					"추천 접수가 종료되거나 새로 시작됐습니다. 입력은 보관했어요.",
-				);
-				return;
-			}
-			if (message.type === "remove-candidate") {
-				const candidate = snapshot.candidates.find(
-					(item) => item.id === message.candidateId,
-				);
-				if (!candidate || (!host && candidate.ownerId !== participant.id)) {
-					fail(
-						"CANDIDATE_FORBIDDEN",
-						"접수 중에는 본인이 추천한 후보만 삭제할 수 있습니다.",
-					);
-					return;
-				}
-			}
-		}
-		if (
-			message.type === "room-edit" &&
-			message.candidates &&
-			message.baseListVersion !== snapshot.listVersion
-		) {
-			fail(
-				"LIST_CONFLICT",
-				"다른 사람이 후보를 변경했습니다. 초안을 보관했으니 최신 목록과 비교해 주세요.",
-			);
+		const invalid = validateRoomCommand(snapshot, message, participant, host);
+		if (invalid) {
+			fail(invalid.code, invalid.message);
 			return;
 		}
 		const before = structuredClone(this.room);
 		try {
-			switch (message.type) {
-				case "intake":
-					snapshot.status =
-						message.action === "edit"
-							? "editing"
-							: message.action === "open"
-								? "collecting"
-								: message.action === "close"
-									? "reviewing"
-									: "waiting";
-					if (message.action === "open")
-						snapshot.intakeId = crypto.randomUUID();
-					if (message.action === "edit" || message.action === "finalize")
-						snapshot.intakeId = null;
-					break;
-				case "recommend":
-					snapshot.candidates.push({
-						id: crypto.randomUUID(),
-						name: message.name,
-						category: message.category ?? "미분류",
-						included: true,
-						ownerId: participant.id,
-						ownerName: participant.name,
-					});
-					snapshot.listVersion++;
-					break;
-				case "remove-candidate":
-					snapshot.candidates = snapshot.candidates.filter(
-						(item) => item.id !== message.candidateId,
-					);
-					snapshot.excludedIds = snapshot.excludedIds?.filter(
-						(id) => id !== message.candidateId,
-					);
-					snapshot.exclusionRecords = snapshot.exclusionRecords?.filter(
-						(entry) => entry.candidateId !== message.candidateId,
-					);
-					if (snapshot.gameFilter)
-						snapshot.gameFilter.excludedIds =
-							snapshot.gameFilter.excludedIds.filter(
-								(id) => id !== message.candidateId,
-							);
-					snapshot.listVersion++;
-					break;
-				case "room-edit":
-					if (message.title !== undefined) snapshot.title = message.title;
-					if (message.candidates) {
-						const old = new Map(
-							snapshot.candidates.map((item) => [item.id, item]),
-						);
-						snapshot.candidates = message.candidates.map((item) => {
-							const original = old.get(item.id);
-							return {
-								...item,
-								included: item.included !== false,
-								ownerId: original?.ownerId ?? this.room?.hostParticipantId,
-								ownerName: original?.ownerName ?? participant.name,
-							};
-						});
-						const ids = new Set(snapshot.candidates.map((item) => item.id));
-						snapshot.excludedIds = snapshot.excludedIds?.filter((id) =>
-							ids.has(id),
-						);
-						snapshot.exclusionRecords = snapshot.exclusionRecords?.filter(
-							(entry) => ids.has(entry.candidateId),
-						);
-						if (snapshot.gameFilter)
-							snapshot.gameFilter.excludedIds =
-								snapshot.gameFilter.excludedIds.filter((id) => ids.has(id));
-						snapshot.listVersion++;
-					}
-					break;
-				case "options":
-					setRoomExcludeDrawn(snapshot, message.excludeDrawn);
-					break;
-				case "game-filter":
-					snapshot.gameFilter = structuredClone(message.filter);
-					snapshot.candidates = snapshot.candidates.map((candidate) =>
-						candidate.included === false
-							? { ...candidate, included: true }
-							: candidate,
-					);
-					break;
-				case "reset-exclusions":
-					snapshot.excludedIds = [];
-					snapshot.exclusionRecords = [];
-					break;
-			}
-			if (message.type !== "room-edit" || message.candidates)
-				snapshot.revision =
-					(snapshot.revision ?? before.snapshot.listVersion) + 1;
+			applyRoomCommand(
+				snapshot,
+				message,
+				participant,
+				this.room.hostParticipantId,
+			);
 			this.room.processedCommands = [...processed, { key, fingerprint }];
 			this.recordActivity(connection);
 			await this.save();
@@ -1253,74 +1031,27 @@ export class LunchRoomServer extends Server<RoomEnv> {
 	) {
 		const participant = connection.state?.participant;
 		if (!this.room || !participant) return;
-		if (this.room.snapshot.history.some((draw) => draw.id === message.drawId)) {
+		const result = castRoomVote(
+			this.room.snapshot,
+			participant,
+			message.drawId,
+			message.vote,
+			Date.now(),
+		);
+		if (result.error) {
 			this.sendError(
 				connection,
-				"VOTE_CLOSED",
-				"기록으로 보관된 결과에는 투표할 수 없습니다.",
+				result.error.code,
+				result.error.message,
 				message.id,
 			);
-			return;
-		}
-		const draw = this.room.snapshot.draw;
-		if (!draw || draw.id !== message.drawId) {
-			this.sendError(
-				connection,
-				"VOTE_NOT_FOUND",
-				"투표할 현재 추첨 결과를 찾을 수 없습니다.",
-				message.id,
-			);
-			return;
-		}
-		const now = Date.now();
-		const endedAt = draw.startedAt + draw.durationMs;
-		if (this.room.snapshot.status !== "result" || now < endedAt) {
-			this.sendError(
-				connection,
-				"VOTE_NOT_READY",
-				"추첨 결과가 나온 뒤 투표해 주세요.",
-				message.id,
-			);
-			return;
-		}
-		const votes = draw.votes ?? [];
-		if (votes.some((vote) => vote.participantId === participant.id)) {
-			this.sendError(
-				connection,
-				"VOTE_ALREADY_CAST",
-				"이미 투표했습니다. 투표는 한 번만 할 수 있으며 바꿀 수 없습니다.",
-				message.id,
-			);
-			this.sendSnapshot(connection);
-			return;
-		}
-		if (!isRoomDrawVoter(draw, participant.id)) {
-			this.sendError(
-				connection,
-				"VOTE_NOT_ELIGIBLE",
-				"추첨 시작 후 입장해 이번 결과에는 투표할 수 없습니다. 다음 추첨부터 참여해 주세요.",
-				message.id,
-			);
-			return;
-		}
-		if (votes.length >= lunchRoomLimits.maxMembers) {
-			this.sendError(
-				connection,
-				"VOTE_LIMIT",
-				"이 결과의 투표 인원이 가득 찼습니다.",
-				message.id,
-			);
+			if (result.error.code === "VOTE_ALREADY_CAST")
+				this.sendSnapshot(connection);
 			return;
 		}
 		const before = structuredClone(this.room);
-		const vote: RoomDrawVote = {
-			participantId: participant.id,
-			name: normalizeLunchRoomNickname(participant.name) ?? "참가자",
-			vote: message.vote,
-			timestamp: now,
-			reactionMs: now - endedAt,
-		};
-		this.room.snapshot.draw = { ...draw, votes: [...votes, vote] };
+		const { draw, vote } = result;
+		this.room.snapshot.draw = draw;
 		this.recordActivity(connection);
 		try {
 			await this.save();
@@ -1347,7 +1078,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 				type: "vote-recorded",
 				roomId: this.room.snapshot.roomId,
 				drawId: draw.id,
-				voteCount: votes.length + 1,
+				voteCount: draw.votes.length,
 				vote,
 			});
 		}
@@ -1383,17 +1114,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			return;
 		}
 		const before = structuredClone(this.room);
-		if (!alreadyArchived)
-			this.room.snapshot.history = [
-				structuredClone(draw),
-				...this.room.snapshot.history,
-			].slice(0, lunchRoomLimits.maxHistory);
-		clearDisabledRoomExclusions(this.room.snapshot);
-		this.room.snapshot.draw = null;
-		this.room.snapshot.status = message.editCandidates ? "editing" : "waiting";
-		if (message.editCandidates) this.room.snapshot.intakeId = null;
-		this.room.snapshot.revision =
-			(this.room.snapshot.revision ?? this.room.snapshot.listVersion) + 1;
+		advanceRoomRound(this.room.snapshot, Boolean(message.editCandidates));
 		this.recordActivity(connection);
 		try {
 			await this.save();
@@ -1451,12 +1172,8 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			this.sendSnapshot(connection);
 			return;
 		}
-		const excludedBefore = snapshot.excludeDrawn
-			? [...(snapshot.excludedIds ?? [])]
-			: [];
-		const candidates = getEligibleRoomCandidates(snapshot).map((place) => ({
-			...place,
-		}));
+		const drawInput = prepareRoomDraw(snapshot, this.participants());
+		const { candidates, requestedAt } = drawInput;
 		if (candidates.length === 0) {
 			this.sendError(
 				connection,
@@ -1467,8 +1184,6 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			return;
 		}
 		const before = structuredClone(this.room);
-		const listVersion = snapshot.listVersion;
-		const requestedAt = Date.now();
 		const prepared = this.room.drawEntropy;
 		let reserved: EntropyBatch | undefined;
 		if (prepared && prepared.expiresAt > requestedAt && prepared.seeds.length) {
@@ -1480,16 +1195,6 @@ export class LunchRoomServer extends Server<RoomEnv> {
 		// Consume these words in the same durable write as the start request.
 		if (prepared && (!reserved || !prepared.seeds.length))
 			delete this.room.drawEntropy;
-		const metadata = {
-			participants: this.participants(),
-			requestedAt,
-			probabilities: candidates.map(() => 1 / candidates.length),
-			...(snapshot.gameFilter === undefined
-				? {}
-				: { gameFilter: structuredClone(snapshot.gameFilter) }),
-			excludeDrawn: snapshot.excludeDrawn ?? false,
-			excludedIdsBefore: excludedBefore,
-		};
 		this.room.processedStarts = [...this.room.processedStarts, requestId].slice(
 			-maxProcessedStarts,
 		);
@@ -1517,45 +1222,19 @@ export class LunchRoomServer extends Server<RoomEnv> {
 		this.publish();
 		this.send(connection, { type: "ack", requestId });
 		// Release the queue so the pending draw can commit after the start acknowledgement.
-		this.ctx.waitUntil(
-			this.completeDraw(requestId, candidates, listVersion, metadata, reserved),
-		);
+		this.ctx.waitUntil(this.completeDraw(requestId, drawInput, reserved));
 		await this.scheduleAlarm();
 	}
 
 	private async completeDraw(
 		requestId: string,
-		candidates: RoomSnapshot["candidates"],
-		listVersion: number,
-		metadata: Pick<
-			RoomDraw,
-			| "participants"
-			| "requestedAt"
-			| "probabilities"
-			| "excludeDrawn"
-			| "excludedIdsBefore"
-			| "gameFilter"
-		>,
+		drawInput: ReturnType<typeof prepareRoomDraw>,
 		reserved: EntropyBatch | undefined,
 	) {
 		try {
 			const result = await drawFromPreparedEntropy(
-				candidates.length - 1,
+				drawInput.candidates.length - 1,
 				reserved,
-			);
-			if (
-				!Array.isArray(result.numbers) ||
-				result.numbers.length !== 1 ||
-				!["quantum", "atmospheric", "csprng", "mixed"].includes(result.source)
-			)
-				throw new Error("Invalid entropy result");
-			const winnerIndex = result.numbers[0];
-			const landingFraction = randomWheelLandingFraction();
-			const toRotation = getWheelRotation(
-				0,
-				winnerIndex,
-				candidates.length,
-				landingFraction,
 			);
 			await this.exclusive(async () => {
 				if (
@@ -1566,32 +1245,8 @@ export class LunchRoomServer extends Server<RoomEnv> {
 				)
 					return;
 				const before = structuredClone(this.room);
-				const timestamp = Date.now();
-				const draw: RoomDraw = {
-					...metadata,
-					id: requestId,
-					candidates,
-					winnerIndex,
-					source: result.source,
-					timestamp,
-					startedAt: timestamp + 1500,
-					durationMs: lunchRoomLimits.drawDurationMs,
-					fromRotation: 0,
-					toRotation,
-					landingFraction,
-					listVersion,
-					votes: [],
-				};
-				recordRoomDrawMetadata(
-					this.room.snapshot,
-					draw,
-					metadata.excludeDrawn ?? false,
-				);
-				this.room.snapshot.draw = draw;
+				startRoomSpin(this.room.snapshot, drawInput, result, requestId, 1500);
 				this.room.pendingStartId = null;
-				this.room.snapshot.status = "drawing";
-				this.room.snapshot.revision =
-					(this.room.snapshot.revision ?? listVersion) + 1;
 				try {
 					// Result and exclusion ledger are a single durable commit; publish only on success.
 					await this.save();
@@ -1613,7 +1268,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 				this.room.pendingStartId = null;
 				this.room.snapshot.status = "waiting";
 				this.room.snapshot.revision =
-					(this.room.snapshot.revision ?? listVersion) + 1;
+					(this.room.snapshot.revision ?? drawInput.listVersion) + 1;
 				this.appendSystemEvent(
 					"draw-failed",
 					"추첨에 실패했습니다. 다시 시작해 주세요.",

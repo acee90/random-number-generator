@@ -11,63 +11,12 @@
 		padding: 0 12px max(8px, env(safe-area-inset-bottom));
 		overflow: clip;
 	}
-	.lunch-room.room-live .site-header {
-		min-block-size: 48px;
-		padding-block: 0;
-	}
-	.lunch-room.room-live .site-header-brand {
-		gap: 8px;
-		font-size: 20px;
-	}
-	.lunch-room.room-live .site-header-symbol {
-		inline-size: 28px;
-		block-size: 28px;
-		border-radius: var(--control-radius);
-	}
-	.lunch-room.room-live .site-header-symbol svg {
-		inline-size: 18px;
-		block-size: 18px;
-	}
-	.lunch-room.room-live .site-header-nav {
-		padding: 0;
-		background: transparent;
-	}
 	.lunch-room.room-live .room-main {
 		display: flex;
 		flex: 1;
 		flex-direction: column;
 		min-block-size: 0;
-		padding-block-start: 6px;
-	}
-	.lunch-room.room-live .room-heading {
-		flex-shrink: 0;
-		align-items: center;
-		gap: 8px;
-		margin-block-end: 8px;
-	}
-	.lunch-room.room-live .room-heading-actions {
-		flex-shrink: 1;
-		flex-wrap: wrap;
-		max-inline-size: 100%;
-		justify-content: flex-end;
-	}
-	.lunch-room.room-live .room-title-block {
-		gap: 2px;
-	}
-	.lunch-room.room-live .room-heading h1 {
-		font-size: 18px;
-		line-height: 1.25;
-	}
-	.lunch-room.room-live .room-connection {
-		flex-shrink: 0;
-		gap: 4px 8px;
-		font-size: 11px;
-		line-height: 1.4;
-	}
-	.lunch-room.room-live .room-host-badge {
-		padding: 2px 4px;
-		font-size: 10px;
-		line-height: 1.2;
+		padding-block-start: 8px;
 	}
 	.lunch-room.room-live .room-host-offline,
 	.lunch-room.room-live .room-main > .room-error {
@@ -99,6 +48,11 @@
 		overscroll-behavior: contain;
 		scrollbar-width: thin;
 		scrollbar-gutter: stable;
+	}
+	/* The board extends below this scroll pane while chat is open. */
+	.lunch-room.room-live .picnic-loading {
+		align-items: flex-start;
+		padding-block-start: clamp(16px, calc(40cqb - 48px), 140px);
 	}
 	.lunch-room.room-live .room-primary-column:focus-visible,
 	.lunch-room.room-live .room-chat-list:focus-visible {
@@ -249,9 +203,6 @@
 		.room-layout[data-chat-collapsed="false"] {
 		grid-template-rows: minmax(0, 0.75fr) minmax(0, 1.25fr);
 	}
-	.lunch-room.room-live[data-compact-viewport] .site-header {
-		display: none;
-	}
 	.lunch-room.room-live:where([data-compact-viewport]):where(
 			:has(.room-chat-form:focus-within)
 		)
@@ -292,14 +243,43 @@
 		min-block-size: 0;
 	}
 }
-@media (max-width: 420px) {
-	.lunch-room.room-live .room-heading {
-		flex-wrap: wrap;
+@media (max-width: 600px) {
+	.site-header.room-header {
+		gap: 8px;
+		min-block-size: 60px;
+		padding-block: 4px;
 	}
-	.lunch-room.room-live .room-title-block:has(.room-connection) {
-		flex-basis: 100%;
+	.room-header .room-title-block {
+		padding-inline-start: 8px;
 	}
-	.lunch-room.room-live .room-heading-actions {
-		flex: 1 1 100%;
+	.room-header h1 {
+		font-size: 18px;
+	}
+}
+@media (max-width: 480px) {
+	.site-header.room-header,
+	.room-header .room-connection {
+		column-gap: 4px;
+	}
+	.room-header .site-header-brand {
+		inline-size: 44px;
+		justify-content: center;
+	}
+	.room-header .site-header-wordmark,
+	.room-invite-button > span {
+		display: none;
+	}
+	.room-header .room-title-block {
+		padding-inline-start: 0;
+		border: 0;
+	}
+	.room-title-row {
+		position: static;
+	}
+	.room-heading-actions {
+		gap: 4px;
+	}
+	.room-invite-button {
+		inline-size: 44px;
 	}
 }

@@ -29,6 +29,17 @@
 .picnic-art[data-painted] {
 	visibility: visible;
 }
+.picnic-loading {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	background: var(--paper-sheet);
+	color: var(--paper-muted);
+	font-size: 14px;
+}
 .picnic-sound,
 .picnic-ticket,
 .picnic-wheel {
@@ -113,6 +124,10 @@
 	pointer-events: none;
 }
 @media (forced-colors: none) {
+	/* Keep the native controls measurable for the first paint, but out of the tab order. */
+	.picnic-loading ~ * {
+		visibility: hidden;
+	}
 	.picnic-frame:has(.picnic-art[data-painted])
 		:is(
 			.picnic-options,
@@ -130,7 +145,8 @@
 	}
 }
 @media (forced-colors: active) {
-	.picnic-frame .picnic-art {
+	.picnic-frame .picnic-art,
+	.picnic-loading {
 		display: none;
 	}
 }

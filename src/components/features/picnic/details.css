@@ -27,7 +27,7 @@
 	--voter-row-height: 36px;
 }
 /* Reserve the ticket, vote sheet and optional host action during the draw. */
-.picnic-frame[data-multiplayer] .picnic-main:not([data-result]) {
+.picnic-frame[data-voting] .picnic-main:not([data-result]) {
 	aspect-ratio: auto;
 	min-height: 0;
 	max-height: none;

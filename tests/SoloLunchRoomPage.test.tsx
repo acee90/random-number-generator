@@ -8,10 +8,14 @@ import {
 	within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import LunchPicker from "../src/components/features/LunchPicker";
-import { soloHistoryKey } from "../src/hooks/useSoloLunch";
+import SoloLunchRoomPage from "../src/components/features/SoloLunchRoomPage";
 import { lunchSpinDurationMs } from "../src/lib/lunch";
 import { lunchHistoryKey } from "../src/lib/lunchHistory";
+import {
+	createSoloRoom,
+	readSoloRoom,
+	soloHistoryKey,
+} from "../src/lib/soloRoom";
 import { generateRandomNumbers } from "../src/services/randomService";
 
 vi.mock("../src/services/randomService", () => ({
@@ -24,6 +28,7 @@ const places = [
 ];
 beforeEach(() => {
 	localStorage.clear();
+	sessionStorage.clear();
 	vi.useFakeTimers();
 	vi.stubGlobal(
 		"matchMedia",
@@ -50,11 +55,15 @@ async function draw() {
 	await act(async () => vi.advanceTimersByTime(lunchSpinDurationMs));
 }
 
-function listAction(name: string) {
-	fireEvent.keyDown(screen.getByRole("button", { name: "목록 작업" }), {
-		key: "ArrowDown",
+function renderRoom() {
+	const { roomId } = createSoloRoom({
+		title: "내 점심방",
+		hostName: "하나",
+		candidates: places,
+		candidateIds: [],
+		startInWaiting: true,
 	});
-	fireEvent.click(screen.getByRole("menuitem", { name }));
+	return { ...render(<SoloLunchRoomPage roomId={roomId} />), roomId };
 }
 
 async function addCandidate(value: string) {
@@ -70,42 +79,18 @@ async function addCandidate(value: string) {
 }
 
 describe("shared solo game screen", () => {
-	it("starts a new solo session in the same candidate editor as a new room", () => {
-		render(<LunchPicker />);
-		expect(screen.getByRole("searchbox", { name: "후보 검색" })).toBeTruthy();
-		expect(screen.getByRole("button", { name: "목록 작업" })).toBeTruthy();
-		expect(screen.getByRole("button", { name: "추가하기" })).toBeTruthy();
-		expect(screen.queryByRole("button", { name: "룰렛 돌리기" })).toBeNull();
-	});
-	it("requires writing and finalizing a list before showing the wheel", async () => {
-		render(<LunchPicker />);
+	it("keeps unknown private rooms out of the shared room service", () => {
+		const fetch = vi.fn();
+		vi.stubGlobal("fetch", fetch);
+		render(<SoloLunchRoomPage roomId={crypto.randomUUID()} />);
 		expect(
-			screen.getByRole("button", { name: "마감" }).hasAttribute("disabled"),
-		).toBe(true);
-		await addCandidate("새 후보");
-		expect(screen.queryByRole("button", { name: "룰렛 돌리기" })).toBeNull();
-		await act(async () =>
-			fireEvent.click(screen.getByRole("button", { name: "마감" })),
-		);
-		expect(
-			screen.getByRole("button", { name: "마지막 후보 확정" }),
+			screen.getByRole("heading", { name: "이 탭에서 방을 찾을 수 없습니다" }),
 		).toBeTruthy();
+		expect(fetch).not.toHaveBeenCalled();
 	});
-	it("opens the shared list loader directly from the solo preparation screen", () => {
-		render(<LunchPicker />);
-		listAction("목록 불러오기");
-		expect(screen.getByRole("dialog", { name: "목록 불러오기" })).toBeTruthy();
-		expect(
-			screen.getByRole("button", { name: /기본 음식점 목록/ }),
-		).toBeTruthy();
-		fireEvent.click(screen.getByRole("button", { name: "취소" }));
-		expect(screen.getByRole("button", { name: "목록 작업" })).toBeTruthy();
-		expect(screen.queryByRole("button", { name: "룰렛 돌리기" })).toBeNull();
-	});
-
 	it("shows the room lifecycle UI without collaboration controls", () => {
-		render(<LunchPicker places={places} />);
-		expect(screen.getByRole("heading", { name: "혼자 추첨하기" })).toBeTruthy();
+		renderRoom();
+		expect(screen.getByRole("heading", { name: "내 점심방" })).toBeTruthy();
 		expect(screen.getByRole("button", { name: "후보 편집" })).toBeTruthy();
 		expect(screen.getByRole("button", { name: /후보 보기/ })).toBeTruthy();
 		expect(screen.queryByRole("button", { name: "초대 링크 복사" })).toBeNull();
@@ -113,10 +98,12 @@ describe("shared solo game screen", () => {
 		expect(screen.queryByRole("button", { name: "룰렛·결과" })).toBeNull();
 	});
 	it("uses the shared result, then waits for an explicit new spin", async () => {
-		render(<LunchPicker places={places} />);
+		renderRoom();
 		await draw();
 		expect(screen.getByRole("heading", { name: "한식당" })).toBeTruthy();
-		expect(screen.queryByRole("button", { name: /좋아요/ })).toBeNull();
+		const up = screen.getByRole("button", { name: /좋아요/ });
+		fireEvent.click(up);
+		expect(up.getAttribute("aria-pressed")).toBe("true");
 		const next = screen.getByRole("button", {
 			name: "다음 게임",
 		});
@@ -128,9 +115,9 @@ describe("shared solo game screen", () => {
 		expect(generateRandomNumbers).toHaveBeenCalledTimes(1);
 	});
 	it("edits candidates straight from a completed game and keeps that game's record", async () => {
-		render(<LunchPicker places={places} />);
+		const { roomId } = renderRoom();
 		await draw();
-		const firstRecord = localStorage.getItem(soloHistoryKey);
+		const firstRecord = readSoloRoom(roomId)?.snapshot.draw;
 		fireEvent.click(screen.getByRole("button", { name: "후보 편집" }));
 		expect(document.activeElement).toBe(
 			screen.getByRole("heading", { name: "후보 편집" }),
@@ -139,7 +126,7 @@ describe("shared solo game screen", () => {
 		await act(async () =>
 			fireEvent.click(screen.getByRole("button", { name: "마감" })),
 		);
-		expect(localStorage.getItem(soloHistoryKey)).toBe(firstRecord);
+		expect(readSoloRoom(roomId)?.snapshot.history[0]).toEqual(firstRecord);
 		expect(generateRandomNumbers).toHaveBeenCalledTimes(1);
 		vi.mocked(generateRandomNumbers).mockResolvedValueOnce({
 			numbers: [2],
@@ -158,7 +145,7 @@ describe("shared solo game screen", () => {
 				resolve = done;
 			}),
 		);
-		render(<LunchPicker places={places} />);
+		renderRoom();
 		const button = screen.getByRole("button", { name: "룰렛 돌리기" });
 		fireEvent.click(button);
 		fireEvent.click(button);
@@ -174,7 +161,7 @@ describe("shared solo game screen", () => {
 			numbers: [8],
 			source: "csprng",
 		});
-		render(<LunchPicker places={places} />);
+		renderRoom();
 		await act(async () =>
 			fireEvent.click(screen.getByRole("button", { name: "룰렛 돌리기" })),
 		);
@@ -183,12 +170,12 @@ describe("shared solo game screen", () => {
 		await draw();
 		expect(screen.getByRole("heading", { name: "한식당" })).toBeTruthy();
 	});
-	it("edits and finalizes candidates with the shared editor and hides recommendation intake", async () => {
-		render(<LunchPicker places={places} />);
+	it("edits and finalizes candidates with the shared editor and supports recommendation intake", async () => {
+		renderRoom();
 		await act(async () =>
 			fireEvent.click(screen.getByRole("button", { name: "후보 편집" })),
 		);
-		expect(screen.queryByRole("switch", { name: "후보 추천받기" })).toBeNull();
+		expect(screen.getByRole("switch", { name: "후보 추천받기" })).toBeTruthy();
 		expect(screen.getByRole("button", { name: "마감" })).toBeTruthy();
 		await act(async () =>
 			fireEvent.click(screen.getByRole("button", { name: "마감" })),
@@ -196,13 +183,12 @@ describe("shared solo game screen", () => {
 		expect(screen.getByRole("button", { name: "룰렛 돌리기" })).toBeTruthy();
 	});
 	it("persists full draw records and restores them after remounting", async () => {
-		const first = render(<LunchPicker places={places} />);
+		const first = renderRoom();
 		await draw();
-		expect(
-			JSON.parse(localStorage.getItem(soloHistoryKey) ?? "[]"),
-		).toHaveLength(1);
+		fireEvent.click(screen.getByRole("button", { name: "다음 게임" }));
+		expect(readSoloRoom(first.roomId)?.snapshot.history).toHaveLength(1);
 		first.unmount();
-		render(<LunchPicker places={places} />);
+		render(<SoloLunchRoomPage roomId={first.roomId} />);
 		fireEvent.click(screen.getByRole("button", { name: "지난 기록" }));
 		expect(document.activeElement).toBe(
 			screen.getByRole("heading", { name: "추첨 기록" }),
@@ -224,7 +210,7 @@ describe("shared solo game screen", () => {
 				},
 			]),
 		);
-		render(<LunchPicker places={places} />);
+		renderRoom();
 		fireEvent.click(screen.getByRole("button", { name: "지난 기록" }));
 		expect(
 			within(screen.getByRole("dialog")).getByRole("heading", {
@@ -233,8 +219,35 @@ describe("shared solo game screen", () => {
 		).toBeTruthy();
 		expect(localStorage.getItem(lunchHistoryKey)).toContain("legacy");
 	});
+	it("can open detailed pre-room solo records without adding them to a new room", async () => {
+		const first = renderRoom();
+		await draw();
+		const previous = readSoloRoom(first.roomId)?.snapshot.draw;
+		localStorage.setItem(soloHistoryKey, JSON.stringify([previous]));
+		first.unmount();
+		const next = renderRoom();
+		fireEvent.click(screen.getByRole("button", { name: "지난 기록" }));
+		expect(
+			screen.getByRole("heading", { name: "이전 혼자 추첨 기록" }),
+		).toBeTruthy();
+		fireEvent.click(
+			screen.getByRole("button", { name: "한식당 상세 기록 열기" }),
+		);
+		expect(
+			screen.getByRole("heading", { name: "한식당 상세 기록" }),
+		).toBeTruthy();
+		expect(readSoloRoom(next.roomId)?.snapshot.history).toEqual([]);
+	});
+	it("can still play when pre-room draws are damaged", () => {
+		localStorage.setItem(soloHistoryKey, "{broken");
+		renderRoom();
+		expect(
+			screen.getByText(/기록을 저장하거나 불러오지 못했습니다/),
+		).toBeTruthy();
+		expect(screen.getByRole("button", { name: "룰렛 돌리기" })).toBeTruthy();
+	});
 	it("returns keyboard focus to the history trigger after Escape", async () => {
-		render(<LunchPicker places={places} />);
+		renderRoom();
 		const trigger = screen.getByRole("button", { name: "지난 기록" });
 		fireEvent.click(trigger);
 		fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
@@ -249,11 +262,15 @@ describe("shared solo game screen", () => {
 				resolve = done;
 			}),
 		);
-		const view = render(<LunchPicker places={places} />);
+		const view = renderRoom();
 		fireEvent.click(screen.getByRole("button", { name: "룰렛 돌리기" }));
 		view.unmount();
 		await act(async () => resolve({ numbers: [0], source: "csprng" }));
 		await act(async () => vi.advanceTimersByTime(lunchSpinDurationMs));
-		expect(localStorage.getItem(soloHistoryKey)).toBeNull();
+		expect(readSoloRoom(view.roomId)?.snapshot).toMatchObject({
+			status: "waiting",
+			draw: null,
+			history: [],
+		});
 	});
 });

@@ -50,28 +50,15 @@ afterEach(() => {
 });
 
 describe("shared site and tool navigation", () => {
-	it("shows only the lunch service in the public navigation", () => {
+	it("uses the brand as the single home link and marks it current only on the home page", () => {
 		const view = render(<SiteHeader active="lunch" homeCurrent />);
-		expect(
-			screen.getByRole("link", { name: "점메추 홈" }).getAttribute("href"),
-		).toBe("/");
-		const navigation = within(
-			screen.getByRole("navigation", { name: "서비스 메뉴" }),
-		);
-		expect(
-			navigation
-				.getByRole("link", { name: "점메추" })
-				.getAttribute("aria-current"),
-		).toBe("page");
+		const header = within(screen.getByRole("banner"));
+		const home = header.getByRole("link", { name: "점메추 홈" });
+		expect(header.getAllByRole("link")).toEqual([home]);
+		expect(home.getAttribute("href")).toBe("/");
+		expect(home.getAttribute("aria-current")).toBe("page");
 		view.rerender(<SiteHeader active="lunch" />);
-		expect(
-			navigation
-				.getByRole("link", { name: "점메추" })
-				.hasAttribute("aria-current"),
-		).toBe(false);
-		expect(navigation.getAllByRole("link")).toHaveLength(1);
-		for (const label of ["랜덤 숫자", "로또 6/45", "연금복권 720+"])
-			expect(navigation.queryByText(label)).toBeNull();
+		expect(home.hasAttribute("aria-current")).toBe(false);
 	});
 
 	it("also hides secondary navigation when a retained tool page supplies switching callbacks", () => {
@@ -83,7 +70,7 @@ describe("shared site and tool navigation", () => {
 		view.rerender(<SiteHeader active="number" onToolChange={change} />);
 		expect(screen.queryByRole("button")).toBeNull();
 		expect(
-			screen.getByRole("link", { name: "점메추" }).getAttribute("href"),
+			screen.getByRole("link", { name: "점메추 홈" }).getAttribute("href"),
 		).toBe("/");
 		expect(change).not.toHaveBeenCalled();
 	});

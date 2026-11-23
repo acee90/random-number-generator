@@ -197,10 +197,10 @@ export function WheelPlayground({
 			<div className="room-draw-panel sb-wheel-panel">
 				<RoomGameStage
 					draw={finished ? draw : null}
+					showVoting={false}
 					isHost={canDraw}
 					connected
 					pending={false}
-					solo
 					reducedMotion={motionOff}
 					onNext={reset}
 					canNext

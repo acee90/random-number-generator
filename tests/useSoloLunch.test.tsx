@@ -9,9 +9,10 @@ import {
 	it,
 	vi,
 } from "vitest";
-import { soloHistoryKey, useSoloLunch } from "../src/hooks/useSoloLunch";
+import { useSoloLunch } from "../src/hooks/useSoloLunch";
 import { lunchSpinDurationMs } from "../src/lib/lunch";
 import { getEligibleRoomCandidates } from "../src/lib/lunchRoom";
+import { createSoloRoom, readSoloRoom } from "../src/lib/soloRoom";
 import { generateRandomNumbers } from "../src/services/randomService";
 
 vi.mock("../src/services/randomService", () => ({
@@ -22,6 +23,7 @@ const places = [
 	{ id: "b", name: "우동", category: "일식" },
 ];
 beforeEach(() => {
+	sessionStorage.clear();
 	localStorage.clear();
 	vi.useFakeTimers();
 	vi.mocked(generateRandomNumbers)
@@ -34,7 +36,14 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 function setup() {
-	return renderHook(() => useSoloLunch(places));
+	const initial = createSoloRoom({
+		title: "내 점심방",
+		hostName: "하나",
+		candidates: places,
+		candidateIds: [],
+		startInWaiting: true,
+	});
+	return renderHook(() => useSoloLunch(initial));
 }
 async function spin(result: ReturnType<typeof setup>["result"]) {
 	await act(async () => {
@@ -127,7 +136,8 @@ describe("local game controller", () => {
 	it("resets only automatic exclusions and keeps manual filters and history", async () => {
 		const { result } = setup();
 		await spin(result);
-		const record = structuredClone(result.current.room.snapshot.history[0]);
+		const record = structuredClone(result.current.room.snapshot.draw);
+		assert(record);
 		act(() => {
 			result.current.room.nextRound(record.id);
 		});
@@ -156,7 +166,8 @@ describe("local game controller", () => {
 			await result.current.room.updateRoomOptions(true);
 		});
 		await spin(result);
-		const record = structuredClone(result.current.room.snapshot.history[0]);
+		const record = structuredClone(result.current.room.snapshot.draw);
+		assert(record);
 		act(() => {
 			result.current.room.nextRound(record.id);
 		});
@@ -229,46 +240,68 @@ describe("local game controller", () => {
 		});
 		await spin(result);
 		expect(result.current.storageFailed).toBe(true);
-		expect(result.current.room.snapshot.history).toHaveLength(1);
+		const saved = readSoloRoom(result.current.room.snapshot.roomId);
+		expect(saved?.snapshot.draw?.id).toBe(
+			result.current.room.snapshot.draw?.id,
+		);
+		expect(saved?.storageFailed).toBe(true);
 	});
-	it("flags damaged stored records without preventing a new game", () => {
-		localStorage.setItem(soloHistoryKey, "{broken");
-		const { result } = setup();
-		expect(result.current.storageFailed).toBe(true);
-		expect(result.current.room.snapshot.history).toEqual([]);
-		act(() => {
-			expect(result.current.room.startDraw()).toBe(true);
-		});
-	});
-	it("restores history from edited lists into a fresh empty preparation session", async () => {
+	it("resumes the same spin after a refresh and archives its vote on the next game", async () => {
 		const first = setup();
 		await act(async () => {
-			await first.result.current.room.enterEditing();
+			first.result.current.room.startDraw();
 		});
-		await act(async () => {
-			await first.result.current.room.editRoom({
-				baseVersion: 1,
-				candidates: [{ ...places[0], name: "편집한 후보" }, places[1]],
-			});
-		});
-		await act(async () => {
-			await first.result.current.room.finalizeIntake();
-		});
-		await spin(first.result);
-		const record = structuredClone(
-			first.result.current.room.snapshot.history[0],
-		);
-		expect(record.listVersion).toBe(2);
+		const { roomId, draw } = first.result.current.room.snapshot;
+		assert(draw);
 		first.unmount();
-		const fresh = renderHook(() => useSoloLunch());
-		expect(fresh.result.current.storageFailed).toBe(false);
-		expect(fresh.result.current.room.snapshot.history[0]).toEqual(record);
-		expect(fresh.result.current.room.snapshot.candidates).toEqual([]);
-		expect(fresh.result.current.room.snapshot.status).toBe("editing");
-		expect(
-			fresh.result.current.room.snapshot.listVersion,
-		).toBeGreaterThanOrEqual(record.listVersion);
+		const saved = readSoloRoom(roomId);
+		assert(saved);
+		const resumed = renderHook(() => useSoloLunch(saved.snapshot));
+		await act(async () => vi.advanceTimersByTime(lunchSpinDurationMs));
+		expect(generateRandomNumbers).toHaveBeenCalledTimes(1);
+		act(() => {
+			expect(resumed.result.current.room.vote(draw.id, "up")).toBe(true);
+			expect(resumed.result.current.room.vote(draw.id, "down")).toBe(false);
+			expect(resumed.result.current.room.nextRound(draw.id, true)).toBe(true);
+		});
+		expect(readSoloRoom(roomId)?.snapshot).toMatchObject({
+			status: "editing",
+			draw: null,
+			history: [{ id: draw.id, votes: [{ name: "하나", vote: "up" }] }],
+		});
+		expect(setup().result.current.room.snapshot.history).toEqual([]);
 	});
+	it("saves recommendations, title changes and a closed archive until expiry", async () => {
+		const { result } = setup();
+		await act(async () => {
+			expect(await result.current.room.openIntake()).toBe(true);
+			expect(await result.current.room.addCandidate("냉면")).toBe(true);
+			expect(await result.current.room.closeIntake()).toBe(true);
+			expect(await result.current.room.finalizeIntake()).toBe(true);
+			expect(
+				await result.current.room.editRoom({
+					baseVersion: 2,
+					title: "새 이름",
+				}),
+			).toBe(true);
+		});
+		await spin(result);
+		const { roomId, draw } = result.current.room.snapshot;
+		assert(draw);
+		await act(async () => {
+			expect(result.current.room.vote(draw.id, "down")).toBe(true);
+			expect(await result.current.room.closeRoom()).toBe(true);
+		});
+		const saved = readSoloRoom(roomId);
+		expect(saved?.snapshot).toMatchObject({
+			title: "새 이름",
+			status: "closed",
+			draw: { votes: [{ name: "하나", vote: "down" }] },
+		});
+		await act(async () => vi.advanceTimersByTime(24 * 60 * 60 * 1000));
+		expect(readSoloRoom(roomId)).toBeNull();
+	});
+
 	it("applies result-time ON immediately after reset and keeps the completed record immutable", async () => {
 		const { result } = setup();
 		await spin(result);
@@ -285,7 +318,7 @@ describe("local game controller", () => {
 			record.candidates[record.winnerIndex].id,
 		]);
 		expect(result.current.room.snapshot.draw).toEqual(record);
-		expect(result.current.room.snapshot.history[0]).toEqual(record);
+		expect(result.current.room.snapshot.history).toEqual([]);
 		await act(async () => {
 			await result.current.room.updateRoomOptions(false);
 			await result.current.room.updateRoomOptions(true);

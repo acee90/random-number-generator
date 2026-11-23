@@ -20,13 +20,6 @@ import { lunchHistoryKey } from "../src/lib/lunchHistory";
 import type { RoomDraw, RoomSnapshot } from "../src/lib/lunchRoom";
 
 vi.mock("../src/hooks/useLunchRoom", () => ({ useLunchRoom: vi.fn() }));
-vi.mock("../src/components/layout/SiteHeader", () => ({
-	default: () => (
-		<header>
-			<a href="/">랜덤랩</a>
-		</header>
-	),
-}));
 vi.mock("../src/services/randomService", () => ({
 	getSourceDisplayName: (source: string) => `출처: ${source}`,
 }));
@@ -3834,22 +3827,18 @@ describe("synchronized lunch room UI", () => {
 		expect(
 			screen.getByText(/^방장이 오프라인입니다\. 채팅하며 기다릴 수 있고/),
 		).toBeTruthy();
-		const titleBlock = screen
-			.getByRole("heading", { level: 1, name: "오늘 점심 함께 골라요" })
-			.closest(".room-title-block") as HTMLElement;
-		expect(titleBlock).not.toBeNull();
-		expect(within(titleBlock).getByText("연결됨")).toBeTruthy();
-		expect(within(titleBlock).getByText("참가 1명")).toBeTruthy();
+		const header = within(screen.getByRole("banner"));
+		expect(
+			header.getByRole("heading", { level: 1, name: "오늘 점심 함께 골라요" }),
+		).toBeTruthy();
+		expect(header.getByRole("link", { name: "점메추 홈" })).toBeTruthy();
+		expect(header.getByText("연결됨")).toBeTruthy();
+		expect(header.getByText("참가 1명")).toBeTruthy();
 		expect(screen.queryByText("실시간 연결됨")).toBeNull();
-		const infoToggle = screen
-			.getByText("방 정보")
-			.closest("summary") as HTMLElement;
-		expect(infoToggle).not.toBeNull();
-		const details = infoToggle.closest("details") as HTMLDetailsElement;
-		expect(details.open).toBe(false);
-		expect(details.querySelectorAll(".room-lifetime time")).toHaveLength(2);
+		const infoToggle = header.getByRole("button", { name: "방 정보" });
+		expect(infoToggle.getAttribute("aria-expanded")).toBe("false");
 		fireEvent.click(infoToggle);
-		expect(details.open).toBe(true);
+		expect(infoToggle.getAttribute("aria-expanded")).toBe("true");
 		expect(screen.getByText(/방장이 나가도 생성 후 24시간/)).toBeTruthy();
 		const times = document.querySelectorAll(".room-lifetime time");
 		expect(times).toHaveLength(2);
@@ -3859,6 +3848,8 @@ describe("synchronized lunch room UI", () => {
 		expect(times[1].getAttribute("datetime")).toBe(
 			new Date(room.snapshot?.expiresAt ?? 0).toISOString(),
 		);
+		fireEvent.keyDown(infoToggle, { key: "Escape" });
+		expect(infoToggle.getAttribute("aria-expanded")).toBe("false");
 		expect(
 			screen
 				.getByRole("log", { name: "방 채팅 메시지" })

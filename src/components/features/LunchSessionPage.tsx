@@ -1,13 +1,4 @@
-import {
-	Check,
-	ChevronRight,
-	Copy,
-	Crown,
-	Info,
-	Wifi,
-	WifiOff,
-	X,
-} from "lucide-react";
+import { ChevronRight, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import CopyFallback from "@/components/features/CopyFallback";
 import { roomCandidateNumbers } from "@/components/features/RoomCandidateList";
@@ -15,8 +6,8 @@ import RoomChatPanel from "@/components/features/RoomChatPanel";
 import RoomDrawDialog from "@/components/features/RoomDrawDialog";
 import RoomEntryGate from "@/components/features/RoomEntryGate";
 import RoomGameStage from "@/components/features/RoomGameStage";
+import RoomHeader from "@/components/features/RoomHeader";
 import RoomLifecyclePanel from "@/components/features/RoomLifecyclePanel";
-import RoomSettingsDialog from "@/components/features/RoomSettingsDialog";
 import SiteHeader from "@/components/layout/SiteHeader";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,8 +27,12 @@ import {
 	lunchRoomLimits,
 	type RoomDraw,
 } from "@/lib/lunchRoom";
+import { getRoomArchiveDraws } from "@/lib/roomGame";
 import { getSourceDisplayName } from "@/services/randomService";
-import ClosedRoomHistory, { RoomTerminalActions } from "./ClosedRoomHistory";
+import ClosedRoomHistory, {
+	ClosedRoomArchive,
+	RoomTerminalActions,
+} from "./ClosedRoomHistory";
 import "./lunch-room.css";
 import "./lunch-room-mobile.css";
 
@@ -49,12 +44,14 @@ export default function LunchSessionPage({
 	roomId,
 	solo = false,
 	legacyHistory = [],
+	previousDraws = [],
 	storageFailed = false,
 }: {
 	room: ReturnType<typeof useLunchRoom>;
 	roomId: string;
 	solo?: boolean;
 	legacyHistory?: readonly LunchHistoryRecord[];
+	previousDraws?: readonly RoomDraw[];
 	storageFailed?: boolean;
 }) {
 	const id = useId();
@@ -69,8 +66,6 @@ export default function LunchSessionPage({
 	const [inviteUrl, setInviteUrl] = useState("");
 	const [selectedDraw, setSelectedDraw] = useState<RoomDraw | null>(null);
 	const roomViewportRef = useRef<HTMLDivElement>(null);
-	const [roomInfoOpen, setRoomInfoOpen] = useState(false);
-	const [roomInfoDismissed, setRoomInfoDismissed] = useState(false);
 	const primaryColumnRef = useRef<HTMLDivElement>(null);
 	const selectedDrawTriggerRef = useRef<HTMLButtonElement>(null);
 	const rotorRef = useRef<HTMLDivElement>(null);
@@ -90,8 +85,7 @@ export default function LunchSessionPage({
 	const draw = snapshot?.draw ?? null;
 	const drawMatchesCandidates = draw?.listVersion === snapshot?.listVersion;
 	const drawArchived =
-		!solo &&
-		(snapshot?.history.some((entry) => entry.id === draw?.id) ?? false);
+		snapshot?.history.some((entry) => entry.id === draw?.id) ?? false;
 	const fetching = room.startPending || snapshot?.status === "fetching";
 	const displayedDraw =
 		fetching ||
@@ -184,9 +178,10 @@ export default function LunchSessionPage({
 	}, [closed, room.waitingForEntry, room.entryPending]);
 
 	useEffect(() => {
-		setInviteUrl(
-			new URL(`/lunch-room/${roomId}`, window.location.origin).toString(),
-		);
+		if (!solo)
+			setInviteUrl(
+				new URL(`/lunch-room/${roomId}`, window.location.origin).toString(),
+			);
 		const media = window.matchMedia("(prefers-reduced-motion: reduce)");
 		const update = () => setReducedMotion(media.matches);
 		update();
@@ -195,7 +190,7 @@ export default function LunchSessionPage({
 			media.removeEventListener("change", update);
 			copyAttemptRef.current++;
 		};
-	}, [roomId]);
+	}, [roomId, solo]);
 	useEffect(() => {
 		if (
 			showResult &&
@@ -285,6 +280,64 @@ export default function LunchSessionPage({
 				: { votes: draw.votes.map((vote) => ({ ...vote })) }),
 		});
 	}
+	function renderHistoryList(entries: readonly RoomDraw[]) {
+		if (!entries.length) return null;
+		return (
+			<ol className="room-history-list">
+				{entries.map((entry) => {
+					const place = entry.candidates[entry.winnerIndex];
+					return (
+						<li key={entry.id} className="room-history-item">
+							<div className="room-history-summary">
+								<strong>{place.name}</strong>
+								<span>{place.category}</span>
+								<span>
+									{entry.candidates.length}곳 중 추첨 ·{" "}
+									{getSourceDisplayName(entry.source)}
+								</span>
+								<time dateTime={new Date(entry.timestamp).toISOString()}>
+									{new Date(entry.timestamp).toLocaleString("ko-KR", {
+										month: "2-digit",
+										day: "2-digit",
+										hour: "2-digit",
+										minute: "2-digit",
+									})}
+								</time>
+
+								{entry.votes && (
+									<span>
+										좋아요{" "}
+										{entry.votes.filter((vote) => vote.vote === "up").length} ·
+										싫어요{" "}
+										{entry.votes.filter((vote) => vote.vote === "down").length}
+									</span>
+								)}
+							</div>
+							<Button
+								variant="ghost"
+								size="icon"
+								type="button"
+								className="room-history-details"
+								title="상세 보기"
+								data-draw-id={entry.id}
+								ref={(node) => {
+									if (node && entry.id === historyRecordFocusRef.current)
+										selectedDrawTriggerRef.current = node;
+								}}
+								aria-expanded={selectedDraw?.id === entry.id}
+								aria-label={`${place.name} 상세 기록 열기`}
+								aria-haspopup="dialog"
+								onClick={(event) => openRecord(entry, event.currentTarget)}
+							>
+								<ChevronRight size={20} aria-hidden="true" />
+							</Button>
+						</li>
+					);
+				})}
+			</ol>
+		);
+	}
+
 	function start(options?: { expectedRevision?: number }) {
 		if (!room.startDraw(options)) return;
 		copyAttemptRef.current++;
@@ -368,157 +421,21 @@ export default function LunchSessionPage({
 			ref={roomViewportRef}
 			className={`random-lab lunch-room${closed ? "" : " room-live"}`}
 		>
-			<SiteHeader active="lunch" />
+			<RoomHeader
+				room={room}
+				solo={solo}
+				busy={busy}
+				canInvite={Boolean(inviteUrl)}
+				copied={copied === "invite"}
+				onCopyInvite={(button) => void copy(inviteUrl, "invite", button)}
+			/>
 			<main id="main-content" className="room-main">
-				{solo && storageFailed && (
+				{storageFailed && (
 					<output className="room-error" aria-live="polite">
 						이 브라우저에 기록을 저장하거나 불러오지 못했습니다. 현재 화면에서는
 						추첨을 계속할 수 있습니다.
 					</output>
 				)}
-				<div className="room-heading">
-					<div className="room-title-block">
-						<div className="room-title-row">
-							<h1>
-								{closed ? "점심 추첨방" : (snapshot?.title ?? "점심 추첨방")}
-							</h1>
-							{!closed && !solo && snapshot && (
-								<div
-									className="room-info"
-									data-open={roomInfoOpen || undefined}
-									data-dismissed={roomInfoDismissed || undefined}
-									onPointerEnter={() => setRoomInfoDismissed(false)}
-									onFocusCapture={() => setRoomInfoDismissed(false)}
-									onBlurCapture={(event) => {
-										if (
-											!event.currentTarget.contains(
-												event.relatedTarget as Node | null,
-											)
-										)
-											setRoomInfoOpen(false);
-									}}
-								>
-									<button
-										className="room-info-trigger"
-										type="button"
-										aria-label="방 정보"
-										aria-controls={`${id}-room-info`}
-										aria-describedby={`${id}-room-info`}
-										aria-expanded={roomInfoOpen}
-										onClick={() => {
-											setRoomInfoDismissed(false);
-											setRoomInfoOpen((open) => !open);
-										}}
-										onKeyDown={(event) => {
-											if (event.key === "Escape") {
-												event.preventDefault();
-												setRoomInfoOpen(false);
-												setRoomInfoDismissed(true);
-											}
-										}}
-									>
-										<Info size={14} aria-hidden="true" />
-									</button>
-									<div
-										id={`${id}-room-info`}
-										className="room-lifetime"
-										role="tooltip"
-									>
-										<span>
-											생성{" "}
-											<time
-												dateTime={new Date(snapshot.createdAt).toISOString()}
-											>
-												{new Date(snapshot.createdAt).toLocaleString("ko-KR", {
-													month: "2-digit",
-													day: "2-digit",
-													hour: "2-digit",
-													minute: "2-digit",
-												})}
-											</time>
-										</span>
-										<span>
-											종료{" "}
-											<time
-												dateTime={new Date(snapshot.expiresAt).toISOString()}
-											>
-												{new Date(snapshot.expiresAt).toLocaleString("ko-KR", {
-													month: "2-digit",
-													day: "2-digit",
-													hour: "2-digit",
-													minute: "2-digit",
-												})}
-											</time>
-										</span>
-										<p>
-											방장이 나가도 생성 후 24시간, 표시된 종료 시각까지 방이
-											유지됩니다.
-										</p>
-									</div>
-								</div>
-							)}
-						</div>
-						{!closed && !solo && (
-							<div className="room-connection" data-connected={connected}>
-								{connected ? (
-									<Wifi size={15} aria-hidden="true" />
-								) : (
-									<WifiOff size={15} aria-hidden="true" />
-								)}
-								<span>
-									{connected
-										? "연결됨"
-										: room.connection === "reconnecting"
-											? "연결 끊김 · 다시 연결 중"
-											: "연결 중"}
-								</span>
-								<span>참가 {participants.length}명</span>
-								{room.self?.isHost && (
-									<span className="room-host-badge">
-										<Crown size={13} aria-hidden="true" /> 방장
-									</span>
-								)}
-								{!connected && (
-									<Button
-										variant="ghost"
-										size="sm"
-										type="button"
-										className="room-text-action"
-										onClick={room.reconnect}
-									>
-										다시 연결
-									</Button>
-								)}
-							</div>
-						)}
-					</div>
-					{!closed && (
-						<div className="room-heading-actions">
-							{!solo && (
-								<>
-									<Button
-										variant="outline"
-										size="default"
-										type="button"
-										className="room-outline-button"
-										disabled={!inviteUrl}
-										onClick={(event) =>
-											void copy(inviteUrl, "invite", event.currentTarget)
-										}
-									>
-										{copied === "invite" ? (
-											<Check size={17} aria-hidden="true" />
-										) : (
-											<Copy size={17} aria-hidden="true" />
-										)}
-										{copied === "invite" ? "링크 복사됨" : "초대 링크 복사"}
-									</Button>
-									<RoomSettingsDialog room={room} busy={busy} />
-								</>
-							)}
-						</div>
-					)}
-				</div>
 				{closed ? (
 					<section className="room-terminal" aria-labelledby={`${id}-terminal`}>
 						<h2 id={`${id}-terminal`} ref={terminalTitleRef} tabIndex={-1}>
@@ -531,11 +448,25 @@ export default function LunchSessionPage({
 							{room.error || "방이 만료되었거나 더 이상 이용할 수 없습니다."}
 						</p>
 						<RoomTerminalActions />
-						<ClosedRoomHistory key={roomId} roomId={roomId} />
+						{solo ? (
+							snapshot &&
+							snapshot.expiresAt > room.serverNow() && (
+								<ClosedRoomArchive
+									roomId={roomId}
+									archive={{
+										title: snapshot.title,
+										expiresAt: snapshot.expiresAt,
+										draws: getRoomArchiveDraws(snapshot),
+									}}
+								/>
+							)
+						) : (
+							<ClosedRoomHistory key={roomId} roomId={roomId} />
+						)}
 					</section>
 				) : (
 					<>
-						{!solo && connected && !hostOnline && (
+						{connected && !hostOnline && (
 							<p className="room-host-offline">
 								방장이 오프라인입니다. 채팅하며 기다릴 수 있고, 방은 종료
 								시각까지 유지됩니다.
@@ -581,7 +512,6 @@ export default function LunchSessionPage({
 								)}
 								<RoomLifecyclePanel
 									room={room}
-									solo={solo}
 									key={roomId}
 									historyButtonRef={historyTriggerRef}
 									busy={busy}
@@ -648,7 +578,6 @@ export default function LunchSessionPage({
 												}
 												reducedMotion={reducedMotion}
 												nextPending={room.nextPending && !editingAfterResult}
-												solo={solo}
 												selfId={room.self?.id}
 												isHost={room.self?.isHost === true}
 												connected={connected}
@@ -702,9 +631,7 @@ export default function LunchSessionPage({
 											지난 추첨 기록
 										</DialogTitle>
 										<DialogDescription className="sr-only">
-											{solo
-												? "이 브라우저에서 완료한 추첨 기록을 확인합니다."
-												: "같은 방에서 완료한 추첨과 당시 후보를 확인합니다."}
+											같은 방에서 완료한 추첨과 당시 후보를 확인합니다.
 										</DialogDescription>
 										<section
 											id={`${id}-history-panel`}
@@ -734,86 +661,20 @@ export default function LunchSessionPage({
 													</DialogClose>
 												</div>
 											</div>
-											{completedHistory.length === 0 ? (
+											{completedHistory.length === 0 && (
 												<p className="room-panel-note">
 													아직 확정된 추첨 기록이 없습니다.
 												</p>
-											) : (
-												<ol className="room-history-list">
-													{completedHistory.map((entry) => {
-														const place = entry.candidates[entry.winnerIndex];
-														return (
-															<li key={entry.id} className="room-history-item">
-																<div className="room-history-summary">
-																	<strong>{place.name}</strong>
-																	<span>{place.category}</span>
-																	<span>
-																		{entry.candidates.length}곳 중 추첨 ·{" "}
-																		{getSourceDisplayName(entry.source)}
-																	</span>
-																	<time
-																		dateTime={new Date(
-																			entry.timestamp,
-																		).toISOString()}
-																	>
-																		{new Date(entry.timestamp).toLocaleString(
-																			"ko-KR",
-																			{
-																				month: "2-digit",
-																				day: "2-digit",
-																				hour: "2-digit",
-																				minute: "2-digit",
-																			},
-																		)}
-																	</time>
-
-																	{entry.votes && (
-																		<span>
-																			좋아요{" "}
-																			{
-																				entry.votes.filter(
-																					(vote) => vote.vote === "up",
-																				).length
-																			}{" "}
-																			· 싫어요{" "}
-																			{
-																				entry.votes.filter(
-																					(vote) => vote.vote === "down",
-																				).length
-																			}
-																		</span>
-																	)}
-																</div>
-																<Button
-																	variant="ghost"
-																	size="icon"
-																	type="button"
-																	className="room-history-details"
-																	title="상세 보기"
-																	data-draw-id={entry.id}
-																	ref={(node) => {
-																		if (
-																			node &&
-																			entry.id === historyRecordFocusRef.current
-																		)
-																			selectedDrawTriggerRef.current = node;
-																	}}
-																	aria-expanded={selectedDraw?.id === entry.id}
-																	aria-label={`${place.name} 상세 기록 열기`}
-																	aria-haspopup="dialog"
-																	onClick={(event) =>
-																		openRecord(entry, event.currentTarget)
-																	}
-																>
-																	<ChevronRight size={20} aria-hidden="true" />
-																</Button>
-															</li>
-														);
-													})}
-												</ol>
+											)}
+											{renderHistoryList(completedHistory)}
+											{previousDraws.length > 0 && (
+												<section aria-label="이전 혼자 추첨 기록">
+													<h3>이전 혼자 추첨 기록</h3>
+													{renderHistoryList(previousDraws)}
+												</section>
 											)}
 										</section>
-										{solo && legacyHistory.length > 0 && (
+										{legacyHistory.length > 0 && (
 											<section aria-label="이전 추첨 기록">
 												<h2>이전 추첨 기록</h2>
 												<ol className="room-history-list">
@@ -862,7 +723,6 @@ export default function LunchSessionPage({
 			</main>
 			{selectedDraw && !closed && (
 				<RoomDrawDialog
-					solo={solo}
 					draw={selectedDraw}
 					columnRef={primaryColumnRef}
 					returnFocusRef={selectedDrawTriggerRef}
