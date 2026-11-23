@@ -7,6 +7,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { defaultDrawView } from "@/lib/drawView";
 import {
 	getWheelRotation,
 	randomWheelLandingFraction,
@@ -85,6 +86,7 @@ function initialState(
 		const draw = createPreviewDraw({ id, count: candidates.length });
 		const value: RoomDraw = {
 			...draw,
+			viewMode: defaultDrawView,
 			candidates: candidates.map((candidate) => ({ ...candidate })),
 			winnerIndex: Math.min(draw.winnerIndex, candidates.length - 1),
 			probabilities: candidates.map(() => 1 / candidates.length),
@@ -145,6 +147,7 @@ function initialState(
 	return {
 		snapshot: {
 			roomId: previewRoomId,
+			viewMode: defaultDrawView,
 			title: "오늘 점심 추첨",
 			createdAt: now - 180000,
 			expiresAt: now - 180000 + lunchRoomLimits.ttlMs,

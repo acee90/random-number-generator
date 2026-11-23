@@ -1,4 +1,4 @@
-import { readDrawView } from "./drawView";
+import { defaultDrawView, readDrawView } from "./drawView";
 import {
 	getWheelRotation,
 	randomWheelLandingFraction,
@@ -52,7 +52,7 @@ export function createRoomSnapshot(
 		revision: 1,
 		intakeId: null,
 		excludeDrawn: false,
-		viewMode: "wheel",
+		viewMode: defaultDrawView,
 		excludedIds: [],
 		exclusionRecords: [],
 		drawCount: 0,

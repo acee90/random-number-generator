@@ -95,12 +95,12 @@ function filterButton() {
 
 function expectWaitingCandidateCount(count: number) {
 	expect(document.querySelector(".room-current-candidates")).toBeNull();
-	expect(screen.getByRole("button", { name: "후보 보기" })).toBeTruthy();
 	expect(
-		document
-			.querySelector(".lunch-wheel")
-			?.getAttribute("data-candidate-count"),
-	).toBe(String(count));
+		screen.getByRole("button", {
+			name: "후보 보기",
+			description: new RegExp(`이번 추첨 ${count}개$`),
+		}),
+	).toBeTruthy();
 }
 
 describe("Storybook room page with the local transport adapter", () => {
@@ -108,7 +108,7 @@ describe("Storybook room page with the local transport adapter", () => {
 		renderPage(true, "editing", 0);
 		expect(screen.getByRole("heading", { name: "후보 편집" })).toBeTruthy();
 		expect(screen.getByRole("button", { name: "목록 작업" })).toBeTruthy();
-		expect(screen.queryByRole("button", { name: "룰렛 돌리기" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "슬롯 돌리기" })).toBeNull();
 		expect(screen.getByRole("button", { name: "추가하기" })).toBeTruthy();
 		expect(
 			screen.getByRole("button", { name: "마감" }).matches(":disabled"),
@@ -132,11 +132,6 @@ describe("Storybook room page with the local transport adapter", () => {
 		expect(
 			screen.getByRole("button", { name: "마지막 후보 확정" }),
 		).toBeTruthy();
-		expect(
-			document
-				.querySelector(".lunch-wheel")
-				?.getAttribute("data-candidate-count"),
-		).toBe("1");
 		expect(fetchRequest).not.toHaveBeenCalled();
 	});
 	it("loads the default list through a dialog from Empty and finalizes without an extra confirmation stage", async () => {
@@ -156,7 +151,7 @@ describe("Storybook room page with the local transport adapter", () => {
 		});
 		expectWaitingCandidateCount(sampleLunchPlaces.length);
 		expect(
-			screen.getByRole("button", { name: "룰렛 돌리기" }).matches(":disabled"),
+			screen.getByRole("button", { name: "슬롯 돌리기" }).matches(":disabled"),
 		).toBe(false);
 		expect(fetchRequest).not.toHaveBeenCalled();
 	});
@@ -166,7 +161,7 @@ describe("Storybook room page with the local transport adapter", () => {
 		expect(screen.queryByRole("button", { name: /^새로 작성/ })).toBeNull();
 		expect(screen.queryByRole("button", { name: /^목록 불러오기/ })).toBeNull();
 		expect(screen.queryByRole("textbox", { name: "후보 추천" })).toBeNull();
-		expect(screen.queryByRole("button", { name: "룰렛 돌리기" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "슬롯 돌리기" })).toBeNull();
 	});
 	it("opens recommendation intake from candidate editing and finalizes back to compact waiting without drawing", async () => {
 		renderPage(true, "idle");
@@ -180,7 +175,7 @@ describe("Storybook room page with the local transport adapter", () => {
 		expect(
 			screen.getByRole("heading", { name: "후보 추천 접수 중" }),
 		).toBeTruthy();
-		expect(screen.queryByRole("heading", { name: "룰렛" })).toBeNull();
+		expect(screen.queryByRole("heading", { name: "슬롯머신" })).toBeNull();
 		await addCandidate("닫기 전 추가한 후보");
 		await act(async () => {
 			fireEvent.click(screen.getByRole("switch", { name: "후보 추천받기" }));
@@ -202,9 +197,9 @@ describe("Storybook room page with the local transport adapter", () => {
 		});
 		expectWaitingCandidateCount(13);
 		expect(
-			screen.getByRole("button", { name: "룰렛 돌리기" }).matches(":disabled"),
+			screen.getByRole("button", { name: "슬롯 돌리기" }).matches(":disabled"),
 		).toBe(false);
-		expect(screen.queryByRole("button", { name: "추첨 준비 중…" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "추첨 준비 중" })).toBeNull();
 		expect(fetchRequest).not.toHaveBeenCalled();
 	});
 
@@ -218,12 +213,12 @@ describe("Storybook room page with the local transport adapter", () => {
 			})),
 		);
 		renderPage(true, "idle");
-		fireEvent.click(screen.getByRole("button", { name: "룰렛 돌리기" }));
+		fireEvent.click(screen.getByRole("button", { name: "슬롯 돌리기" }));
 		act(() => vi.advanceTimersByTime(350));
 		const input = screen.getByRole("textbox", { name: "메시지" });
 		act(() => input.focus());
-		fireEvent.change(input, { target: { value: "룰렛 보면서 이야기해요" } });
-		expect(screen.getByRole("heading", { name: "룰렛" })).toBeTruthy();
+		fireEvent.change(input, { target: { value: "추첨 보면서 이야기해요" } });
+		expect(screen.getByRole("heading", { name: "슬롯머신" })).toBeTruthy();
 		expect(screen.getByRole("heading", { name: "채팅" })).toBeTruthy();
 		expect(
 			screen.queryByRole("navigation", { name: "모바일 추첨방 화면" }),
@@ -231,19 +226,17 @@ describe("Storybook room page with the local transport adapter", () => {
 		act(() => vi.advanceTimersByTime(lunchSpinDurationMs));
 		expect(screen.getByText("0명 참여")).toBeTruthy();
 		expect(document.activeElement).toBe(input);
-		expect((input as HTMLTextAreaElement).value).toBe("룰렛 보면서 이야기해요");
+		expect((input as HTMLTextAreaElement).value).toBe("추첨 보면서 이야기해요");
 		expect(fetchRequest).not.toHaveBeenCalled();
 	});
 
 	it("runs a host draw through the real reveal, then archives it and returns to the draw button", () => {
 		renderPage(true, "idle");
-		fireEvent.click(screen.getByRole("button", { name: "룰렛 돌리기" }));
-		expect(screen.getByRole("button", { name: "추첨 준비 중…" })).toBeTruthy();
+		fireEvent.click(screen.getByRole("button", { name: "슬롯 돌리기" }));
+		expect(screen.getByRole("button", { name: "추첨 준비 중" })).toBeTruthy();
 		act(() => vi.advanceTimersByTime(350));
 		expect(
-			screen
-				.getByRole("button", { name: "룰렛이 돌아가고 있어요" })
-				.matches(":disabled"),
+			screen.getByRole("button", { name: "추첨 중" }).matches(":disabled"),
 		).toBe(true);
 		act(() => vi.advanceTimersByTime(lunchSpinDurationMs - 1));
 		expect(
@@ -256,7 +249,7 @@ describe("Storybook room page with the local transport adapter", () => {
 			screen.queryByRole("region", { name: "실시간 투표 현황" }),
 		).toBeNull();
 		expect(
-			screen.getByRole("button", { name: "룰렛 돌리기" }).matches(":disabled"),
+			screen.getByRole("button", { name: "슬롯 돌리기" }).matches(":disabled"),
 		).toBe(false);
 		fireEvent.click(screen.getByRole("button", { name: "지난 기록" }));
 		expect(
@@ -402,7 +395,7 @@ describe("Storybook room page with the local transport adapter", () => {
 				name: "중복 없이 추첨 · 뽑힌 후보 제외",
 			}),
 		).toBeNull();
-		expect(screen.queryByRole("button", { name: "룰렛 돌리기" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "슬롯 돌리기" })).toBeNull();
 		expect(screen.queryByRole("dialog")).toBeNull();
 		expect(screen.queryByRole("button", { name: "편집하기" })).toBeNull();
 		expect(screen.queryByRole("button", { name: "변경 적용" })).toBeNull();
@@ -429,12 +422,7 @@ describe("Storybook room page with the local transport adapter", () => {
 		});
 		expectWaitingCandidateCount(11);
 		expect(
-			document
-				.querySelector(".lunch-wheel")
-				?.getAttribute("data-candidate-count"),
-		).toBe("11");
-		expect(
-			screen.getByRole("button", { name: "룰렛 돌리기" }).matches(":disabled"),
+			screen.getByRole("button", { name: "슬롯 돌리기" }).matches(":disabled"),
 		).toBe(false);
 		expect(document.querySelector(".room-game-filter")).toBeNull();
 		expect(screen.queryByRole("checkbox", { name: /추첨 포함$/ })).toBeNull();
@@ -479,11 +467,6 @@ describe("Storybook room page with the local transport adapter", () => {
 			fireEvent.click(screen.getByRole("button", { name: "마감" })),
 		);
 		expectWaitingCandidateCount(11);
-		expect(
-			document
-				.querySelector(".lunch-wheel")
-				?.getAttribute("data-candidate-count"),
-		).toBe("11");
 		expect(document.querySelector(".room-game-filter")).toBeNull();
 		expect(fetchRequest).not.toHaveBeenCalled();
 	});
@@ -598,16 +581,16 @@ describe("Storybook room page with the local transport adapter", () => {
 		expect(fetchRequest).not.toHaveBeenCalled();
 	});
 
-	it("starts a new room on editing and waits for the host to finish before showing roulette", async () => {
+	it("starts a new room on editing and waits for the host to finish before showing the slot machine", async () => {
 		renderPage(true, "editing");
 		expect(screen.getByRole("heading", { name: "후보 편집" })).toBeTruthy();
-		expect(screen.queryByRole("button", { name: "룰렛 돌리기" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "슬롯 돌리기" })).toBeNull();
 		await act(async () => {
 			fireEvent.click(screen.getByRole("button", { name: "마감" }));
 		});
 		expect(
-			screen.getByRole("button", { name: "룰렛 돌리기" }).matches(":disabled"),
+			screen.getByRole("button", { name: "슬롯 돌리기" }).matches(":disabled"),
 		).toBe(false);
-		expect(screen.queryByRole("button", { name: "추첨 준비 중…" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "추첨 준비 중" })).toBeNull();
 	});
 });

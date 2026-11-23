@@ -2,10 +2,12 @@ import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function RoomNextGameButton({
+	className = "room-next-round",
 	disabled,
 	pending,
 	onClick,
 }: {
+	className?: string;
 	disabled: boolean;
 	pending: boolean;
 	onClick: () => void;
@@ -15,7 +17,7 @@ export default function RoomNextGameButton({
 			variant="default"
 			size="lg"
 			type="button"
-			className="room-next-round"
+			className={className}
 			disabled={disabled}
 			aria-busy={pending || undefined}
 			aria-label={pending ? "대기 화면으로 이동 중…" : undefined}

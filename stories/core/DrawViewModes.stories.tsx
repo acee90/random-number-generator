@@ -5,7 +5,7 @@ const meta = {
 	id: "draw-view-modes",
 	title: "시안/추첨 보기",
 	component: DrawViewPreview,
-	args: { initialMode: "wheel", count: 200, guest: false, longName: false },
+	args: { initialMode: "rolling", count: 200, guest: false, longName: false },
 	argTypes: {
 		initialMode: { table: { disable: true } },
 		count: {
@@ -26,10 +26,10 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Roulette: Story = { name: "룰렛 · 기본 보기" };
-export const Rolling: Story = {
-	name: "슬롯머신 · 후보 200개",
-	args: { initialMode: "rolling" },
+export const Rolling: Story = { name: "슬롯머신 · 기본 보기" };
+export const Roulette: Story = {
+	name: "룰렛 · 후보 200개",
+	args: { initialMode: "wheel" },
 };
 export const Cards: Story = {
 	name: "카드 뽑기 시안 · 후보 200개",

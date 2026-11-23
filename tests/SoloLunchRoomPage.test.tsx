@@ -50,7 +50,7 @@ afterEach(() => {
 });
 async function draw() {
 	await act(async () =>
-		fireEvent.click(screen.getByRole("button", { name: "룰렛 돌리기" })),
+		fireEvent.click(screen.getByRole("button", { name: "슬롯 돌리기" })),
 	);
 	await act(async () => vi.advanceTimersByTime(lunchSpinDurationMs));
 }
@@ -97,8 +97,12 @@ describe("shared solo game screen", () => {
 		expect(screen.queryByRole("textbox", { name: /메시지/ })).toBeNull();
 		expect(screen.queryByRole("button", { name: "룰렛·결과" })).toBeNull();
 	});
-	it("uses the shared result, then waits for an explicit new spin", async () => {
+	it("opens with the slot and replaces spin with the next game above voting", async () => {
 		renderRoom();
+		const spin = screen.getByRole("button", { name: "슬롯 돌리기" });
+		const controls = spin.parentElement;
+		expect(controls?.closest(".slot-cabinet")).toBeTruthy();
+		expect(screen.queryByRole("button", { name: "다음 게임" })).toBeNull();
 		await draw();
 		expect(screen.getByRole("heading", { name: "한식당" })).toBeTruthy();
 		const up = screen.getByRole("button", { name: /좋아요/ });
@@ -107,9 +111,13 @@ describe("shared solo game screen", () => {
 		const next = screen.getByRole("button", {
 			name: "다음 게임",
 		});
+		expect(next.parentElement).toBe(controls);
+		expect(
+			next.compareDocumentPosition(up) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
 		next.focus();
 		fireEvent.click(next);
-		expect(screen.getByRole("button", { name: "룰렛 돌리기" })).toBe(
+		expect(screen.getByRole("button", { name: "슬롯 돌리기" })).toBe(
 			document.activeElement,
 		);
 		expect(generateRandomNumbers).toHaveBeenCalledTimes(1);
@@ -146,12 +154,13 @@ describe("shared solo game screen", () => {
 			}),
 		);
 		renderRoom();
-		const button = screen.getByRole("button", { name: "룰렛 돌리기" });
+		const button = screen.getByRole("button", { name: "슬롯 돌리기" });
 		fireEvent.click(button);
 		fireEvent.click(button);
 		expect(generateRandomNumbers).toHaveBeenCalledTimes(1);
 		expect(screen.queryByRole("button", { name: "후보 편집" })).toBeNull();
 		await act(async () => resolve({ numbers: [0], source: "csprng" }));
+		expect(screen.queryByRole("button", { name: "다음 게임" })).toBeNull();
 		expect(screen.queryByRole("heading", { name: "한식당" })).toBeNull();
 		await act(async () => vi.advanceTimersByTime(lunchSpinDurationMs));
 		expect(screen.getByRole("heading", { name: "한식당" })).toBeTruthy();
@@ -163,7 +172,7 @@ describe("shared solo game screen", () => {
 		});
 		renderRoom();
 		await act(async () =>
-			fireEvent.click(screen.getByRole("button", { name: "룰렛 돌리기" })),
+			fireEvent.click(screen.getByRole("button", { name: "슬롯 돌리기" })),
 		);
 		expect(screen.getByRole("alert").textContent).toContain("다시 시도");
 		expect(localStorage.getItem(soloHistoryKey)).toBeNull();
@@ -180,7 +189,7 @@ describe("shared solo game screen", () => {
 		await act(async () =>
 			fireEvent.click(screen.getByRole("button", { name: "마감" })),
 		);
-		expect(screen.getByRole("button", { name: "룰렛 돌리기" })).toBeTruthy();
+		expect(screen.getByRole("button", { name: "슬롯 돌리기" })).toBeTruthy();
 	});
 	it("persists full draw records and restores them after remounting", async () => {
 		const first = renderRoom();
@@ -244,7 +253,7 @@ describe("shared solo game screen", () => {
 		expect(
 			screen.getByText(/기록을 저장하거나 불러오지 못했습니다/),
 		).toBeTruthy();
-		expect(screen.getByRole("button", { name: "룰렛 돌리기" })).toBeTruthy();
+		expect(screen.getByRole("button", { name: "슬롯 돌리기" })).toBeTruthy();
 	});
 	it("returns keyboard focus to the history trigger after Escape", async () => {
 		renderRoom();
@@ -263,7 +272,7 @@ describe("shared solo game screen", () => {
 			}),
 		);
 		const view = renderRoom();
-		fireEvent.click(screen.getByRole("button", { name: "룰렛 돌리기" }));
+		fireEvent.click(screen.getByRole("button", { name: "슬롯 돌리기" }));
 		view.unmount();
 		await act(async () => resolve({ numbers: [0], source: "csprng" }));
 		await act(async () => vi.advanceTimersByTime(lunchSpinDurationMs));

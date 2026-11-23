@@ -196,6 +196,7 @@ export function WheelPlayground({
 			</div>
 			<div className="room-draw-panel sb-wheel-panel">
 				<RoomGameStage
+					viewMode="wheel"
 					draw={finished ? draw : null}
 					showVoting={false}
 					isHost={canDraw}

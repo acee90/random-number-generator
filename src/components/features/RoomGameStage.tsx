@@ -9,7 +9,7 @@ import {
 } from "react";
 import type { useDrawSound } from "@/hooks/useDrawPresentation";
 import { type FeedbackOptions, useRoomFeedback } from "@/hooks/useRoomFeedback";
-import type { DrawView } from "@/lib/drawView";
+import { type DrawView, defaultDrawView, readDrawView } from "@/lib/drawView";
 import type { RoomDraw } from "@/lib/lunchRoom";
 import DrawPresentationControls from "./DrawPresentationControls";
 import { LunchWheel } from "./LunchWheel";
@@ -58,7 +58,7 @@ function hitTarget(target: EventTarget | null): Control | null {
 
 export default function RoomGameStage({
 	draw,
-	viewMode = "wheel",
+	viewMode,
 	activeDraw,
 	clockOffset = 0,
 	showVoting = true,
@@ -75,7 +75,10 @@ export default function RoomGameStage({
 	...voting
 }: Props) {
 	const id = useId();
-	const slot = viewMode === "slot-v1" && Boolean(wheel);
+	const round = activeDraw ?? draw;
+	const mode =
+		viewMode ?? (round ? readDrawView(round.viewMode) : defaultDrawView);
+	const slot = mode === "slot-v1" && Boolean(wheel);
 	const frame = useRef<HTMLElement>(null);
 	const main = useRef<HTMLDivElement>(null);
 	const [size, setSize] = useState({
@@ -131,6 +134,15 @@ export default function RoomGameStage({
 			: null;
 	const headingId = titleId ?? `${id}-winner`;
 	const showNext = isHost && !voting.readOnly;
+	const nextButton =
+		result && showNext ? (
+			<RoomNextGameButton
+				className={slot ? "slot-action" : undefined}
+				disabled={!canNext || nextPending || voting.pending}
+				pending={nextPending}
+				onClick={onNext}
+			/>
+		) : null;
 	const details = (
 		<div className="picnic-details">
 			{result?.votes && draw && (
@@ -149,13 +161,7 @@ export default function RoomGameStage({
 					/>
 				</div>
 			)}
-			{result && showNext && (
-				<RoomNextGameButton
-					disabled={!canNext || nextPending || voting.pending}
-					pending={nextPending}
-					onClick={onNext}
-				/>
-			)}
+			{!slot && nextButton}
 		</div>
 	);
 	const options = exclusion && <RoomExclusionPanel {...exclusion} />;
@@ -174,13 +180,14 @@ export default function RoomGameStage({
 						<SlotMachine
 							candidates={wheel.candidates}
 							numbers={wheel.candidateNumbers}
-							draw={activeDraw ?? draw}
+							draw={round}
 							clockOffset={clockOffset}
 							phase={wheel.phase}
 							reduced={Boolean(reducedMotion)}
 							host={isHost}
 							disabled={wheel.covered || wheel.canDraw === false}
 							onDraw={wheel.onDraw}
+							nextButton={nextButton}
 							buttonRef={wheel.buttonRef}
 							buttonId={wheel.buttonId}
 							titleRef={titleRef}
