@@ -20,6 +20,7 @@ import {
 import { useDrawSound } from "@/hooks/useDrawPresentation";
 import type { useLunchRoom } from "@/hooks/useLunchRoom";
 import { useRoomTimeline } from "@/hooks/useRoomTimeline";
+import { drawViewLabels, readDrawView } from "@/lib/drawView";
 import type { LunchHistoryRecord } from "@/lib/lunchHistory";
 import {
 	getEligibleRoomCandidates,
@@ -93,6 +94,10 @@ export default function LunchSessionPage({
 		(!drawMatchesCandidates && drawArchived)
 			? null
 			: draw;
+	const viewMode = readDrawView(
+		displayedDraw ? displayedDraw.viewMode : snapshot?.viewMode,
+	);
+	const viewLabel = drawViewLabels[viewMode];
 	const finished = useRoomTimeline(
 		displayedDraw,
 		room.clockOffset,
@@ -108,8 +113,9 @@ export default function LunchSessionPage({
 		? getEligibleRoomCandidates(snapshot)
 		: [];
 	const places =
-		(drawMatchesCandidates ? displayedDraw?.candidates : undefined) ??
-		eligibleCandidates;
+		(drawMatchesCandidates || viewMode === "slot-v1"
+			? displayedDraw?.candidates
+			: undefined) ?? eligibleCandidates;
 	const winner =
 		displayedDraw && finished
 			? displayedDraw.candidates[displayedDraw.winnerIndex]
@@ -198,10 +204,10 @@ export default function LunchSessionPage({
 			focusResultRef.current &&
 			view === "wheel"
 		) {
-			resultTitleRef.current?.focus();
+			resultTitleRef.current?.focus({ preventScroll: viewMode === "slot-v1" });
 			focusResultRef.current = false;
 		}
-	}, [showResult, view, selectedDraw]);
+	}, [showResult, view, selectedDraw, viewMode]);
 	const focusNextRoundRef = useRef(false);
 	const [editingAfterResult, setEditingAfterResult] = useState(false);
 	useEffect(() => {
@@ -388,13 +394,15 @@ export default function LunchSessionPage({
 				: fetching
 					? "난수 출처에서 추첨 결과를 가져오고 있습니다."
 					: spinning
-						? "룰렛이 멈추면 결과를 공개합니다."
+						? viewMode === "slot-v1"
+							? "릴이 멈추면 결과를 공개합니다."
+							: "룰렛이 멈추면 결과를 공개합니다."
 						: winner
 							? `추첨 결과: ${winner.name}`
 							: isHost
-								? "가운데 버튼으로 추첨을 시작하세요."
+								? "돌리기 버튼으로 추첨을 시작하세요."
 								: hostOnline
-									? "방장이 추첨을 시작하면 함께 룰렛을 봅니다."
+									? "방장이 추첨을 시작하면 결과를 함께 볼 수 있습니다."
 									: "방장이 오프라인입니다. 방장이 돌아오면 추첨을 시작할 수 있습니다.";
 
 	if (awaitingEntry)
@@ -532,9 +540,12 @@ export default function LunchSessionPage({
 											aria-labelledby={`${id}-wheel`}
 										>
 											<h2 id={`${id}-wheel`} className="sr-only">
-												룰렛
+												{viewLabel}
 											</h2>
 											<RoomGameStage
+												viewMode={viewMode}
+												activeDraw={displayedDraw}
+												clockOffset={room.clockOffset}
 												draw={showResult ? displayedDraw : null}
 												wheel={{
 													candidates: places,
@@ -554,8 +565,8 @@ export default function LunchSessionPage({
 																: "idle",
 													onComplete: () => {},
 													onDraw: requestStart,
-													buttonId: id + "-start",
-													errorId: room.error ? id + "-error" : undefined,
+													buttonId: `${id}-start`,
+													errorId: room.error ? `${id}-error` : undefined,
 													covered: !canStart,
 													canDraw: isHost,
 													drawLabel:
@@ -589,7 +600,7 @@ export default function LunchSessionPage({
 												onNext={() => advanceRound()}
 												onVote={room.vote}
 												titleRef={resultTitleRef}
-												titleId={id + "-winner"}
+												titleId={`${id}-winner`}
 											/>
 											<output className="sr-only" aria-live="polite">
 												{status}

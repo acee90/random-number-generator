@@ -52,6 +52,36 @@ async function spin(result: ReturnType<typeof setup>["result"]) {
 	await act(async () => vi.advanceTimersByTime(lunchSpinDurationMs));
 }
 describe("local game controller", () => {
+	it("restores the slot view and its winner from the local room after voting and advancing", async () => {
+		const { result } = setup();
+		await act(async () => {
+			expect(await result.current.room.updateDrawView("slot-v1")).toBe(true);
+		});
+		await spin(result);
+		const { roomId, draw } = result.current.room.snapshot;
+		assert(draw);
+		expect(draw.viewMode).toBe("slot-v1");
+		act(() => {
+			expect(result.current.room.vote(draw.id, "up")).toBe(true);
+		});
+		act(() => {
+			expect(result.current.room.nextRound(draw.id)).toBe(true);
+		});
+		expect(readSoloRoom(roomId)?.snapshot).toMatchObject({
+			viewMode: "slot-v1",
+			draw: null,
+			history: [
+				{
+					id: draw.id,
+					viewMode: "slot-v1",
+					winnerIndex: 0,
+					votes: [{ vote: "up" }],
+				},
+			],
+		});
+		expect(generateRandomNumbers).toHaveBeenCalledTimes(1);
+	});
+
 	it("excludes winners on subsequent games and supports the last remaining candidate", async () => {
 		const { result } = setup();
 		await act(async () => {

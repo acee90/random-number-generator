@@ -579,6 +579,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 					"remove-candidate",
 					"room-edit",
 					"options",
+					"draw-view",
 					"game-filter",
 					"reset-exclusions",
 				].includes(message.type)

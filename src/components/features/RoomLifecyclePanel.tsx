@@ -18,6 +18,7 @@ import {
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
 import {
 	Dialog,
 	DialogContent,
@@ -31,6 +32,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import type { useLunchRoom } from "@/hooks/useLunchRoom";
 import { recordCandidateListUse } from "@/lib/candidateListUsage";
+import { drawViewLabels, readDrawView } from "@/lib/drawView";
 import { lunchCategories } from "@/lib/lunch";
 import {
 	type RoomGameFilter as GameFilter,
@@ -110,6 +112,9 @@ export default function RoomLifecyclePanel({
 	const pending = Boolean(room.mutationPending) || room.candidatesPending;
 	const locked = busy || pending || !connected || stagePending !== null;
 	const candidates = snapshot?.candidates ?? [];
+	const viewMode = readDrawView(
+		snapshot?.draw ? snapshot.draw.viewMode : snapshot?.viewMode,
+	);
 	const eligible = snapshot ? getEligibleRoomCandidates(snapshot) : [];
 	const preparedCount = snapshot
 		? getEligibleRoomCandidates({ ...snapshot, excludeDrawn: false }).length
@@ -570,10 +575,33 @@ export default function RoomLifecyclePanel({
 			aria-label="게임 진행"
 		>
 			<div className="room-lifecycle-heading" hidden={isHost && listScreen}>
-				<div>
+				<div className="room-phase-title">
 					<h2 ref={phaseTitleRef} tabIndex={-1}>
 						{phaseLabel}
 					</h2>
+					{!listScreen &&
+						snapshot &&
+						(isHost ? (
+							<Combobox
+								label="추첨 보기"
+								options={drawViewLabels}
+								value={viewMode}
+								onValueChange={(mode) => {
+									void room.updateDrawView(mode, revision);
+								}}
+								pending={room.mutationPending === "draw-view"}
+								disabled={
+									(locked && room.mutationPending !== "draw-view") ||
+									phase !== "waiting" ||
+									Boolean(snapshot.draw)
+								}
+							/>
+						) : (
+							<span className="room-view-label">
+								<span className="sr-only">추첨 보기 · </span>
+								{drawViewLabels[viewMode]}
+							</span>
+						))}
 				</div>
 				<div className="room-lifecycle-tools">
 					{candidates.length > 0 && (
@@ -706,7 +734,7 @@ export default function RoomLifecyclePanel({
 							{phase === "editing"
 								? "방장이 후보 목록을 편집하고 있습니다. 편집을 마치거나 추천 접수를 열 때까지 기다려 주세요."
 								: phase === "collecting"
-									? "추천할 후보를 추가해 주세요. 방장이 마감하면 룰렛으로 돌아갑니다."
+									? "추천할 후보를 추가해 주세요. 방장이 마감하면 추첨 화면으로 돌아갑니다."
 									: "접수가 종료되었습니다. 방장이 목록을 확인하고 있습니다. 다시 열리면 추천을 이어갈 수 있어요."}
 						</p>
 					)}

@@ -533,6 +533,16 @@ export function RoomPageFixtureProvider({
 			});
 			return true;
 		},
+		async updateDrawView(viewMode, expectedRevision) {
+			if (
+				!mutable() ||
+				current.current.snapshot.status !== "waiting" ||
+				!revisionMatches(expectedRevision)
+			)
+				return false;
+			applySnapshot((value) => ({ ...value, viewMode }));
+			return true;
+		},
 		async updateGameFilter(filter, expectedRevision) {
 			const parsed = parseRoomGameFilter(filter);
 			if (
@@ -604,6 +614,7 @@ export function RoomPageFixtureProvider({
 				const landingFraction = randomWheelLandingFraction();
 				const draw: RoomDraw = {
 					id: `page-draw-${sequence.current}`,
+					viewMode: value.snapshot.viewMode,
 					candidates,
 					winnerIndex,
 					source: "csprng",

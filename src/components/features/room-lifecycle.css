@@ -14,6 +14,16 @@
 	padding: 14px 16px;
 	border-block-end: 1px solid var(--line);
 }
+.room-phase-title {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.room-view-label {
+	color: var(--muted);
+	font-size: 0.875rem;
+}
 .room-lifecycle-heading[hidden] {
 	display: none;
 }

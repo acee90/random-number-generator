@@ -1,0 +1,387 @@
+.dv-preview {
+	max-inline-size: 704px;
+	margin: clamp(4px, 3vw, 40px) auto;
+	container: draw-preview / inline-size;
+}
+.dv-heading,
+.dv-toolbar,
+.dv-browse,
+.dv-card-corner,
+.dv-card-foot,
+.dv-picker > p {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+.dv-heading {
+	margin-block-end: 20px;
+}
+.dv-heading p {
+	margin: 0 0 4px;
+	color: var(--muted);
+	font-size: 0.875rem;
+	font-weight: 600;
+}
+.dv-heading h1 {
+	margin: 0;
+	font-size: clamp(1.5rem, 4cqi, 2rem);
+	font-weight: 750;
+	line-height: 1.15;
+	letter-spacing: -0.04em;
+}
+.dv-list-trigger,
+.dv-action button,
+.dv-next button {
+	min-block-size: 44px;
+}
+.dv-picker {
+	margin: 0 0 16px;
+	padding: 0;
+	min-inline-size: 0;
+	border: 0;
+}
+.dv-picker > p {
+	justify-content: start;
+	margin: 0;
+	min-block-size: 44px;
+	font-weight: 700;
+}
+.dv-picker > p span {
+	color: var(--muted);
+	font-size: 0.875rem;
+	font-weight: 500;
+}
+.dv-preview button:disabled {
+	cursor: default;
+}
+.dv-mat {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	padding: 12px clamp(12px, 4cqi, 28px) 24px;
+	border: 1px solid var(--paper-edge);
+	border-radius: var(--panel-radius);
+	color: var(--paper-ink);
+	background-color: color-mix(in srgb, var(--paper-sheet) 84%, var(--dv-gold));
+	background-image:
+		repeating-linear-gradient(
+			0deg,
+			transparent 0 14px,
+			color-mix(in srgb, var(--dv-coral) 23%, transparent) 14px 20px,
+			transparent 20px 22px
+		),
+		repeating-linear-gradient(
+			90deg,
+			transparent 0 14px,
+			color-mix(in srgb, var(--dv-coral) 23%, transparent) 14px 20px,
+			transparent 20px 22px
+		);
+}
+.dv-toolbar p,
+.dv-action p {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	font-size: 0.875rem;
+	font-weight: 650;
+	color: var(--paper-muted);
+}
+.dv-toolbar[data-busy] {
+	visibility: hidden;
+}
+.dv-status-dot {
+	inline-size: 8px;
+	block-size: 8px;
+	border-radius: 50%;
+	background: var(--paper-green);
+}
+.dv-browse {
+	gap: 4px;
+}
+.dv-browse button {
+	inline-size: 44px;
+	block-size: 44px;
+}
+.dv-scene {
+	display: grid;
+	place-items: center;
+	min-block-size: clamp(288px, 52cqi, 352px);
+	padding: 20px 4px;
+}
+.dv-action,
+.dv-next {
+	display: flex;
+	justify-content: center;
+	padding-block-start: 8px;
+}
+.dv-action button {
+	min-inline-size: min(100%, 192px);
+}
+.dv-action button:disabled {
+	opacity: 1;
+	background: var(--paper-sheet);
+	border-color: var(--paper-edge);
+	color: var(--paper-muted);
+}
+.dv-serial {
+	font:
+		700 1rem / 1.2 Georgia,
+		serif;
+	font-variant-numeric: tabular-nums;
+}
+
+/* Offset printed backs make the deck recognizable even with motion turned off. */
+.dv-deck {
+	position: relative;
+	isolation: isolate;
+	inline-size: min(75%, 206px);
+	margin: 8px 0;
+}
+.dv-deck::before,
+.dv-deck::after,
+.dv-playing-card {
+	border: 2px solid var(--paper-ink);
+	border-radius: 14px;
+}
+.dv-deck::before,
+.dv-deck::after {
+	content: "";
+	position: absolute;
+	z-index: -1;
+	inset: 0;
+	transform: translate(-10px, 3px) rotate(-9deg);
+	background: repeating-linear-gradient(
+		45deg,
+		var(--dv-mint) 0 5px,
+		var(--paper-green) 5px 7px
+	);
+}
+.dv-deck::after {
+	transform: translate(9px, 2px) rotate(7deg);
+	background: repeating-linear-gradient(
+		-45deg,
+		var(--dv-coral) 0 5px,
+		var(--paper-muted) 5px 7px
+	);
+}
+.dv-playing-card {
+	display: grid;
+	grid-template-rows: auto 1fr auto;
+	position: relative;
+	min-block-size: 234px;
+	padding: 14px;
+	background: var(--paper-sheet);
+	box-shadow: 0 3px 0 var(--paper-ink);
+}
+.dv-card-corner,
+.dv-card-foot {
+	color: var(--paper-muted);
+}
+.dv-card-corner svg,
+.dv-card-foot svg {
+	inline-size: 16px;
+	block-size: 16px;
+}
+.dv-card-face {
+	display: grid;
+	justify-items: center;
+	align-content: center;
+	gap: 12px;
+	padding-block: 12px;
+	text-align: center;
+}
+.dv-card-face > svg,
+.dv-card-back > svg {
+	box-sizing: content-box;
+	inline-size: 28px;
+	block-size: 28px;
+	padding: 13px;
+	border: 1px solid var(--paper-green);
+	border-radius: 50%;
+	color: var(--paper-green);
+	background: color-mix(in srgb, var(--dv-mint) 55%, var(--paper-sheet));
+}
+.dv-card-face strong,
+.dv-ticket h2 {
+	font-size: clamp(1.25rem, 4.6cqi, 1.7rem);
+	line-height: 1.3;
+	letter-spacing: -0.045em;
+	word-break: keep-all;
+	overflow-wrap: anywhere;
+}
+.dv-card-foot {
+	border-block-start: 1px solid var(--paper-edge);
+	padding-block-start: 8px;
+	font-size: 0.8125rem;
+}
+.dv-card-back {
+	display: grid;
+	grid-row: span 3;
+	place-items: center;
+	border: 1px solid var(--paper-green);
+	border-radius: 6px;
+	background: repeating-linear-gradient(
+		-45deg,
+		var(--dv-mint) 0 4px,
+		var(--paper-sheet) 4px 6px
+	);
+}
+@media (prefers-reduced-motion: no-preference) {
+	.dv-deck[data-drawing] .dv-playing-card {
+		animation: dv-shuffle 1s ease-in-out 3;
+	}
+	.dv-ticket {
+		animation: dv-reveal 180ms ease-out both;
+	}
+	.dv-result[data-view="cards"] .dv-ticket {
+		animation: dv-turn-card 230ms ease-out both;
+	}
+	.dv-action .lucide-loader-circle {
+		animation: dv-turn 1.2s linear infinite;
+	}
+}
+@keyframes dv-shuffle {
+	0%,
+	100% {
+		transform: none;
+	}
+	45% {
+		transform: translate(-10%, -2%) rotate(-5deg);
+	}
+	72% {
+		transform: translate(4%, -1%) rotate(2deg);
+	}
+}
+@keyframes dv-reveal {
+	from {
+		transform: perspective(800px) rotateX(-12deg);
+	}
+	to {
+		transform: none;
+	}
+}
+@keyframes dv-turn-card {
+	from {
+		transform: perspective(800px) rotateY(-68deg);
+	}
+	to {
+		transform: none;
+	}
+}
+@keyframes dv-turn {
+	to {
+		transform: rotate(1turn);
+	}
+}
+
+.dv-result {
+	align-content: center;
+	min-block-size: 272px;
+	padding: 32px 16px;
+}
+.dv-ticket {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	inline-size: min(100%, 484px);
+	justify-self: center;
+	border: 2px solid var(--paper-ink);
+	border-radius: 8px;
+	background: var(--paper-sheet);
+	box-shadow: 2px 4px 0 var(--paper-edge);
+}
+.dv-ticket-main {
+	display: grid;
+	justify-items: center;
+	gap: 6px;
+	padding: 20px 12px;
+	text-align: center;
+}
+.dv-ticket-main > svg {
+	color: var(--paper-green);
+}
+.dv-ticket span,
+.dv-ticket small {
+	font-size: 0.875rem;
+	color: var(--paper-muted);
+}
+.dv-ticket h2 {
+	max-inline-size: 100%;
+	margin: 4px 0;
+}
+.dv-ticket-stub {
+	display: grid;
+	align-content: center;
+	justify-items: center;
+	gap: 4px;
+	min-inline-size: 54px;
+	padding-inline: 8px;
+	border-inline-start: 1px dashed var(--paper-muted);
+}
+.dv-ticket-stub b {
+	font:
+		700 2rem / 1.2 Georgia,
+		serif;
+}
+.dv-ticket-stub i {
+	inline-size: 28px;
+	block-size: 12px;
+	background: repeating-linear-gradient(
+		90deg,
+		var(--paper-muted) 0 2px,
+		transparent 2px 4px
+	);
+}
+.dv-next {
+	padding-block: 12px;
+}
+.dv-empty {
+	display: grid;
+	justify-items: center;
+	gap: 8px;
+	padding: 48px 16px;
+	background: var(--surface);
+	text-align: center;
+}
+.dv-empty p {
+	margin: 0;
+	font-weight: 700;
+}
+.dv-list-dialog ol {
+	overflow: auto;
+	min-block-size: 0;
+	max-block-size: 58dvh;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.dv-list-dialog li {
+	display: grid;
+	grid-template-columns: 3ch minmax(0, 1fr) auto;
+	gap: 12px;
+	align-items: baseline;
+	padding-block: 12px;
+	border-block-end: 1px solid var(--line);
+}
+.dv-list-dialog li strong {
+	overflow-wrap: anywhere;
+}
+.dv-list-dialog li small,
+.dv-list-dialog .dv-serial {
+	color: var(--muted);
+}
+.dv-list-dialog .ui-dialog-close {
+	min-inline-size: 44px;
+	min-block-size: 44px;
+}
+@container draw-preview (max-width: 370px) {
+	.dv-list-trigger {
+		gap: 4px;
+	}
+	.dv-preview .room-draw-feedback[data-mode="results"] {
+		padding-inline: 4px;
+	}
+	.dv-preview .room-feedback-lists {
+		gap: 8px;
+	}
+}

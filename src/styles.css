@@ -49,6 +49,12 @@
 	--card: #fff;
 	--input: #8b967d;
 	--ring: #527427;
+	--slot-shell: #233a34;
+	--slot-shell-dark: #132923;
+	--slot-brass: #d8ac65;
+	--slot-highlight: #ffe3a3;
+	--slot-barrel: #773e32;
+	--slot-type: #fff4d9;
 	--focus-ring-width: 2px;
 	--focus-ring-offset: 2px;
 	--destructive: #a13d27;

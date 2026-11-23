@@ -11,6 +11,7 @@ import {
 import CopyFallback from "@/components/features/CopyFallback";
 import RoomDrawFeedback from "@/components/features/RoomDrawFeedback";
 import { Button } from "@/components/ui/button";
+import { drawViewLabels, readDrawView } from "@/lib/drawView";
 import type { RoomDraw } from "@/lib/lunchRoom";
 import { getSourceDisplayName } from "@/services/randomService";
 
@@ -28,7 +29,7 @@ export function roomDrawCopyText(draw: RoomDraw) {
 		`후보 목록 버전: ${draw.listVersion}`,
 		`추첨 요청: ${draw.requestedAt === undefined ? "이전 기록에는 요청 시각이 없습니다" : new Date(draw.requestedAt).toISOString()}`,
 		`난수 결과 생성: ${new Date(draw.timestamp).toISOString()}`,
-		`룰렛 시작: ${new Date(draw.startedAt).toISOString()}`,
+		`${drawViewLabels[readDrawView(draw.viewMode)]} 시작: ${new Date(draw.startedAt).toISOString()}`,
 		`공개 예정 시각: ${new Date(draw.startedAt + draw.durationMs).toISOString()}`,
 		`난수 출처: ${getSourceDisplayName(draw.source)}`,
 		...(draw.votes === undefined
@@ -65,7 +66,10 @@ export function RoomDrawRecordBody({ draw }: { draw: RoomDraw }) {
 	const times = [
 		{ label: "추첨 요청", value: draw.requestedAt },
 		{ label: "난수 결과 생성", value: draw.timestamp },
-		{ label: "룰렛 시작", value: draw.startedAt },
+		{
+			label: `${drawViewLabels[readDrawView(draw.viewMode)]} 시작`,
+			value: draw.startedAt,
+		},
 		{ label: "공개 예정 시각", value: draw.startedAt + draw.durationMs },
 	];
 	return (

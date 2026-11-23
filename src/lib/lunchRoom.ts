@@ -1,4 +1,5 @@
 import type { RandomSource } from "@/services/randomCore";
+import { type DrawView, isDrawView, readDrawView } from "./drawView";
 import {
 	getWheelRotation,
 	type LunchPlace,
@@ -80,6 +81,7 @@ export interface RoomExclusionRecord {
 }
 
 export interface RoomDraw {
+	viewMode?: DrawView;
 	id: string;
 	candidates: LunchPlace[];
 	winnerIndex: number;
@@ -104,6 +106,7 @@ export interface RoomDraw {
 }
 
 export interface RoomSnapshot {
+	viewMode?: DrawView;
 	roomId: string;
 	title: string;
 	createdAt: number;
@@ -239,6 +242,12 @@ export type ClientMessage =
 			excludeDrawn: boolean;
 	  }
 	| { type: "reset-exclusions"; id: string; expectedRevision: number }
+	| {
+			type: "draw-view";
+			id: string;
+			expectedRevision: number;
+			viewMode: DrawView;
+	  }
 	| {
 			type: "game-filter";
 			id: string;
@@ -701,6 +710,17 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
 						expectedRevision: value.expectedRevision as number,
 					}
 				: null;
+		case "draw-view":
+			return isId(value.id) &&
+				isVersion(value.expectedRevision) &&
+				isDrawView(value.viewMode)
+				? {
+						type: "draw-view",
+						id: value.id,
+						expectedRevision: value.expectedRevision,
+						viewMode: value.viewMode,
+					}
+				: null;
 		case "ping":
 			return isTime(value.clientTime)
 				? { type: "ping", clientTime: value.clientTime }
@@ -862,6 +882,9 @@ function parseDraw(value: unknown): RoomDraw | null {
 		id: value.id,
 		candidates,
 		winnerIndex: value.winnerIndex,
+		...(value.viewMode !== undefined && {
+			viewMode: readDrawView(value.viewMode),
+		}),
 		source: value.source as RandomSource,
 		timestamp: value.timestamp,
 		startedAt: value.startedAt,
@@ -1200,6 +1223,9 @@ export function parseRoomSnapshot(value: unknown): RoomSnapshot | null {
 	return {
 		roomId: value.roomId,
 		title,
+		...(value.viewMode !== undefined && {
+			viewMode: readDrawView(value.viewMode),
+		}),
 		createdAt: value.createdAt,
 		expiresAt: value.expiresAt,
 		listVersion: value.listVersion,
