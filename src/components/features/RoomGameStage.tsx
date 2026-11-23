@@ -29,7 +29,7 @@ import RoomNextGameButton from "./RoomNextGameButton";
 type WheelProps = ComponentProps<typeof LunchWheel>;
 type Props = Omit<FeedbackOptions, "draw"> & {
 	draw: RoomDraw | null;
-	solo?: boolean;
+	showVoting?: boolean;
 	isHost: boolean;
 	wheel?: WheelProps;
 	exclusion?: ExclusionOptions;
@@ -51,7 +51,7 @@ function hitTarget(target: EventTarget | null): Control | null {
 
 export default function RoomGameStage({
 	draw,
-	solo = false,
+	showVoting = true,
 	isHost,
 	wheel,
 	exclusion,
@@ -108,14 +108,14 @@ export default function RoomGameStage({
 					name: winner.name,
 					category: winner.category,
 					number: roomCandidateNumbers.get(winner.id) ?? draw.winnerIndex + 1,
-					votes: solo
-						? undefined
-						: {
+					votes: showVoting
+						? {
 								up: feedback.upVotes.length,
 								down: feedback.downVotes.length,
 								selected: feedback.ownChoice,
 								enabled: feedback.canVote,
-							},
+							}
+						: undefined,
 				}
 			: null;
 	const phase = wheel?.phase ?? "idle";
@@ -173,7 +173,7 @@ export default function RoomGameStage({
 			<section
 				aria-label="게임 보드"
 				className="picnic-frame"
-				data-multiplayer={!solo || undefined}
+				data-voting={showVoting || undefined}
 				data-next={showNext || undefined}
 				ref={frame}
 				style={box}

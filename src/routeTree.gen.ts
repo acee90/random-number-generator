@@ -15,6 +15,7 @@ import { Route as LunchRouteImport } from './routes/lunch'
 import { Route as SoloRouteImport } from './routes/solo'
 import { Route as ToolsRouteImport } from './routes/tools'
 import { Route as LunchRoomRoomIdRouteImport } from './routes/lunch-room.$roomId'
+import { Route as SoloRoomIdRouteImport } from './routes/solo_.$roomId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -46,6 +47,11 @@ const LunchRoomRoomIdRoute = LunchRoomRoomIdRouteImport.update({
   path: '/lunch-room/$roomId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SoloRoomIdRoute = SoloRoomIdRouteImport.update({
+  id: '/solo_/$roomId',
+  path: '/solo/$roomId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -54,6 +60,7 @@ export interface FileRoutesByFullPath {
   '/solo': typeof SoloRoute
   '/tools': typeof ToolsRoute
   '/lunch-room/$roomId': typeof LunchRoomRoomIdRoute
+  '/solo/$roomId': typeof SoloRoomIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -62,6 +69,7 @@ export interface FileRoutesByTo {
   '/solo': typeof SoloRoute
   '/tools': typeof ToolsRoute
   '/lunch-room/$roomId': typeof LunchRoomRoomIdRoute
+  '/solo/$roomId': typeof SoloRoomIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -71,13 +79,27 @@ export interface FileRoutesById {
   '/solo': typeof SoloRoute
   '/tools': typeof ToolsRoute
   '/lunch-room/$roomId': typeof LunchRoomRoomIdRoute
+  '/solo_/$roomId': typeof SoloRoomIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/create' | '/lunch' | '/solo' | '/tools' | '/lunch-room/$roomId'
+    | '/'
+    | '/create'
+    | '/lunch'
+    | '/solo'
+    | '/tools'
+    | '/lunch-room/$roomId'
+    | '/solo/$roomId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/create' | '/lunch' | '/solo' | '/tools' | '/lunch-room/$roomId'
+  to:
+    | '/'
+    | '/create'
+    | '/lunch'
+    | '/solo'
+    | '/tools'
+    | '/lunch-room/$roomId'
+    | '/solo/$roomId'
   id:
     | '__root__'
     | '/'
@@ -86,6 +108,7 @@ export interface FileRouteTypes {
     | '/solo'
     | '/tools'
     | '/lunch-room/$roomId'
+    | '/solo_/$roomId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -95,6 +118,7 @@ export interface RootRouteChildren {
   SoloRoute: typeof SoloRoute
   ToolsRoute: typeof ToolsRoute
   LunchRoomRoomIdRoute: typeof LunchRoomRoomIdRoute
+  SoloRoomIdRoute: typeof SoloRoomIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -141,6 +165,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LunchRoomRoomIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/solo_/$roomId': {
+      id: '/solo_/$roomId'
+      path: '/solo/$roomId'
+      fullPath: '/solo/$roomId'
+      preLoaderRoute: typeof SoloRoomIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -151,6 +182,7 @@ const rootRouteChildren: RootRouteChildren = {
   SoloRoute: SoloRoute,
   ToolsRoute: ToolsRoute,
   LunchRoomRoomIdRoute: LunchRoomRoomIdRoute,
+  SoloRoomIdRoute: SoloRoomIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

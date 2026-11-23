@@ -81,11 +81,9 @@ export default function RoomLifecyclePanel({
 	onStart,
 	onHistory,
 	historyButtonRef,
-	solo = false,
 	children,
 }: {
 	room: Room;
-	solo?: boolean;
 	busy: boolean;
 	showResult: boolean;
 	onEditResult?: () => boolean;
@@ -103,7 +101,7 @@ export default function RoomLifecyclePanel({
 	liveSnapshot.current = snapshot;
 	const phase = snapshot ? getRoomPhase(snapshot) : "waiting";
 	const editPhase = ["editing", "collecting", "reviewing"].includes(phase);
-	const sharedAdd = !solo && phase === "collecting";
+	const sharedAdd = phase === "collecting";
 	const listScreen = editPhase;
 	const connected = room.connection === "connected";
 	const isHost = room.self?.isHost === true;
@@ -838,29 +836,27 @@ export default function RoomLifecyclePanel({
 								</>
 							}
 						>
-							{!solo && (
-								<div className="room-editor-stage-actions">
-									<label
-										className="room-intake-switch"
-										htmlFor={`${id}-intake-enabled`}
-									>
-										<Switch
-											id={`${id}-intake-enabled`}
-											aria-label="후보 추천받기"
-											checked={phase === "collecting"}
-											disabled={locked || !sameDraftStage}
-											aria-busy={
-												stagePending === "open" || stagePending === "close"
-											}
-											onCheckedChange={(checked) => {
-												if (checked === (phase === "collecting")) return;
-												void changeStage(checked ? "open" : "close");
-											}}
-										/>
-										<span>후보 추천받기</span>
-									</label>
-								</div>
-							)}
+							<div className="room-editor-stage-actions">
+								<label
+									className="room-intake-switch"
+									htmlFor={`${id}-intake-enabled`}
+								>
+									<Switch
+										id={`${id}-intake-enabled`}
+										aria-label="후보 추천받기"
+										checked={phase === "collecting"}
+										disabled={locked || !sameDraftStage}
+										aria-busy={
+											stagePending === "open" || stagePending === "close"
+										}
+										onCheckedChange={(checked) => {
+											if (checked === (phase === "collecting")) return;
+											void changeStage(checked ? "open" : "close");
+										}}
+									/>
+									<span>후보 추천받기</span>
+								</label>
+							</div>
 						</RoomCandidateEditor>
 					) : (
 						<>

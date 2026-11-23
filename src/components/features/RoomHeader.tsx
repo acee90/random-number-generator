@@ -1,4 +1,4 @@
-import { Check, Copy, Crown, Info, Wifi, WifiOff } from "lucide-react";
+import { Check, Copy, Crown, Info, Monitor, Wifi, WifiOff } from "lucide-react";
 import { useId, useState } from "react";
 import SiteHeader from "@/components/layout/SiteHeader";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,13 @@ const roomDate = new Intl.DateTimeFormat("ko-KR", {
 	minute: "2-digit",
 });
 
-function RoomInfo({ snapshot }: { snapshot: RoomSnapshot }) {
+function RoomInfo({
+	snapshot,
+	solo,
+}: {
+	snapshot: RoomSnapshot;
+	solo: boolean;
+}) {
 	const id = useId();
 	const [open, setOpen] = useState(false);
 	const [dismissed, setDismissed] = useState(false);
@@ -62,7 +68,9 @@ function RoomInfo({ snapshot }: { snapshot: RoomSnapshot }) {
 					</time>
 				</span>
 				<p>
-					방장이 나가도 생성 후 24시간, 표시된 종료 시각까지 방이 유지됩니다.
+					{solo
+						? "혼자 만든 방과 기록은 이 탭에 보관하며, 탭을 닫으면 삭제됩니다."
+						: "방장이 나가도 생성 후 24시간, 표시된 종료 시각까지 방이 유지됩니다."}
 				</p>
 			</div>
 		</div>
@@ -87,28 +95,32 @@ export default function RoomHeader({
 	const { snapshot, connection } = room;
 	const closed = connection === "closed";
 	const connected = connection === "connected";
-	const shared = !solo && !closed;
+
 	const inviteLabel = copied ? "링크 복사됨" : "초대 링크 복사";
 	return (
 		<SiteHeader className="room-header">
 			<div className="room-title-block">
 				<div className="room-title-row">
 					<h1>{(!closed && snapshot?.title) || "점심 추첨방"}</h1>
-					{shared && snapshot && <RoomInfo snapshot={snapshot} />}
+					{!closed && snapshot && <RoomInfo snapshot={snapshot} solo={solo} />}
 				</div>
-				{shared && (
+				{!closed && (
 					<div className="room-connection" data-connected={connected}>
 						<span className="room-connection-state">
-							{connected ? (
+							{solo ? (
+								<Monitor size={14} aria-hidden="true" />
+							) : connected ? (
 								<Wifi size={14} aria-hidden="true" />
 							) : (
 								<WifiOff size={14} aria-hidden="true" />
 							)}
-							{connected
-								? "연결됨"
-								: connection === "reconnecting"
-									? "연결 끊김 · 다시 연결 중"
-									: "연결 중"}
+							{solo
+								? "혼자 추첨"
+								: connected
+									? "연결됨"
+									: connection === "reconnecting"
+										? "연결 끊김 · 다시 연결 중"
+										: "연결 중"}
 						</span>
 						<span>참가 {snapshot?.participants.length ?? 0}명</span>
 						{room.self?.isHost && (
@@ -125,23 +137,25 @@ export default function RoomHeader({
 					</div>
 				)}
 			</div>
-			{shared && (
+			{!closed && (
 				<div className="room-heading-actions">
-					<Button
-						variant="outline"
-						className="room-invite-button"
-						aria-label={inviteLabel}
-						title={inviteLabel}
-						disabled={!canInvite}
-						onClick={(event) => onCopyInvite(event.currentTarget)}
-					>
-						{copied ? (
-							<Check aria-hidden="true" />
-						) : (
-							<Copy aria-hidden="true" />
-						)}
-						<span>{inviteLabel}</span>
-					</Button>
+					{!solo && (
+						<Button
+							variant="outline"
+							className="room-invite-button"
+							aria-label={inviteLabel}
+							title={inviteLabel}
+							disabled={!canInvite}
+							onClick={(event) => onCopyInvite(event.currentTarget)}
+						>
+							{copied ? (
+								<Check aria-hidden="true" />
+							) : (
+								<Copy aria-hidden="true" />
+							)}
+							<span>{inviteLabel}</span>
+						</Button>
+					)}
 					<RoomSettingsDialog room={room} busy={busy} />
 				</div>
 			)}

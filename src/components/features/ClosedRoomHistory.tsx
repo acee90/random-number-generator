@@ -33,7 +33,6 @@ export function RoomTerminalActions() {
 export default function ClosedRoomHistory({ roomId }: { roomId: string }) {
 	const [archive, setArchive] = useState<Archive | null>(null);
 	const [error, setError] = useState("");
-	const [downloadError, setDownloadError] = useState("");
 	const [loading, setLoading] = useState(true);
 	const [attempt, setAttempt] = useState(0);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: An explicit retry must repeat this request.
@@ -120,6 +119,31 @@ export default function ClosedRoomHistory({ roomId }: { roomId: string }) {
 		);
 		return () => clearTimeout(timer);
 	}, [archive]);
+	return (
+		<ClosedRoomArchive
+			roomId={roomId}
+			archive={archive}
+			loading={loading}
+			error={error}
+			onRetry={() => setAttempt((value) => value + 1)}
+		/>
+	);
+}
+
+export function ClosedRoomArchive({
+	roomId,
+	archive,
+	loading = false,
+	error,
+	onRetry,
+}: {
+	roomId: string;
+	archive: Archive | null;
+	loading?: boolean;
+	error?: string;
+	onRetry?: () => void;
+}) {
+	const [downloadError, setDownloadError] = useState("");
 	function download() {
 		if (!archive || Date.now() >= archive.expiresAt) return;
 		let url: string | undefined;
@@ -173,11 +197,7 @@ export default function ClosedRoomHistory({ roomId }: { roomId: string }) {
 			{error && (
 				<div>
 					<p role="alert">{error}</p>
-					<Button
-						variant="outline"
-						size="sm"
-						onClick={() => setAttempt((value) => value + 1)}
-					>
+					<Button variant="outline" size="sm" onClick={onRetry}>
 						<RotateCcw size={16} aria-hidden="true" />
 						다시 확인
 					</Button>
@@ -211,7 +231,7 @@ export default function ClosedRoomHistory({ roomId }: { roomId: string }) {
 												})}
 											</time>
 										</summary>
-										<RoomDrawRecordBody draw={draw} solo={false} />
+										<RoomDrawRecordBody draw={draw} />
 										{draw.votes && (
 											<RoomDrawFeedback
 												draw={draw}

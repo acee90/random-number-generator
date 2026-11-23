@@ -24,6 +24,7 @@ import { Label } from "@/components/ui/label";
 import { recordCandidateListUse } from "@/lib/candidateListUsage";
 import { lunchCategories } from "@/lib/lunch";
 import {
+	type CreateRoomInput,
 	clampLunchRoomNickname,
 	getEligibleRoomCandidates,
 	isLunchRoomId,
@@ -40,6 +41,7 @@ import {
 	saveLunchRoomName,
 } from "@/lib/lunchRoomClient";
 import { beginRoomTiming } from "@/lib/roomTimings";
+import { createSoloRoom } from "@/lib/soloRoom";
 import { cn } from "@/lib/utils";
 import CandidateListLoadDialog, {
 	type CandidateListSelection,
@@ -100,7 +102,7 @@ async function requestRoom(body: string, signal: AbortSignal) {
 	return { roomId: value.roomId, hostToken: value.hostToken };
 }
 
-export default function CreateLunchRoom() {
+export default function CreateLunchRoom({ solo = false }: { solo?: boolean }) {
 	const id = useId();
 	const router = useRouter({ warn: false });
 	const [step, setStep] = useState<1 | 2>(1);
@@ -146,7 +148,14 @@ export default function CreateLunchRoom() {
 	const pendingLabel = createdRoomId ? "방에 입장하는 중…" : "방 만드는 중…";
 
 	useEffect(() => {
-		setName(clampLunchRoomNickname(readLunchRoomName() ?? "") || "방장");
+		// The server-rendered form can accept typing before React attaches its handlers.
+		if (titleRef.current) setTitle(titleRef.current.value);
+		const typedName = nameRef.current?.value;
+		setName(
+			typedName !== undefined && typedName !== "방장"
+				? typedName
+				: clampLunchRoomNickname(readLunchRoomName() ?? "") || "방장",
+		);
 		return () => {
 			clearTimeout(requestTimeoutRef.current);
 			requestRef.current?.abort();
@@ -195,10 +204,11 @@ export default function CreateLunchRoom() {
 
 	async function create() {
 		if (requestRef.current || !hostName) return;
-		let body: string | undefined;
+		let input: CreateRoomInput | null = null;
+		let body = "";
 		if (!createdRoomId) {
 			const ids = new Set(candidates.map(({ id: candidateId }) => candidateId));
-			const input = validateCreateRoomInput({
+			input = validateCreateRoomInput({
 				title,
 				hostName,
 				candidates,
@@ -233,31 +243,34 @@ export default function CreateLunchRoom() {
 		setError("");
 		try {
 			let roomId = createdRoomId;
-			if (body !== undefined) {
-				const timeout = setTimeout(() => {
-					if (requestRef.current !== controller) return;
-					controller.abort();
-					requestRef.current = null;
-					setPending(false);
-					setError(
-						"방 생성 응답이 늦어지고 있습니다. 연결을 확인한 뒤 다시 시도해 주세요.",
-					);
-				}, 15000);
-				requestTimeoutRef.current = timeout;
-				const created = await requestRoom(body, controller.signal);
-				clearTimeout(timeout);
-				if (controller.signal.aborted) return;
-				roomId = created.roomId;
-				saveLunchRoomHost(roomId, created.hostToken);
+			if (input) {
+				if (solo) {
+					roomId = createSoloRoom(input).roomId;
+				} else {
+					requestTimeoutRef.current = setTimeout(() => {
+						if (requestRef.current !== controller) return;
+						controller.abort();
+						requestRef.current = null;
+						setPending(false);
+						setError(
+							"방 생성 응답이 늦어지고 있습니다. 연결을 확인한 뒤 다시 시도해 주세요.",
+						);
+					}, 15000);
+					const created = await requestRoom(body, controller.signal);
+					if (controller.signal.aborted) return;
+					clearTimeout(requestTimeoutRef.current);
+					roomId = created.roomId;
+					saveLunchRoomHost(roomId, created.hostToken);
+				}
 				saveLunchRoomName(hostName);
 				setCreatedRoomId(roomId);
 			}
 			if (!roomId) return;
-			prepareLunchRoomEntry(roomId, hostName);
+			if (!solo) prepareLunchRoomEntry(roomId, hostName);
 			const finishNavigation = beginRoomTiming("room_navigation");
 			try {
 				await router.navigate({
-					to: "/lunch-room/$roomId",
+					to: solo ? "/solo/$roomId" : "/lunch-room/$roomId",
 					params: { roomId },
 				});
 			} catch {

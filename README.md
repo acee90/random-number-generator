@@ -66,7 +66,8 @@ TanStack Start · React · Cloudflare Workers · Durable Objects · PartyServer/
 | `/` | 방 만들기·혼자 추첨 중 시작 방식 선택 |
 | `/create` | 방 이름·닉네임 입력, 후보 준비와 새 방 생성 |
 | `/lunch-room/<UUID>` | 닉네임 입장·공동 룰렛·채팅·투표·결과 기록 |
-| `/solo` | 혼자 사용하는 점심 룰렛 |
+| `/solo` | 같은 방 만들기 화면에서 개인 방 정보 입력·후보 준비 |
+| `/solo/<UUID>` | 현재 탭에 보관하는 개인 룰렛·투표·결과 기록 |
 | `/lunch` | 메인(`/`)으로 이동 |
 | `/tools?tool=number` | 랜덤 정수 생성 |
 | `/tools?tool=lotto` | 로또 6/45 번호 생성 |
