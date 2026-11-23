@@ -1170,7 +1170,17 @@ describe("synchronized lunch room UI", () => {
 		Object.defineProperties(list, {
 			clientHeight: { configurable: true, value: 100 },
 			scrollHeight: { configurable: true, value: 600 },
+			scrollTo: {
+				value: ({ top }: ScrollToOptions) => {
+					list.scrollTop = top ?? 0;
+				},
+			},
 		});
+		const firstRow = list.querySelector<HTMLElement>("[data-message-id]");
+		if (firstRow)
+			firstRow.getBoundingClientRect = () =>
+				new DOMRect(0, -list.scrollTop, 300, list.scrollHeight);
+		fireEvent.wheel(list, { deltaY: -100 });
 		list.scrollTop = 100;
 		fireEvent.scroll(list);
 		updateRoom(view, {
@@ -1188,7 +1198,7 @@ describe("synchronized lunch room UI", () => {
 		});
 		expect(list.scrollTop).toBe(100);
 		fireEvent.click(screen.getByRole("button", { name: "새 메시지 1개 보기" }));
-		expect(list.scrollTop).toBe(600);
+		expect(list.scrollTop).toBe(500);
 	});
 
 	it("collapses the chat without unmounting its draft and restores the same controls with disclosure focus", () => {
@@ -1291,7 +1301,17 @@ describe("synchronized lunch room UI", () => {
 		Object.defineProperties(log, {
 			clientHeight: { configurable: true, value: 100 },
 			scrollHeight: { configurable: true, value: 600 },
+			scrollTo: {
+				value: ({ top }: ScrollToOptions) => {
+					log.scrollTop = top ?? 0;
+				},
+			},
 		});
+		const firstRow = log.querySelector<HTMLElement>("[data-message-id]");
+		if (firstRow)
+			firstRow.getBoundingClientRect = () =>
+				new DOMRect(0, -log.scrollTop, 300, log.scrollHeight);
+		fireEvent.wheel(log, { deltaY: -100 });
 		log.scrollTop = 100;
 		fireEvent.scroll(log);
 		const messages = [
@@ -1327,7 +1347,7 @@ describe("synchronized lunch room UI", () => {
 		expect(within(log).getByText(latest.text)).toBeTruthy();
 		expect(log.scrollTop).toBe(100);
 		fireEvent.click(screen.getByRole("button", { name: "새 메시지 2개 보기" }));
-		expect(log.scrollTop).toBe(600);
+		expect(log.scrollTop).toBe(500);
 	});
 
 	it.each([
@@ -3942,19 +3962,19 @@ describe("synchronized lunch room UI", () => {
 		expect(
 			screen
 				.getByText("내 메시지")
-				.closest("li")
+				.closest('[role="listitem"]')
 				?.classList.contains("is-mine"),
 		).toBe(true);
 		expect(
 			screen
 				.getByText("다른 사람 메시지")
-				.closest("li")
+				.closest('[role="listitem"]')
 				?.classList.contains("is-other"),
 		).toBe(true);
 		expect(
 			screen
 				.getByText("새 참가자가 들어왔습니다.")
-				.closest("li")
+				.closest('[role="listitem"]')
 				?.classList.contains("room-chat-system"),
 		).toBe(true);
 		expect(document.querySelectorAll(".room-chat-system")).toHaveLength(1);
@@ -3962,7 +3982,7 @@ describe("synchronized lunch room UI", () => {
 		expect(
 			screen
 				.getByText("내 메시지")
-				.closest("li")
+				.closest('[role="listitem"]')
 				?.classList.contains("is-mine"),
 		).toBe(true);
 		expect(
@@ -3975,7 +3995,7 @@ describe("synchronized lunch room UI", () => {
 		expect(
 			screen
 				.getByText("내 메시지")
-				.closest("li")
+				.closest('[role="listitem"]')
 				?.classList.contains("is-mine"),
 		).toBe(true);
 		expect(screen.getAllByText("다시 연결되었습니다.")).toHaveLength(1);
@@ -4262,22 +4282,26 @@ describe("synchronized lunch room UI", () => {
 			],
 		});
 		render(<LunchRoomPage roomId={roomId} />);
-		const first = screen.getByText("첫 메시지").closest("li") as HTMLElement;
-		const second = screen.getByText("같은 묶음").closest("li") as HTMLElement;
+		const first = screen
+			.getByText("첫 메시지")
+			.closest('[role="listitem"]') as HTMLElement;
+		const second = screen
+			.getByText("같은 묶음")
+			.closest('[role="listitem"]') as HTMLElement;
 		expect(within(first).getByText("방장")).toBeTruthy();
 		expect(first.querySelector("time")).toBeNull();
 		expect(second.querySelector(".room-message-author")).toBeNull();
 		expect(second.querySelectorAll("time")).toHaveLength(1);
 		for (const text of ["다음 분", "알림 다음", "이름이 같은 다른 사람"])
 			expect(
-				within(screen.getByText(text).closest("li") as HTMLElement).getByText(
-					"방장",
-				),
+				within(
+					screen.getByText(text).closest('[role="listitem"]') as HTMLElement,
+				).getByText("방장"),
 			).toBeTruthy();
 		expect(
 			screen
 				.getByText("참가했습니다")
-				.closest("li")
+				.closest('[role="listitem"]')
 				?.classList.contains("room-chat-system"),
 		).toBe(true);
 	});
