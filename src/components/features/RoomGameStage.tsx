@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { useDrawSound } from "@/hooks/useDrawPresentation";
 import { type FeedbackOptions, useRoomFeedback } from "@/hooks/useRoomFeedback";
+import type { DrawView } from "@/lib/drawView";
 import type { RoomDraw } from "@/lib/lunchRoom";
 import DrawPresentationControls from "./DrawPresentationControls";
 import { LunchWheel } from "./LunchWheel";
@@ -26,9 +27,15 @@ import RoomExclusionPanel, {
 } from "./RoomExclusionPanel";
 import RoomNextGameButton from "./RoomNextGameButton";
 
+import SlotMachine from "./slot/SlotMachine";
+
 type WheelProps = ComponentProps<typeof LunchWheel>;
 type Props = Omit<FeedbackOptions, "draw"> & {
 	draw: RoomDraw | null;
+	viewMode?: DrawView;
+	/** Frozen round used by the animation before draw is released to voting. */
+	activeDraw?: RoomDraw | null;
+	clockOffset?: number;
 	showVoting?: boolean;
 	isHost: boolean;
 	wheel?: WheelProps;
@@ -51,6 +58,9 @@ function hitTarget(target: EventTarget | null): Control | null {
 
 export default function RoomGameStage({
 	draw,
+	viewMode = "wheel",
+	activeDraw,
+	clockOffset = 0,
 	showVoting = true,
 	isHost,
 	wheel,
@@ -65,6 +75,7 @@ export default function RoomGameStage({
 	...voting
 }: Props) {
 	const id = useId();
+	const slot = viewMode === "slot-v1" && Boolean(wheel);
 	const frame = useRef<HTMLElement>(null);
 	const main = useRef<HTMLDivElement>(null);
 	const [size, setSize] = useState({
@@ -76,7 +87,7 @@ export default function RoomGameStage({
 	const [pressed, setPressed] = useState<Control | null>(null);
 	useLayoutEffect(() => {
 		const el = frame.current;
-		if (!el) return;
+		if (!el || slot) return;
 		function measure() {
 			if (!el?.clientWidth || !el.clientHeight) return;
 			const width = el.clientWidth,
@@ -99,7 +110,7 @@ export default function RoomGameStage({
 		observer.observe(el);
 		if (main.current) observer.observe(main.current);
 		return () => observer.disconnect();
-	}, []);
+	}, [slot]);
 	const feedback = useRoomFeedback({ draw, ...voting });
 	const winner = draw?.candidates[draw.winnerIndex];
 	const result =
@@ -118,6 +129,71 @@ export default function RoomGameStage({
 						: undefined,
 				}
 			: null;
+	const headingId = titleId ?? `${id}-winner`;
+	const showNext = isHost && !voting.readOnly;
+	const details = (
+		<div className="picnic-details">
+			{result?.votes && draw && (
+				<div className="picnic-sheet">
+					<span className="picnic-participation">
+						{result.votes.up + result.votes.down}명 참여
+					</span>
+					<RoomFeedbackDetails
+						draw={draw}
+						{...voting}
+						isHost={isHost}
+						mode="results"
+						feedback={feedback}
+						onBoard
+						reducedMotion={reducedMotion}
+					/>
+				</div>
+			)}
+			{result && showNext && (
+				<RoomNextGameButton
+					disabled={!canNext || nextPending || voting.pending}
+					pending={nextPending}
+					onClick={onNext}
+				/>
+			)}
+		</div>
+	);
+	const options = exclusion && <RoomExclusionPanel {...exclusion} />;
+	const soundControl = sound && (
+		<div className="picnic-sound" data-hit="sound">
+			<DrawPresentationControls sound={sound} />
+		</div>
+	);
+	if (slot && wheel) {
+		return (
+			<div data-own-choice={feedback.ownChoice}>
+				<section aria-label="게임 보드" className="picnic-frame slot-stage">
+					{options}
+					<div className="slot-stage-main">
+						{soundControl}
+						<SlotMachine
+							candidates={wheel.candidates}
+							numbers={wheel.candidateNumbers}
+							draw={activeDraw ?? draw}
+							clockOffset={clockOffset}
+							phase={wheel.phase}
+							reduced={Boolean(reducedMotion)}
+							host={isHost}
+							disabled={wheel.covered || wheel.canDraw === false}
+							onDraw={wheel.onDraw}
+							buttonRef={wheel.buttonRef}
+							buttonId={wheel.buttonId}
+							titleRef={titleRef}
+							titleId={headingId}
+						/>
+					</div>
+					<div className="slot-reveal" data-open={Boolean(result) || undefined}>
+						<div>{details}</div>
+					</div>
+				</section>
+			</div>
+		);
+	}
 	const phase = wheel?.phase ?? "idle";
 	const caption =
 		phase === "fetching"
@@ -163,8 +239,7 @@ export default function RoomGameStage({
 		"--ticket-h": `${layout.heroHeight}px`,
 		"--ticket-top": `${layout.ticketTop}px`,
 	} as CSSProperties;
-	const headingId = titleId ?? `${id}-winner`;
-	const showNext = isHost && !voting.readOnly;
+
 	return (
 		<div
 			className={result ? "room-result-layout" : undefined}
@@ -203,17 +278,13 @@ export default function RoomGameStage({
 					rotorRef={wheel?.rotorRef}
 					animate={!result && phase === "spinning" && !reducedMotion}
 				/>
-				{exclusion && <RoomExclusionPanel {...exclusion} />}
+				{options}
 				<div
 					ref={main}
 					className="picnic-main"
 					data-result={Boolean(result) || undefined}
 				>
-					{sound && (
-						<div className="picnic-sound" data-hit="sound">
-							<DrawPresentationControls sound={sound} />
-						</div>
-					)}
+					{soundControl}
 					{!result && wheel && (
 						<div className="picnic-wheel">
 							<LunchWheel {...wheel} />
@@ -232,31 +303,7 @@ export default function RoomGameStage({
 						</section>
 					)}
 				</div>
-				<div className="picnic-details">
-					{result?.votes && draw && (
-						<div className="picnic-sheet">
-							<span className="picnic-participation">
-								{result.votes.up + result.votes.down}명 참여
-							</span>
-							<RoomFeedbackDetails
-								draw={draw}
-								{...voting}
-								isHost={isHost}
-								mode="results"
-								feedback={feedback}
-								onBoard
-								reducedMotion={reducedMotion}
-							/>
-						</div>
-					)}
-					{result && showNext && (
-						<RoomNextGameButton
-							disabled={!canNext || nextPending || voting.pending}
-							pending={nextPending}
-							onClick={onNext}
-						/>
-					)}
-				</div>
+				{details}
 			</section>
 		</div>
 	);

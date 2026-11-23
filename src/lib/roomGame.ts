@@ -1,3 +1,4 @@
+import { readDrawView } from "./drawView";
 import {
 	getWheelRotation,
 	randomWheelLandingFraction,
@@ -30,6 +31,7 @@ export type LifecycleCommand = Extract<
 			| "remove-candidate"
 			| "room-edit"
 			| "options"
+			| "draw-view"
 			| "game-filter"
 			| "reset-exclusions";
 	}
@@ -50,6 +52,7 @@ export function createRoomSnapshot(
 		revision: 1,
 		intakeId: null,
 		excludeDrawn: false,
+		viewMode: "wheel",
 		excludedIds: [],
 		exclusionRecords: [],
 		drawCount: 0,
@@ -84,6 +87,15 @@ export function validateRoomCommand(
 		return {
 			code: "REVISION_CONFLICT",
 			message: "게임 조건이 바뀌었어요. 목록을 확인한 뒤 다시 진행해 주세요.",
+		};
+	}
+	if (
+		message.type === "draw-view" &&
+		(snapshot.status !== "waiting" || snapshot.draw)
+	) {
+		return {
+			code: "PHASE_CONFLICT",
+			message: "추첨 보기는 대기 중에 변경할 수 있습니다.",
 		};
 	}
 	if (message.type === "intake") {
@@ -263,6 +275,9 @@ export function applyRoomCommand(
 		case "options":
 			setRoomExcludeDrawn(snapshot, message.excludeDrawn);
 			break;
+		case "draw-view":
+			snapshot.viewMode = message.viewMode;
+			break;
 		case "game-filter":
 			snapshot.gameFilter = structuredClone(message.filter);
 			snapshot.candidates = snapshot.candidates.map((candidate) =>
@@ -289,6 +304,7 @@ export function prepareRoomDraw(
 	return {
 		candidates,
 		listVersion: snapshot.listVersion,
+		viewMode: readDrawView(snapshot.viewMode),
 		participants: structuredClone(participants),
 		requestedAt: Date.now(),
 		probabilities: candidates.map(() => 1 / candidates.length),

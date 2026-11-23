@@ -247,6 +247,13 @@ export function useSoloLunch(
 				excludeDrawn,
 				expectedRevision: revision(expected),
 			}),
+		updateDrawView: (viewMode, expected?: number) =>
+			change({
+				type: "draw-view",
+				id: crypto.randomUUID(),
+				viewMode,
+				expectedRevision: revision(expected),
+			}),
 		resetExclusions: (expected?: number) =>
 			change({
 				type: "reset-exclusions",

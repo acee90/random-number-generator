@@ -8,6 +8,7 @@ import {
 	useState,
 } from "react";
 import { beginChatTrace } from "@/lib/chatTrace";
+import type { DrawView } from "@/lib/drawView";
 import {
 	type ChatMessage,
 	type ClientMessage,
@@ -59,6 +60,7 @@ export type RoomMutation =
 	| "candidate"
 	| "edit"
 	| "options"
+	| "draw-view"
 	| "filter"
 	| "reset"
 	| "close";
@@ -78,6 +80,7 @@ type MutationMessage = Extract<
 			| "room-edit"
 			| "room-close"
 			| "options"
+			| "draw-view"
 			| "game-filter"
 			| "reset-exclusions";
 	}
@@ -1248,6 +1251,22 @@ export function useLunchRoom(
 				expectedRevision ?? current.revision ?? current.listVersion,
 		});
 	}
+	function updateDrawView(viewMode: DrawView, expectedRevision?: number) {
+		const current = snapshotRef.current;
+		if (
+			!selfRef.current?.isHost ||
+			current?.status !== "waiting" ||
+			current.draw
+		)
+			return Promise.resolve(false);
+		return requestMutation("draw-view", {
+			type: "draw-view",
+			viewMode,
+			id: actionId(),
+			expectedRevision:
+				expectedRevision ?? current.revision ?? current.listVersion,
+		});
+	}
 	function updateGameFilter(filter: RoomGameFilter, expectedRevision?: number) {
 		const current = snapshotRef.current;
 		if (!current || !canEditRoom()) return Promise.resolve(false);
@@ -1454,6 +1473,7 @@ export function useLunchRoom(
 		editRoom,
 		closeRoom,
 		updateRoomOptions,
+		updateDrawView,
 		updateGameFilter,
 		resetExclusions,
 		vote,

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readDrawView } from "../src/lib/drawView";
 import { getWheelRotation, sampleLunchPlaces } from "../src/lib/lunch";
 import {
 	type ChatMessage,
@@ -96,6 +97,25 @@ function makeRoom(overrides: Partial<RoomSnapshot> = {}): RoomSnapshot {
 
 const client = (value: unknown) => parseClientMessage(JSON.stringify(value));
 const server = (value: unknown) => parseServerMessage(JSON.stringify(value));
+
+it("opens legacy or future draw presentations on the wheel and accepts only supported view changes", () => {
+	const command = {
+		type: "draw-view",
+		id: "switch-view",
+		expectedRevision: 1,
+		viewMode: "slot-v1",
+	};
+	expect(client(command)).toEqual(command);
+	expect(client({ ...command, viewMode: "future" })).toBeNull();
+	expect(readDrawView(parseRoomSnapshot(makeRoom())?.viewMode)).toBe("wheel");
+	const future = parseRoomSnapshot({
+		...makeRoom(),
+		viewMode: "future",
+		draw: { ...makeDraw(), viewMode: "future" },
+	});
+	expect(future?.viewMode).toBe("wheel");
+	expect(future?.draw?.viewMode).toBe("wheel");
+});
 
 describe("room draw vote protocol", () => {
 	const endedAt = now + 8200;

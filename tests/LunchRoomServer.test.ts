@@ -3593,6 +3593,67 @@ describe("LunchRoomServer game lifecycle", () => {
 		return structuredClone(draw);
 	}
 
+	it("synchronizes the host's view, freezes it on the round, and keeps the archived view after switching back", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const guest = await connect(server, context, "참가자");
+		const change = {
+			type: "draw-view",
+			id: "slot-change",
+			viewMode: "slot-v1",
+			expectedRevision: revision(host),
+		};
+		await send(server, guest, { ...change, id: "guest-change" });
+		expect(requestErrors(guest, "guest-change")).toMatchObject([
+			{ code: "HOST_REQUIRED" },
+		]);
+		const pool = latestSnapshot(host).snapshot.candidates;
+		await send(server, host, change);
+		await send(server, host, change);
+		expect(revision(host)).toBe(change.expectedRevision + 1);
+		expect(latestSnapshot(guest).snapshot).toMatchObject({
+			viewMode: "slot-v1",
+			candidates: pool,
+		});
+		await send(server, host, {
+			...change,
+			id: "stale-view",
+			viewMode: "wheel",
+		});
+		expect(requestErrors(host, "stale-view")).toMatchObject([
+			{ code: "REVISION_CONFLICT" },
+		]);
+		const draw = await drawResult(server, context, host, "slot-draw");
+		expect(draw.viewMode).toBe("slot-v1");
+		expect(latestSnapshot(guest).snapshot.draw).toEqual(draw);
+		await send(server, host, {
+			...change,
+			id: "result-change",
+			viewMode: "wheel",
+			expectedRevision: revision(host),
+		});
+		expect(requestErrors(host, "result-change")).toMatchObject([
+			{ code: "PHASE_CONFLICT" },
+		]);
+		await send(server, host, {
+			type: "next",
+			id: "after-slot",
+			drawId: draw.id,
+		});
+		expect(latestSnapshot(host).snapshot.viewMode).toBe("slot-v1");
+		await send(server, host, {
+			...change,
+			id: "back-to-wheel",
+			viewMode: "wheel",
+			expectedRevision: revision(host),
+		});
+		expect(latestSnapshot(guest).snapshot).toMatchObject({
+			viewMode: "wheel",
+			history: [{ id: draw.id, viewMode: "slot-v1" }],
+		});
+		expect(entropy).toHaveBeenCalledTimes(1);
+	});
+
 	it("runs two consecutive OFF games without reset approval and keeps host, guest and durable exclusions empty", async () => {
 		const { server, context } = await room();
 		const host = await connect(server, context, "방장", hostToken);

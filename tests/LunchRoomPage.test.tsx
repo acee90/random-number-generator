@@ -353,6 +353,39 @@ describe("current result feedback and frozen history", () => {
 		expect(room.vote).toHaveBeenCalledOnce();
 	});
 
+	it("keeps the slot drum mounted and opens voting below the landed row at the reveal time", async () => {
+		reduced = true;
+		room.snapshot = snapshot({ viewMode: "slot-v1" });
+		const view = render(<LunchRoomPage roomId={roomId} />);
+		const stage = screen.getByRole("region", { name: "게임 보드" });
+		const drum = stage.querySelector(".slot-drum");
+		expect(drum).toBeTruthy();
+		const current = { ...draw(baseTime), viewMode: "slot-v1" as const };
+		updateRoom(view, {
+			snapshot: snapshot({
+				viewMode: "slot-v1",
+				status: "drawing",
+				draw: current,
+			}),
+		});
+		await act(async () => vi.advanceTimersByTime(current.durationMs - 1));
+		const winner = current.candidates[current.winnerIndex].name;
+		expect(within(stage).queryByRole("heading", { name: winner })).toBeNull();
+		expect(
+			within(stage).queryByRole("button", { name: "좋아요 투표" }),
+		).toBeNull();
+		await act(async () => vi.advanceTimersByTime(1));
+		const heading = within(stage).getByRole("heading", { name: winner });
+		expect(heading.closest(".slot-drum")).toBe(drum);
+		const vote = within(stage).getByRole("button", { name: "좋아요 투표" });
+		expect(
+			heading.compareDocumentPosition(vote) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
+		fireEvent.click(vote);
+		expect(room.vote).toHaveBeenCalledExactlyOnceWith(current.id, "up");
+		expect(stage.querySelector(".slot-drum")).toBe(drum);
+	});
+
 	it("exposes guest voting only after reveal and preserves the acknowledged selection", async () => {
 		const current = { ...draw(baseTime - 7000), votes: [] };
 		room.snapshot = snapshot({ draw: current, status: "drawing" });
@@ -587,6 +620,7 @@ beforeEach(() => {
 		editRoom: vi.fn(async () => true),
 		closeRoom: vi.fn(async () => true),
 		updateRoomOptions: vi.fn(async () => true),
+		updateDrawView: vi.fn(async () => true),
 		updateGameFilter: vi.fn(async () => true),
 		resetExclusions: vi.fn(async () => true),
 		vote: vi.fn(() => true),
