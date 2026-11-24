@@ -70,6 +70,45 @@ describe("public licence data spatial index", () => {
 		vi.unstubAllGlobals();
 		vi.resetModules();
 	});
+	it("shares the index download with searches and skips cell reads for a cancelled pin", async () => {
+		let finishIndex!: (response: Response) => void;
+		const pending = new Promise<Response>((resolve) => {
+			finishIndex = resolve;
+		});
+		const fetcher = vi
+			.fn()
+			.mockResolvedValueOnce(new Response(null, { status: 503 }))
+			.mockReturnValueOnce(pending);
+		vi.stubGlobal("fetch", fetcher);
+		const { getRestaurantIndex, getPublicNearbyRestaurants } = await import(
+			"@/services/publicNearbyRestaurants"
+		);
+		await expect(getRestaurantIndex()).rejects.toThrow();
+		const preload = getRestaurantIndex();
+		const controller = new AbortController();
+		const cancelled = getPublicNearbyRestaurants(center, controller.signal);
+		const latest = getPublicNearbyRestaurants(
+			{ latitude: 0, longitude: 0 },
+			new AbortController().signal,
+		);
+		controller.abort();
+		finishIndex(
+			Response.json({
+				asOf: "2026-11-20",
+				cellsPerDegree: 20,
+				packs: {
+					"37-127": { file: "cancelled.bin", cells: { "750-2540": [0, 32] } },
+				},
+			}),
+		);
+		await expect(cancelled).rejects.toMatchObject({ name: "AbortError" });
+		await preload;
+		await expect(latest).resolves.toEqual({
+			restaurants: [],
+			asOf: "2026-11-20",
+		});
+		expect(fetcher).toHaveBeenCalledTimes(2);
+	});
 	it("includes cells across regional pack boundaries and leaves overseas searches empty", () => {
 		const index: RestaurantIndex = {
 			asOf: "2026-11-20",

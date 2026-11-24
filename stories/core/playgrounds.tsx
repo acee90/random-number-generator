@@ -96,6 +96,7 @@ export function VotePlayground(args: ResultProps) {
 				{...args}
 				draw={draw}
 				onNext={reset}
+				onRedraw={reset}
 				onVote={(drawId, choice) => {
 					if (
 						drawId !== draw.id ||
@@ -204,6 +205,7 @@ export function WheelPlayground({
 					pending={false}
 					reducedMotion={motionOff}
 					onNext={reset}
+					onRedraw={start}
 					canNext
 					onVote={() => false}
 					wheel={{

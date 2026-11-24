@@ -20,10 +20,11 @@ import {
 import { useDrawSound } from "@/hooks/useDrawPresentation";
 import type { useLunchRoom } from "@/hooks/useLunchRoom";
 import { useRoomTimeline } from "@/hooks/useRoomTimeline";
-import { drawViewLabels, readDrawView } from "@/lib/drawView";
+import { drawViewLabels } from "@/lib/drawView";
 import type { LunchHistoryRecord } from "@/lib/lunchHistory";
 import {
 	getEligibleRoomCandidates,
+	getRoomDrawView,
 	getRoomPhase,
 	lunchRoomLimits,
 	type RoomDraw,
@@ -94,9 +95,7 @@ export default function LunchSessionPage({
 		(!drawMatchesCandidates && drawArchived)
 			? null
 			: draw;
-	const viewMode = readDrawView(
-		displayedDraw ? displayedDraw.viewMode : snapshot?.viewMode,
-	);
+	const viewMode = getRoomDrawView(snapshot);
 	const viewLabel = drawViewLabels[viewMode];
 	const finished = useRoomTimeline(
 		displayedDraw,
@@ -344,7 +343,10 @@ export default function LunchSessionPage({
 		);
 	}
 
-	function start(options?: { expectedRevision?: number }) {
+	function start(options?: {
+		expectedRevision?: number;
+		previousDrawId?: string;
+	}) {
 		if (!room.startDraw(options)) return;
 		copyAttemptRef.current++;
 		setCopyHelp(null);
@@ -598,6 +600,20 @@ export default function LunchSessionPage({
 												)}
 												readOnly={drawArchived}
 												onNext={() => advanceRound()}
+												canRedraw={
+													eligibleCandidates.length > 0 &&
+													Boolean(
+														snapshot && getRoomPhase(snapshot) === "result",
+													)
+												}
+												onRedraw={() => {
+													if (displayedDraw && snapshot)
+														start({
+															previousDrawId: displayedDraw.id,
+															expectedRevision:
+																snapshot.revision ?? snapshot.listVersion,
+														});
+												}}
 												onVote={room.vote}
 												titleRef={resultTitleRef}
 												titleId={`${id}-winner`}

@@ -296,7 +296,8 @@ export function RoomFeedbackDetails({
 			</fieldset>
 			{!onBoard && mode === "results" && isHost && !readOnly && (
 				<p className="room-feedback-timing-note">
-					후보 편집이나 다음 게임으로 이동하면 투표가 마감돼요.
+					후보 편집을 열거나, 대기화면으로 이동하거나, 다시 뽑으면 투표가
+					마감돼요.
 				</p>
 			)}
 		</section>

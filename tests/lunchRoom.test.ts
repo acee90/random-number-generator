@@ -1362,6 +1362,12 @@ describe("room lifecycle and candidate protocol", () => {
 			},
 			{ type: "reset-exclusions", id: "reset-1", expectedRevision: 4 },
 			{ type: "start", id: "start-1", expectedRevision: 5, confirmReset: true },
+			{
+				type: "start",
+				id: "redraw",
+				expectedRevision: 6,
+				previousDrawId: "start-1",
+			},
 		]) {
 			expect(
 				client({
@@ -1428,6 +1434,7 @@ describe("room lifecycle and candidate protocol", () => {
 		{ type: "reset-exclusions", id: "reset-1" },
 		{ type: "start", id: "start-1", expectedRevision: -1 },
 		{ type: "start", id: "start-1", confirmReset: "yes" },
+		{ type: "start", id: "start-1", previousDrawId: "" },
 	])("rejects malformed or unversioned lifecycle commands %j", (command) => {
 		expect(client(command)).toBeNull();
 	});

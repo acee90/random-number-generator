@@ -18,7 +18,7 @@ import {
 import { picnic } from "@/components/features/picnic/palette";
 import RoomDrawFeedback from "@/components/features/RoomDrawFeedback";
 import RoomGameStage from "@/components/features/RoomGameStage";
-import RoomNextGameButton from "@/components/features/RoomNextGameButton";
+import RoomResultActions from "@/components/features/RoomResultActions";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import {
@@ -91,11 +91,20 @@ export function DrawViewPreview({
 	}, [finished]);
 
 	function start() {
-		if (guest || locked || !places.length || timer.current !== undefined)
+		if (
+			guest ||
+			pending ||
+			spinning ||
+			!places.length ||
+			timer.current !== undefined
+		)
 			return;
+		const nextRound = finished ? round + 1 : round;
+		setRound(nextRound);
+		setDraw(null);
 		setPending(true);
 		timer.current = setTimeout(() => {
-			setDraw(sampleRound(places, round, longName));
+			setDraw(sampleRound(places, nextRound, longName));
 			setPending(false);
 			timer.current = undefined;
 		}, 320);
@@ -191,7 +200,7 @@ export function DrawViewPreview({
 						options={modes}
 						value={mode}
 						onValueChange={setMode}
-						disabled={locked}
+						disabled={pending || spinning}
 						triggerRef={selectedMode}
 					/>
 				)}
@@ -221,13 +230,17 @@ export function DrawViewPreview({
 						mode="results"
 						onVote={vote}
 					/>
-					<div className="dv-next">
-						<RoomNextGameButton
-							disabled={false}
-							pending={false}
-							onClick={next}
-						/>
-					</div>
+					{!guest && (
+						<div className="dv-next">
+							<RoomResultActions
+								disabled={false}
+								canRedraw
+								nextPending={false}
+								onNext={next}
+								onRedraw={start}
+							/>
+						</div>
+					)}
 				</div>
 			) : mode !== "cards" ? (
 				<RoomGameStage
@@ -242,6 +255,7 @@ export function DrawViewPreview({
 					reducedMotion={reduced}
 					canNext
 					onNext={next}
+					onRedraw={start}
 					onVote={vote}
 					wheel={{
 						candidates: places,

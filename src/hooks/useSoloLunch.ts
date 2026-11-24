@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { parseClientMessage, type RoomSnapshot } from "@/lib/lunchRoom";
 import {
-	clearDisabledRoomExclusions,
-	visibleRoomExclusions,
-} from "@/lib/roomDrawMetadata";
+	canStartRoomDraw,
+	parseClientMessage,
+	type RoomSnapshot,
+} from "@/lib/lunchRoom";
+import { visibleRoomExclusions } from "@/lib/roomDrawMetadata";
 import {
 	advanceRoomRound,
 	applyRoomCommand,
+	beginRoomDraw,
 	castRoomVote,
 	type LifecycleCommand,
 	prepareRoomDraw,
@@ -140,13 +142,15 @@ export function useSoloLunch(
 		commit({ ...state, draw: result.draw });
 		return true;
 	};
-	const startDraw: Room["startDraw"] = ({ expectedRevision } = {}) => {
+	const startDraw: Room["startDraw"] = ({
+		expectedRevision,
+		previousDrawId,
+	} = {}) => {
 		const state = current.current;
 		if (
 			state.expiresAt <= Date.now() ||
-			(expectedRevision !== undefined && expectedRevision !== state.revision) ||
-			state.status !== "waiting" ||
-			state.draw
+			(expectedRevision !== undefined && expectedRevision !== revision()) ||
+			!canStartRoomDraw(state, previousDrawId)
 		)
 			return false;
 		const prepared = prepareRoomDraw(state, state.participants);
@@ -161,12 +165,8 @@ export function useSoloLunch(
 		const active = () =>
 			attempt.current === request && Date.now() < state.expiresAt;
 		setError("");
-		const fetching: RoomSnapshot = {
-			...state,
-			status: "fetching",
-			revision: revision() + 1,
-		};
-		clearDisabledRoomExclusions(fetching);
+		const fetching = { ...state };
+		beginRoomDraw(fetching);
 		commit(fetching);
 		void (async () => {
 			try {

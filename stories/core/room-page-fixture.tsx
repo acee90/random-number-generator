@@ -15,6 +15,8 @@ import {
 } from "@/lib/lunch";
 import {
 	type ChatMessage,
+	canChangeRoomDrawView,
+	canStartRoomDraw,
 	getEligibleRoomCandidates,
 	isRoomDrawVoter,
 	lunchRoomLimits,
@@ -30,6 +32,7 @@ import {
 	recordRoomDrawMetadata,
 	setRoomExcludeDrawn,
 } from "@/lib/roomDrawMetadata";
+import { advanceRoomRound, beginRoomDraw } from "@/lib/roomGame";
 import type { useLunchRoom as useServiceLunchRoom } from "../../src/hooks/useLunchRoom";
 import {
 	appendPreviewVote,
@@ -539,7 +542,7 @@ export function RoomPageFixtureProvider({
 		async updateDrawView(viewMode, expectedRevision) {
 			if (
 				!mutable() ||
-				current.current.snapshot.status !== "waiting" ||
+				!canChangeRoomDrawView(current.current.snapshot) ||
 				!revisionMatches(expectedRevision)
 			)
 				return false;
@@ -578,31 +581,25 @@ export function RoomPageFixtureProvider({
 			applySnapshot((value) => ({ ...value, excludedIds: [] }));
 			return true;
 		},
-		startDraw({ expectedRevision } = {}) {
+		startDraw({ expectedRevision, previousDrawId } = {}) {
 			const value = current.current;
 			const eligible = getEligibleRoomCandidates(value.snapshot);
 			if (
 				!mutable() ||
 				!revisionMatches(expectedRevision) ||
-				value.snapshot.status !== "waiting" ||
-				value.snapshot.draw !== null ||
+				!canStartRoomDraw(value.snapshot, previousDrawId) ||
 				eligible.length === 0
 			)
 				return false;
 			const requestedAt = Date.now();
+			const fetching = { ...value.snapshot };
+			beginRoomDraw(fetching);
 			commit((state) =>
 				appendMessage(
 					{
 						...state,
 						startPending: true,
-						snapshot: {
-							...state.snapshot,
-							...(state.snapshot.excludeDrawn
-								? {}
-								: { excludedIds: [], exclusionRecords: [] }),
-							status: "fetching",
-							draw: null,
-						},
+						snapshot: fetching,
 					},
 					systemMessage(
 						`방장이 ${eligible.length}곳 중 추첨을 시작했습니다.`,
@@ -694,25 +691,11 @@ export function RoomPageFixtureProvider({
 			const draw = current.current.snapshot.draw;
 			if (!options.isHost || !draw || draw.id !== drawId || !drawFinished(draw))
 				return false;
-			commit((value) => ({
-				...value,
-				snapshot: {
-					...value.snapshot,
-					...(value.snapshot.excludeDrawn
-						? {}
-						: { excludedIds: [], exclusionRecords: [] }),
-					draw: null,
-					status: editCandidates ? "editing" : "waiting",
-					...(editCandidates ? { intakeId: null } : {}),
-					revision: (value.snapshot.revision ?? 1) + 1,
-					history: value.snapshot.history.some((entry) => entry.id === drawId)
-						? value.snapshot.history
-						: [draw, ...value.snapshot.history].slice(
-								0,
-								lunchRoomLimits.maxHistory,
-							),
-				},
-			}));
+			commit((value) => {
+				const snapshot = { ...value.snapshot };
+				advanceRoomRound(snapshot, Boolean(editCandidates));
+				return { ...value, snapshot };
+			});
 			return true;
 		},
 		updateCandidates(ids) {

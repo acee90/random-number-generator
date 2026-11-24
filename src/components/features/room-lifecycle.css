@@ -20,6 +20,9 @@
 	flex-wrap: wrap;
 	gap: 8px;
 }
+.room-lifecycle-heading :is(.ui-combobox-trigger, .room-candidates-trigger) {
+	min-inline-size: 6.5rem;
+}
 .room-view-label {
 	color: var(--muted);
 	font-size: 0.875rem;
@@ -124,13 +127,6 @@
 .room-lifecycle-main {
 	min-inline-size: 0;
 }
-.room-candidate-count-badge {
-	padding: 1px 6px;
-	border-radius: 999px;
-	background: var(--accent);
-	font-size: 12px;
-	font-variant-numeric: tabular-nums;
-}
 .room-waiting-empty {
 	display: block;
 	padding: 10px 16px;
@@ -211,11 +207,9 @@
 	color: var(--muted);
 	margin: 0;
 }
-.room-options-dialog {
-	inline-size: min(760px, calc(100vw - 24px));
-	max-inline-size: 760px;
-	max-block-size: calc(100dvh - 24px);
-	overflow: auto;
+.room-guest-candidates {
+	padding: 12px 16px;
+	border-block-end: 1px solid var(--line);
 }
 .room-options-candidates {
 	display: grid;

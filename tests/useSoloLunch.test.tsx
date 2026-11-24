@@ -52,7 +52,7 @@ async function spin(result: ReturnType<typeof setup>["result"]) {
 	await act(async () => vi.advanceTimersByTime(lunchSpinDurationMs));
 }
 describe("local game controller", () => {
-	it("restores the slot view and its winner from the local room after voting and advancing", async () => {
+	it("persists the chosen result view and preserves the original slot winner and ballot in the archive", async () => {
 		const { result } = setup();
 		expect(result.current.room.snapshot.viewMode).toBe("slot-v1");
 		await spin(result);
@@ -62,11 +62,16 @@ describe("local game controller", () => {
 		act(() => {
 			expect(result.current.room.vote(draw.id, "up")).toBe(true);
 		});
+		const voted = readSoloRoom(roomId)?.snapshot.draw;
+		await act(async () => {
+			expect(await result.current.room.updateDrawView("wheel")).toBe(true);
+		});
+		expect(readSoloRoom(roomId)?.snapshot.draw).toEqual(voted);
 		act(() => {
 			expect(result.current.room.nextRound(draw.id)).toBe(true);
 		});
 		expect(readSoloRoom(roomId)?.snapshot).toMatchObject({
-			viewMode: "slot-v1",
+			viewMode: "wheel",
 			draw: null,
 			history: [
 				{

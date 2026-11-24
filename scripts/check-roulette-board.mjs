@@ -185,22 +185,28 @@ try {
 			await board.getByRole("heading", { name: "실시간 투표 현황" }).count(),
 			0,
 		);
-		assert.equal(
-			await board.getByText(/다음 게임으로 이동하면 투표가/).count(),
-			0,
-		);
-		const next = board.getByRole("button", { name: "다음 게임" });
-		const nextBox = await next.boundingBox(),
-			sheetBox = await board.locator(".picnic-sheet").boundingBox();
+		assert.equal(await board.getByText(/투표가 마감돼요/).count(), 0);
+		const next = board.getByRole("button", { name: "대기화면으로 이동" });
+		const redraw = board.getByRole("button", { name: "바로 다시 뽑기" });
+		const [nextBox, redrawBox, sheetBox] = await Promise.all([
+			next.boundingBox(),
+			redraw.boundingBox(),
+			board.locator(".picnic-sheet").boundingBox(),
+		]);
 		assert.ok(
-			nextBox.y >= sheetBox.y + sheetBox.height + 8 && nextBox.height >= 44,
-			`${width}px: the next game button must fit below both voter lists`,
+			nextBox.y >= sheetBox.y + sheetBox.height + 8 &&
+				nextBox.height >= 44 &&
+				redrawBox.height >= 44 &&
+				nextBox.y === redrawBox.y &&
+				nextBox.x + nextBox.width < redrawBox.x,
+			`${width}px: both round actions must fit side by side below voting`,
 		);
 		assert.ok(
 			Math.abs(
-				nextBox.x + nextBox.width / 2 - (sheetBox.x + sheetBox.width / 2),
+				(nextBox.x + redrawBox.x + redrawBox.width) / 2 -
+					(sheetBox.x + sheetBox.width / 2),
 			) <= 1,
-			`${width}px: the next game button must be centered`,
+			`${width}px: the two actions must be centered together`,
 		);
 		assert.equal(await board.getByText("아직 없어요").count(), 0);
 		for (const list of await board.getByRole("list").all()) {
@@ -317,7 +323,7 @@ try {
 			document.activeElement?.matches(".picnic-history-button"),
 		);
 
-		await board.getByRole("button", { name: "다음 게임" }).click();
+		await board.getByRole("button", { name: "대기화면으로 이동" }).click();
 		await idle.waitFor();
 		assert.equal((await board.boundingBox()).height, idleHeight);
 		console.log(`${width}px passed (board height: ${idleHeight}px)`);

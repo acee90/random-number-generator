@@ -2,45 +2,81 @@ import { LoaderCircle, Shuffle } from "lucide-react";
 import { memo, type RefObject } from "react";
 import { Button } from "@/components/ui/button";
 import type { LunchPlace } from "@/lib/lunch";
-import { getWheelLabels, type WheelLabel } from "./picnic/layout";
+import {
+	getWheelLabels,
+	layoutWheelLabels,
+	type WheelLabel,
+	wheelFaceRadius,
+} from "./picnic/layout";
 import "./lunch-wheel.css";
 
 type Phase = "idle" | "fetching" | "spinning" | "done";
 
 const wheelColors = ["#d6f266", "#edf2e3", "#ffffff", "#dce6c9"];
 const WheelFace = memo(
-	function WheelFace({ labels }: { labels: readonly WheelLabel[] }) {
-		const size = labels.length;
-		const labelFontSize =
-			size > 12 ? Math.min(14, (2 * Math.PI * 112) / size) : 18;
+	function WheelFace({
+		labels,
+		side,
+	}: {
+		labels: readonly WheelLabel[];
+		side: number;
+	}) {
+		const {
+			items,
+			badgeWidth,
+			badgeHeight,
+			numberSize,
+			showNames,
+			nameOffset,
+			nameSize,
+		} = layoutWheelLabels(labels, side);
 		return (
-			<svg viewBox="0 0 400 400" focusable="false" aria-hidden="true">
-				{labels.map((label, index) => {
-					const angle = ((index + 0.5) * 360) / size;
-					const radians = ((angle - 90) * Math.PI) / 180;
-					const radius = 188;
-					const flipped = angle > 180;
-					// Avoid SVG hydration differences between math engines.
-					const x = Number((200 + Math.cos(radians) * radius).toFixed(4));
-					const y = Number((200 + Math.sin(radians) * radius).toFixed(4));
-					return (
+			<svg
+				viewBox={`-${wheelFaceRadius} -${wheelFaceRadius} ${wheelFaceRadius * 2} ${wheelFaceRadius * 2}`}
+				focusable="false"
+				aria-hidden="true"
+			>
+				{items.map(({ label, x, y, rotation, nameOnRight }) => (
+					<g
+						key={label.id}
+						className="lunch-wheel-label"
+						transform={`translate(${x} ${y}) rotate(${rotation})`}
+						direction="ltr"
+					>
+						{showNames && (
+							<rect
+								x={-badgeWidth / 2}
+								y={-badgeHeight / 2}
+								width={badgeWidth}
+								height={badgeHeight}
+								rx={badgeHeight / 2}
+							/>
+						)}
 						<text
-							key={label.id}
-							x={x}
-							y={y}
-							textAnchor={flipped ? "start" : "end"}
+							className="lunch-wheel-number"
+							textAnchor="middle"
 							dominantBaseline="central"
-							style={{ fontSize: labelFontSize }}
-							transform={`rotate(${angle - 90 + (flipped ? 180 : 0)}, ${x}, ${y})`}
+							fontSize={numberSize}
 						>
-							{label.number} {label.name}
+							{label.number}
 						</text>
-					);
-				})}
+						{showNames && (
+							<text
+								x={nameOnRight ? nameOffset : -nameOffset}
+								textAnchor={nameOnRight ? "start" : "end"}
+								dominantBaseline="central"
+								fontSize={nameSize}
+							>
+								{label.name}
+							</text>
+						)}
+					</g>
+				))}
 			</svg>
 		);
 	},
 	(previous, next) =>
+		previous.side === next.side &&
 		previous.labels.length === next.labels.length &&
 		previous.labels.every(
 			(label, index) =>
@@ -53,6 +89,7 @@ const WheelFace = memo(
 export function LunchWheel({
 	candidates,
 	candidateNumbers,
+	wheelSide = 440,
 	rotation,
 	phase,
 	onComplete,
@@ -69,6 +106,7 @@ export function LunchWheel({
 }: {
 	candidates: readonly LunchPlace[];
 	candidateNumbers: readonly number[];
+	wheelSide?: number;
 	rotation: number;
 	phase: Phase;
 	onComplete: () => void;
@@ -115,7 +153,7 @@ export function LunchWheel({
 							onComplete();
 					}}
 				>
-					<WheelFace labels={labels} />
+					<WheelFace labels={labels} side={wheelSide} />
 				</div>
 			</div>
 			<Button

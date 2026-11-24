@@ -12,6 +12,8 @@ import type { DrawView } from "@/lib/drawView";
 import {
 	type ChatMessage,
 	type ClientMessage,
+	canChangeRoomDrawView,
+	canStartRoomDraw,
 	clampLunchRoomNickname,
 	isLunchRoomId,
 	isRoomDrawVoter,
@@ -1253,11 +1255,7 @@ export function useLunchRoom(
 	}
 	function updateDrawView(viewMode: DrawView, expectedRevision?: number) {
 		const current = snapshotRef.current;
-		if (
-			!selfRef.current?.isHost ||
-			current?.status !== "waiting" ||
-			current.draw
-		)
+		if (!selfRef.current?.isHost || !current || !canChangeRoomDrawView(current))
 			return Promise.resolve(false);
 		return requestMutation("draw-view", {
 			type: "draw-view",
@@ -1294,17 +1292,20 @@ export function useLunchRoom(
 	function startDraw({
 		confirmReset,
 		expectedRevision,
+		previousDrawId,
 	}: {
 		confirmReset?: boolean;
 		expectedRevision?: number;
+		previousDrawId?: string;
 	} = {}) {
 		const current = snapshotRef.current;
 		if (
 			!selfRef.current?.isHost ||
 			!current ||
 			hasPendingAction() ||
-			current.status !== "waiting" ||
-			current.draw !== null
+			!canStartRoomDraw(current, previousDrawId, serverNow()) ||
+			(previousDrawId !== undefined &&
+				voteRequestRef.current?.drawId === previousDrawId)
 		)
 			return false;
 		const requestId = actionId();
@@ -1312,6 +1313,7 @@ export function useLunchRoom(
 			!send({
 				type: "start",
 				id: requestId,
+				...(previousDrawId === undefined ? {} : { previousDrawId }),
 				...(expectedRevision !== undefined || current.revision !== undefined
 					? { expectedRevision: expectedRevision ?? current.revision }
 					: {}),

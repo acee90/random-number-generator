@@ -7,6 +7,7 @@ import {
 import {
 	type ClientMessage,
 	type CreateRoomInput,
+	canChangeRoomDrawView,
 	getEligibleRoomCandidates,
 	isRoomDrawVoter,
 	lunchRoomLimits,
@@ -89,13 +90,10 @@ export function validateRoomCommand(
 			message: "게임 조건이 바뀌었어요. 목록을 확인한 뒤 다시 진행해 주세요.",
 		};
 	}
-	if (
-		message.type === "draw-view" &&
-		(snapshot.status !== "waiting" || snapshot.draw)
-	) {
+	if (message.type === "draw-view" && !canChangeRoomDrawView(snapshot)) {
 		return {
 			code: "PHASE_CONFLICT",
-			message: "추첨 보기는 대기 중에 변경할 수 있습니다.",
+			message: "추첨 보기는 대기 화면이나 결과 화면에서 변경할 수 있습니다.",
 		};
 	}
 	if (message.type === "intake") {
@@ -373,10 +371,7 @@ export function getRoomArchiveDraws({
 		.slice(0, lunchRoomLimits.maxHistory);
 }
 
-export function advanceRoomRound(
-	snapshot: RoomSnapshot,
-	editCandidates: boolean,
-) {
+function archiveCurrentDraw(snapshot: RoomSnapshot) {
 	const draw = snapshot.draw;
 	if (draw && !snapshot.history.some((entry) => entry.id === draw.id)) {
 		snapshot.history = [structuredClone(draw), ...snapshot.history].slice(
@@ -386,6 +381,20 @@ export function advanceRoomRound(
 	}
 	clearDisabledRoomExclusions(snapshot);
 	snapshot.draw = null;
+}
+
+/** Archive the previous result together with the new start, in one persisted snapshot. */
+export function beginRoomDraw(snapshot: RoomSnapshot) {
+	archiveCurrentDraw(snapshot);
+	snapshot.status = "fetching";
+	snapshot.revision = (snapshot.revision ?? snapshot.listVersion) + 1;
+}
+
+export function advanceRoomRound(
+	snapshot: RoomSnapshot,
+	editCandidates: boolean,
+) {
+	archiveCurrentDraw(snapshot);
 	snapshot.status = editCandidates ? "editing" : "waiting";
 	if (editCandidates) snapshot.intakeId = null;
 	snapshot.revision = (snapshot.revision ?? snapshot.listVersion) + 1;

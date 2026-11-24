@@ -31,6 +31,7 @@ const voteArgs = () => ({
 	connected: true,
 	pending: false,
 	onNext: vi.fn(),
+	onRedraw: vi.fn(),
 	onVote: vi.fn(() => false),
 });
 

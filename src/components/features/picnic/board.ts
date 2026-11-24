@@ -1,5 +1,5 @@
 import { Container, Graphics, Text } from "pixi.js";
-import type { WheelLabel } from "./layout";
+import { layoutWheelLabels, type WheelLabel, wheelFaceRadius } from "./layout";
 import { picnic } from "./palette";
 
 const turn = 2 * Math.PI;
@@ -33,99 +33,65 @@ function boardLayer(stage: Container, side: number) {
 function lettering(
 	parent: Container,
 	value: string,
-	x: number,
-	y: number,
 	fontSize: number,
-	numeral = false,
+	x = 0,
+	anchorX = 0.5,
 ) {
 	const text = new Text({
 		text: value,
 		style: {
-			fontFamily: numeral ? "Georgia, serif" : fontFamily,
+			fontFamily,
 			fontSize,
 			fontWeight: "700",
 			fill: picnic.ink,
-			padding: 2,
+			padding: 1,
 		},
 		resolution: 3,
 	});
-	text.anchor.set(0.5);
-	text.position.set(x, y);
-	return parent.addChild(text);
+	text.anchor.set(anchorX, 0.5);
+	text.x = x;
+	parent.addChild(text);
 }
 
 function drawLabels(
 	board: Container,
 	labels: readonly WheelLabel[],
-	scale: number,
+	side: number,
 ) {
-	const step = turn / Math.max(1, labels.length);
-	const roomy = labels.length <= 6;
-	// In a dense wheel, print evenly spaced original numbers at a readable size.
-	// Every candidate still owns its full sector and appears in the room's candidate list.
-	const numberOnly = !roomy && step * 115 * scale < 12;
-	const visible = numberOnly
-		? Math.min(
-				labels.length,
-				Math.max(1, Math.floor((turn * 145 * scale) / 15)),
-			)
-		: labels.length;
-	for (let slot = 0; slot < visible; slot++) {
-		const index = Math.floor((slot * labels.length) / visible);
-		const { name, number } = labels[index];
-		const angle = top + (index + 0.5) * step;
-		const radius = roomy
-			? Math.abs(Math.sin(angle)) < 0.1
-				? 111
-				: 119
-			: numberOnly
-				? 145
-				: 116;
-		const x = radius * Math.cos(angle);
-		const y = radius * Math.sin(angle);
-		if (roomy) {
-			const badgeY = y - Math.max(14, 8 / scale);
-			const badgeRadius = Math.max(10.5, 6.5 / scale);
-			const badge = board.addChild(new Graphics());
-			badge
-				.circle(x, badgeY + 1.5, badgeRadius)
-				.fill(picnic.seam)
-				.circle(x, badgeY, badgeRadius)
-				.fill(0xfff5d7)
-				.stroke({ color: picnic.seam, width: 1.2 });
-			const token = lettering(
-				board,
-				String(number),
-				x,
-				badgeY,
-				badgeRadius * 1.32,
-				true,
+	const {
+		items,
+		badgeWidth,
+		badgeHeight,
+		numberSize,
+		showNames,
+		nameOffset,
+		nameSize,
+	} = layoutWheelLabels(labels, side);
+	for (const { label, x, y, rotation, nameOnRight } of items) {
+		const row = board.addChild(new Container());
+		row.position.set(x, y);
+		row.angle = rotation;
+		if (showNames) {
+			row
+				.addChild(new Graphics())
+				.roundRect(
+					-badgeWidth / 2,
+					-badgeHeight / 2,
+					badgeWidth,
+					badgeHeight,
+					badgeHeight / 2,
+				)
+				.fill(picnic.cream)
+				.stroke({ color: picnic.seam, width: 0.8 });
+			lettering(
+				row,
+				label.name,
+				nameSize,
+				nameOnRight ? nameOffset : -nameOffset,
+				nameOnRight ? 0 : 1,
 			);
-			if (token.width > badgeRadius * 1.65)
-				token.scale.set((badgeRadius * 1.65) / token.width);
-			const text = lettering(
-				board,
-				name,
-				x,
-				y + Math.max(14, 6 / scale),
-				Math.max(22, 12 / scale),
-			);
-			const maxWidth = Math.abs(Math.sin(angle)) < 0.1 ? 110 : 120;
-			if (text.width > maxWidth) text.scale.set(maxWidth / text.width);
-		} else {
-			const size = numberOnly
-				? Math.max(12, 10 / scale)
-				: Math.min(18, step * 92);
-			const text = lettering(
-				board,
-				numberOnly ? String(number) : `${number} ${name}`,
-				x,
-				y,
-				size,
-			);
-			if (text.width > 106) text.scale.set(106 / text.width);
-			text.rotation = angle + (Math.cos(angle) < 0 ? Math.PI : 0);
 		}
+		lettering(row, String(label.number), numberSize);
 	}
 }
 
@@ -169,12 +135,15 @@ export function drawWheel(
 	for (let i = 0; i < sectors; i++) {
 		const angle = top + i * step;
 		const color = picnic.slices[i % picnic.slices.length];
-		if (sectors === 1) face.circle(0, 0, 173).fill(color);
+		if (sectors === 1) face.circle(0, 0, wheelFaceRadius).fill(color);
 		else
 			face
 				.moveTo(0, 0)
-				.lineTo(173 * Math.cos(angle), 173 * Math.sin(angle))
-				.arc(0, 0, 173, angle, angle + step)
+				.lineTo(
+					wheelFaceRadius * Math.cos(angle),
+					wheelFaceRadius * Math.sin(angle),
+				)
+				.arc(0, 0, wheelFaceRadius, angle, angle + step)
 				.closePath()
 				.fill(color);
 	}
@@ -184,7 +153,7 @@ export function drawWheel(
 			y = Math.sin(angle);
 		face
 			.moveTo(0, 0)
-			.lineTo(173 * x, 173 * y)
+			.lineTo(wheelFaceRadius * x, wheelFaceRadius * y)
 			.stroke({ color: picnic.seam, width: sectors > 30 ? 0.65 : 1.4 });
 		if (sectors <= 12)
 			face
@@ -192,8 +161,8 @@ export function drawWheel(
 				.fill(picnic.cream)
 				.stroke({ color: picnic.seam, width: 1 });
 	}
-	face.circle(0, 0, 173).stroke({ color: picnic.ink, width: 1.8 });
-	drawLabels(board, labels, side / 440);
+	face.circle(0, 0, wheelFaceRadius).stroke({ color: picnic.ink, width: 1.8 });
+	drawLabels(board, labels, side);
 }
 
 export function drawTable(stage: Container, side: number) {

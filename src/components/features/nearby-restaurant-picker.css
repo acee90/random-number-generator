@@ -7,6 +7,9 @@
 	padding: 0;
 	overflow: hidden;
 }
+.ui-dialog-content.nearby-search-dialog:dir(rtl) {
+	translate: 50% -50%;
+}
 
 .nearby-search-dialog .ui-dialog-close {
 	min-inline-size: 44px;
@@ -16,7 +19,8 @@
 .nearby-search-header {
 	gap: 4px;
 	margin: 0;
-	padding: 16px 64px 12px 16px;
+	padding-block: 16px 12px;
+	padding-inline: 16px 64px;
 }
 .nearby-search-body {
 	display: grid;

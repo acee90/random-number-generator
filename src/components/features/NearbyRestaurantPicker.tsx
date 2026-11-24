@@ -1,6 +1,14 @@
-import { Check, Layers, ListPlus, LocateFixed, MapPin } from "lucide-react";
+import {
+	Check,
+	Layers,
+	ListPlus,
+	LoaderCircle,
+	LocateFixed,
+	MapPin,
+} from "lucide-react";
 import {
 	type ReactNode,
+	type RefObject,
 	useCallback,
 	useEffect,
 	useId,
@@ -22,6 +30,7 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { CandidateListItem } from "@/lib/candidateListDraft";
 import {
 	countCategories,
@@ -33,7 +42,10 @@ import {
 	restaurantsWithin,
 	seonjeongneungStation,
 } from "@/lib/nearbyRestaurants";
-import { getPublicNearbyRestaurants } from "@/services/publicNearbyRestaurants";
+import {
+	getPublicNearbyRestaurants,
+	getRestaurantIndex,
+} from "@/services/publicNearbyRestaurants";
 import NearbyRestaurantMap from "./NearbyRestaurantMap";
 import "./nearby-restaurant-picker.css";
 
@@ -55,7 +67,11 @@ type Load = {
 };
 const pageSize = 10;
 
-function SearchContents({ existingIds, onAdd }: SearchProps) {
+function SearchContents({
+	existingIds,
+	onAdd,
+	titleRef,
+}: SearchProps & { titleRef: RefObject<HTMLHeadingElement | null> }) {
 	const filtersId = useId();
 	const [center, setCenter] = useState(seonjeongneungStation);
 	const [userLocation, setUserLocation] = useState<MapPosition | null>(null);
@@ -103,6 +119,9 @@ function SearchContents({ existingIds, onAdd }: SearchProps) {
 		);
 	}, []);
 	useEffect(() => {
+		// Start the location-independent download while the permission prompt is open.
+		// The search below handles errors and retries once it knows the location.
+		void getRestaurantIndex().catch(() => {});
 		locate(true);
 		return () => {
 			locationAttempt.current += 1;
@@ -118,9 +137,15 @@ function SearchContents({ existingIds, onAdd }: SearchProps) {
 	const locating = location === "locating";
 	const hasCurrentData = loaded?.center === center;
 	useEffect(() => {
-		if (locating || dragging || hasCurrentData) return;
+		if (
+			location === "locating" ||
+			dragging ||
+			hasCurrentData ||
+			failedCenter === center
+		)
+			return;
 		const abort = new AbortController();
-		const timer = window.setTimeout(() => {
+		function search() {
 			void getPublicNearbyRestaurants(center, abort.signal)
 				.then((data) => {
 					if (abort.signal.aborted) return;
@@ -131,16 +156,19 @@ function SearchContents({ existingIds, onAdd }: SearchProps) {
 				.catch(() => {
 					if (!abort.signal.aborted) setFailedCenter(center);
 				});
-		}, 100);
+		}
+		let timer: number | undefined;
+		if (location === "pin") timer = window.setTimeout(search, 100);
+		else search();
 		return () => {
 			window.clearTimeout(timer);
 			abort.abort();
 		};
-	}, [center, locating, dragging, hasCurrentData]);
+	}, [center, location, dragging, hasCurrentData, failedCenter]);
 
 	const failed = !locating && !dragging && failedCenter === center;
-	const canAdd = !locating && !dragging && hasCurrentData;
-	const busy = !canAdd && !failed;
+	const ready = !locating && !dragging && hasCurrentData;
+	const busy = !ready && !failed;
 	const results = useMemo(
 		() =>
 			loaded
@@ -171,13 +199,11 @@ function SearchContents({ existingIds, onAdd }: SearchProps) {
 	const restaurantItems = nearbyCandidateItems(visible, existingIds);
 	const placesToAdd = restaurantItems;
 	const categoryItems = nearbyCategoryItems(categories, existingIds);
-	const status = dragging
-		? "핀 이동 중"
-		: failed && loaded
-			? "이전 위치 결과"
-			: loaded && busy && !locating
-				? "새 위치 검색 중"
-				: locationMessages[location];
+	const progress = dragging
+		? "지도를 놓으면 이 위치에서 검색해요."
+		: locating
+			? locationMessages.locating
+			: "주변 음식점을 찾는 중이에요.";
 
 	function select(value: string | null) {
 		setSelected((previous) => {
@@ -193,12 +219,27 @@ function SearchContents({ existingIds, onAdd }: SearchProps) {
 		setAddError(false);
 	}
 	function add(items: CandidateListItem[]) {
-		if (!canAdd) return;
+		if (!ready) return;
 		if (!onAdd(items)) setAddError(true);
 	}
 
 	return (
 		<>
+			<DialogHeader className="nearby-search-header">
+				<DialogTitle ref={titleRef} tabIndex={-1}>
+					주변 음식점
+				</DialogTitle>
+				<DialogDescription aria-live="polite" aria-atomic="true">
+					{busy && !dragging && (
+						<LoaderCircle
+							size={16}
+							className="me-2 inline-block align-text-bottom motion-safe:animate-spin"
+							aria-hidden="true"
+						/>
+					)}
+					{busy ? progress : "지도를 끌어 검색 위치를 바꾸세요."}
+				</DialogDescription>
+			</DialogHeader>
 			<div className="nearby-search-body">
 				<div className="nearby-search-map-pane">
 					<div className="nearby-search-toolbar">
@@ -244,7 +285,9 @@ function SearchContents({ existingIds, onAdd }: SearchProps) {
 						</Button>
 					</div>
 					<div className="nearby-map-caption">
-						<output>{status}</output>
+						{!locating && !dragging && (
+							<span>{locationMessages[location]}</span>
+						)}
 						<div className="nearby-source">
 							<span>음식점 출처</span>
 							<a
@@ -271,7 +314,8 @@ function SearchContents({ existingIds, onAdd }: SearchProps) {
 						<div className="nearby-result-summary">
 							<h3>음식점</h3>
 							<output aria-atomic="true">
-								{loaded && `${visible.length}곳 · 가까운 순`}
+								{(ready || visible.length > 0) &&
+									`${visible.length}곳 · ${ready ? "가까운 순" : "이전 위치 결과"}`}
 							</output>
 						</div>
 						{allTypes.length > 4 && (
@@ -299,19 +343,22 @@ function SearchContents({ existingIds, onAdd }: SearchProps) {
 							onSelect={select}
 						/>
 					)}
-					{!loaded && busy && (
-						<output className="nearby-search-empty">
-							{locating
-								? "현재 위치를 확인한 뒤 음식점을 표시해요."
-								: dragging
-									? "지도를 놓으면 이 위치에서 검색해요."
-									: "주변 음식점을 불러오는 중이에요."}
-						</output>
+					{busy && visible.length === 0 && (
+						<ul className="nearby-search-list" aria-hidden="true">
+							{[1, 2, 3].map((row) => (
+								<li key={row}>
+									<div>
+										<Skeleton className="h-4 w-28 motion-reduce:animate-none" />
+										<Skeleton className="h-3 w-44 max-w-full motion-reduce:animate-none" />
+									</div>
+								</li>
+							))}
+						</ul>
 					)}
 					{failed && (
 						<div className="nearby-search-empty">
 							<p role="alert">
-								{loaded
+								{visible.length > 0
 									? "새 위치의 음식점을 불러오지 못했어요. 이전 위치의 목록을 표시하고 있어요."
 									: "음식점 자료를 불러오지 못했어요."}
 							</p>
@@ -325,7 +372,7 @@ function SearchContents({ existingIds, onAdd }: SearchProps) {
 							</Button>
 						</div>
 					)}
-					{loaded && visible.length === 0 && (
+					{ready && visible.length === 0 && (
 						<p className="nearby-search-empty">
 							{selected.length
 								? "이 반경에는 선택한 카테고리의 음식점이 없어요."
@@ -379,7 +426,7 @@ function SearchContents({ existingIds, onAdd }: SearchProps) {
 				<div className="nearby-add-actions">
 					<Button
 						variant="outline"
-						disabled={!canAdd || !categoryItems.length}
+						disabled={!ready || !categoryItems.length}
 						onClick={() => add(categoryItems)}
 					>
 						<Layers size={16} aria-hidden="true" />
@@ -388,7 +435,7 @@ function SearchContents({ existingIds, onAdd }: SearchProps) {
 							: "카테고리 추가"}
 					</Button>
 					<Button
-						disabled={!canAdd || !placesToAdd.length}
+						disabled={!ready || !placesToAdd.length}
 						onClick={() => add(placesToAdd)}
 					>
 						<ListPlus size={17} aria-hidden="true" />
@@ -450,16 +497,9 @@ export function NearbyRestaurantDialog({
 					title.current?.focus();
 				}}
 			>
-				<DialogHeader className="nearby-search-header">
-					<DialogTitle ref={title} tabIndex={-1}>
-						주변 음식점
-					</DialogTitle>
-					<DialogDescription>
-						지도를 끌어 검색 위치를 바꾸세요.
-					</DialogDescription>
-				</DialogHeader>
 				{open && (
 					<SearchContents
+						titleRef={title}
 						existingIds={existingIds}
 						onAdd={(items) => {
 							if (!onAdd(items)) return false;

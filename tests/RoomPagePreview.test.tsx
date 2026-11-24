@@ -97,7 +97,7 @@ function expectWaitingCandidateCount(count: number) {
 	expect(document.querySelector(".room-current-candidates")).toBeNull();
 	expect(
 		screen.getByRole("button", {
-			name: "후보 보기",
+			name: "후보",
 			description: new RegExp(`이번 추첨 ${count}개$`),
 		}),
 	).toBeTruthy();
@@ -167,7 +167,7 @@ describe("Storybook room page with the local transport adapter", () => {
 		renderPage(true, "idle");
 		expect(screen.queryByRole("switch", { name: "후보 추천받기" })).toBeNull();
 		await act(async () => {
-			fireEvent.click(screen.getByRole("button", { name: "후보 편집" }));
+			fireEvent.click(screen.getByRole("button", { name: "후보" }));
 		});
 		await act(async () => {
 			fireEvent.click(screen.getByRole("switch", { name: "후보 추천받기" }));
@@ -244,7 +244,7 @@ describe("Storybook room page with the local transport adapter", () => {
 		).toBeNull();
 		act(() => vi.advanceTimersByTime(1));
 		expect(screen.getByText("0명 참여")).toBeTruthy();
-		fireEvent.click(screen.getByRole("button", { name: "다음 게임" }));
+		fireEvent.click(screen.getByRole("button", { name: "대기화면으로 이동" }));
 		expect(
 			screen.queryByRole("region", { name: "실시간 투표 현황" }),
 		).toBeNull();
@@ -261,7 +261,7 @@ describe("Storybook room page with the local transport adapter", () => {
 	it("acknowledges the host ballot before returning to waiting and freezes it in the archived round", () => {
 		renderPage(true, "result");
 		const next = screen.getByRole("button", {
-			name: "다음 게임",
+			name: "대기화면으로 이동",
 		});
 		expect(next.matches(":disabled")).toBe(false);
 		fireEvent.click(screen.getByRole("button", { name: "좋아요 투표" }));
@@ -298,7 +298,7 @@ describe("Storybook room page with the local transport adapter", () => {
 		).toBeNull();
 		expect(
 			within(archived).queryByRole("button", {
-				name: "다음 게임",
+				name: "대기화면으로 이동",
 			}),
 		).toBeNull();
 		expect(fetchRequest).not.toHaveBeenCalled();
@@ -353,18 +353,8 @@ describe("Storybook room page with the local transport adapter", () => {
 		expect(screen.queryByRole("checkbox", { name: /추첨 포함$/ })).toBeNull();
 		expectWaitingCandidateCount(12);
 		expect(screen.queryByRole("textbox", { name: "1번 후보 이름" })).toBeNull();
-		fireEvent.click(screen.getByRole("button", { name: "후보 보기" }));
-		const readonly = screen.getByRole("dialog", { name: "후보 보기" });
-		expect(within(readonly).getAllByRole("listitem")).toHaveLength(12);
-		expect(
-			within(readonly).queryByRole("button", { name: "변경 적용" }),
-		).toBeNull();
-		expect(
-			within(readonly).queryByRole("textbox", { name: "방 이름" }),
-		).toBeNull();
-		fireEvent.click(
-			within(readonly).getAllByRole("button", { name: "닫기" })[0],
-		);
+		expect(screen.queryByRole("button", { name: "후보 보기" })).toBeNull();
+		expect(screen.queryByRole("dialog")).toBeNull();
 		fireEvent.click(screen.getByRole("button", { name: "방 설정" }));
 		const options = screen.getByRole("dialog", { name: "방 설정" });
 		expect(
@@ -383,7 +373,7 @@ describe("Storybook room page with the local transport adapter", () => {
 			screen.getByRole("heading", { name: "다음 추첨 대기" }),
 		).toBeTruthy();
 		await act(async () => {
-			fireEvent.click(screen.getByRole("button", { name: "후보 편집" }));
+			fireEvent.click(screen.getByRole("button", { name: "후보" }));
 		});
 		expect(screen.getByRole("heading", { name: "후보 편집" })).toBeTruthy();
 		expect(screen.queryByRole("region", { name: /게임 옵션$/ })).toBeNull();
@@ -493,14 +483,16 @@ describe("Storybook room page with the local transport adapter", () => {
 		expect(
 			screen.getByRole("region", { name: "실시간 투표 현황" }),
 		).toBeTruthy();
-		expect(screen.getByRole("button", { name: "다음 게임" })).toBeTruthy();
+		expect(
+			screen.getByRole("button", { name: "대기화면으로 이동" }),
+		).toBeTruthy();
 		expect(
 			screen.getByRole("button", {
-				name: "후보 보기",
+				name: "후보",
 				description: /전체 후보 12개 중/,
 			}),
 		).toBeTruthy();
-		fireEvent.click(screen.getByRole("button", { name: "후보 편집" }));
+		fireEvent.click(screen.getByRole("button", { name: "후보" }));
 		expect(screen.getByRole("heading", { name: "후보 편집" })).toBeTruthy();
 		expect(
 			screen.queryByRole("region", { name: "실시간 투표 현황" }),
@@ -530,10 +522,12 @@ describe("Storybook room page with the local transport adapter", () => {
 		expect(
 			screen.getByRole("region", { name: "실시간 투표 현황" }),
 		).toBeTruthy();
-		expect(screen.getByRole("button", { name: "다음 게임" })).toBeTruthy();
+		expect(
+			screen.getByRole("button", { name: "대기화면으로 이동" }),
+		).toBeTruthy();
 		expect(
 			screen.getByRole("button", {
-				name: "후보 보기",
+				name: "후보",
 				description: /전체 후보 12개 중/,
 			}),
 		).toBeTruthy();
@@ -544,12 +538,19 @@ describe("Storybook room page with the local transport adapter", () => {
 		const switchForDrawn = () =>
 			screen.getByRole("switch", { name: "중복 없이 추첨 · 뽑힌 후보 제외" });
 		await act(async () => fireEvent.click(switchForDrawn()));
+		expect(
+			screen
+				.getByRole("button", { name: "바로 다시 뽑기" })
+				.matches(":disabled"),
+		).toBe(true);
 		await act(async () =>
-			fireEvent.click(screen.getByRole("button", { name: "다음 게임" })),
+			fireEvent.click(
+				screen.getByRole("button", { name: "대기화면으로 이동" }),
+			),
 		);
 		expectWaitingCandidateCount(0);
 		await act(async () =>
-			fireEvent.click(screen.getByRole("button", { name: "후보 편집" })),
+			fireEvent.click(screen.getByRole("button", { name: "후보" })),
 		);
 		expect(
 			screen.queryByRole("switch", { name: "중복 없이 추첨 · 뽑힌 후보 제외" }),
@@ -572,11 +573,15 @@ describe("Storybook room page with the local transport adapter", () => {
 				.getByRole("button", { name: "마지막 후보 확정" })
 				.matches(":disabled"),
 		).toBe(false);
-		fireEvent.click(screen.getByRole("button", { name: "후보 보기" }));
-		const candidates = screen.getByRole("dialog", { name: "후보 보기" });
+		await act(async () =>
+			fireEvent.click(screen.getByRole("button", { name: "후보" })),
+		);
+		const candidates = screen.getByRole("list", { name: "후보 편집 목록" });
 		expect(within(candidates).getAllByRole("listitem")).toHaveLength(1);
 		expect(
-			within(candidates).getByText(sampleLunchPlaces[0].name),
+			within(candidates).getByRole("button", {
+				name: `${sampleLunchPlaces[0].name} 이름 수정`,
+			}),
 		).toBeTruthy();
 		expect(fetchRequest).not.toHaveBeenCalled();
 	});
