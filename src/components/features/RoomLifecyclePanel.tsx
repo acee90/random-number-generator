@@ -230,11 +230,13 @@ export default function RoomLifecyclePanel({
 			: phase === "collecting"
 				? "후보 추천 접수 중"
 				: "접수 종료 · 목록 확인"
-		: showResult
-			? "추첨 결과"
-			: busy
-				? "추첨 진행 중"
-				: "다음 추첨 대기";
+		: viewMode === "slot-v1"
+			? "추첨"
+			: showResult
+				? "추첨 결과"
+				: busy
+					? "추첨 진행 중"
+					: "다음 추첨 대기";
 	// Inclusion is a game condition. A saved draft may predate the migration of
 	// legacy included flags, so always project that condition from the live room.
 	const currentById = new Map(

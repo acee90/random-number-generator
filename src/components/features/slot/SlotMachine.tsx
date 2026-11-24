@@ -1,5 +1,5 @@
 import {
-	Award,
+	Check,
 	ChevronLeft,
 	ChevronRight,
 	LoaderCircle,
@@ -9,6 +9,7 @@ import { type ReactElement, type RefObject, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { LunchPlace } from "@/lib/lunch";
 import type { RoomDraw } from "@/lib/lunchRoom";
+import type { BallotScene } from "../picnic/ballots";
 import { slotStrip } from "./motion";
 import { useSlotReel } from "./useSlotReel";
 import "./slot-machine.css";
@@ -23,7 +24,10 @@ type Props = {
 	host: boolean;
 	disabled: boolean;
 	onDraw: () => void;
-	resultActions: ReactElement | null;
+	result: BallotScene["result"];
+	voteMotionRound?: string;
+	showVoting: boolean;
+	children: ReactElement;
 	buttonRef: RefObject<HTMLButtonElement | null>;
 	buttonId: string;
 	titleRef?: RefObject<HTMLHeadingElement | null>;
@@ -40,7 +44,10 @@ export default function SlotMachine({
 	host,
 	disabled,
 	onDraw,
-	resultActions,
+	result,
+	voteMotionRound,
+	showVoting,
+	children,
 	buttonRef,
 	buttonId,
 	titleRef,
@@ -51,7 +58,6 @@ export default function SlotMachine({
 	const done = phase === "done";
 	const busy = phase === "fetching" || phase === "spinning";
 	const winner = draw?.winnerIndex;
-	const category = draw?.candidates[draw.winnerIndex]?.category;
 	const rows = useMemo(
 		() => slotStrip(count, preview, winner),
 		[count, preview, winner],
@@ -64,12 +70,12 @@ export default function SlotMachine({
 		duration: draw?.durationMs,
 		clockOffset,
 		reduced,
+		result,
+		voteMotionRound,
 	});
 
-	const browsing = phase === "idle" && count > 1;
-	const plaqueCategory = done && resultActions ? category : undefined;
 	const label = done
-		? "당첨 메뉴"
+		? "추첨 완료"
 		: phase === "spinning"
 			? "추첨 중"
 			: phase === "fetching"
@@ -77,14 +83,17 @@ export default function SlotMachine({
 				: "후보 미리보기";
 	const action = count === 1 ? "마지막 후보 확정" : "슬롯 돌리기";
 	return (
-		<div className="slot-machine" data-phase={phase}>
+		<div
+			className="slot-machine"
+			data-phase={phase}
+			data-voting={showVoting || undefined}
+			data-host={host || undefined}
+		>
 			<canvas className="slot-art" ref={canvasRef} inert />
 			<div className="slot-cabinet" ref={cabinetRef}>
 				<div className="slot-plaque">
 					<span className="slot-rule" aria-hidden="true" />
-					<span className="slot-plaque-label" title={plaqueCategory}>
-						{plaqueCategory ? `${label} · ${plaqueCategory}` : label}
-					</span>
+					<span className="slot-plaque-label">슬롯머신</span>
 					<span className="slot-rule" aria-hidden="true" />
 				</div>
 				<div className="slot-bezel">
@@ -92,13 +101,13 @@ export default function SlotMachine({
 						<div className="slot-strip">
 							{rows.map((index, slot) => {
 								const place = index === null ? undefined : candidates[index];
-								const landed = done && slot === landingRow + 1;
+								const landing = winner !== undefined && slot === landingRow + 1;
 								return (
 									<div
 										className="slot-row"
 										// biome-ignore lint/suspicious/noArrayIndexKey: Fixed positions on the drum outlive their labels.
 										key={slot}
-										aria-hidden={landed ? undefined : true}
+										aria-hidden={done && landing ? undefined : true}
 									>
 										{index !== null && place && (
 											<>
@@ -107,23 +116,16 @@ export default function SlotMachine({
 													{String(numbers[index] ?? index + 1).padStart(2, "0")}
 													<span className="sr-only">번</span>
 												</span>
-												{landed ? (
-													<>
-														<span
-															aria-hidden="true"
-															className="slot-name slot-name-measure"
-														>
-															{place.name}
-														</span>
-														<h3
-															className="slot-name"
-															tabIndex={-1}
-															ref={titleRef}
-															id={titleId}
-														>
-															{place.name}
-														</h3>
-													</>
+												{landing ? (
+													<h3
+														className="slot-name"
+														tabIndex={-1}
+														ref={done ? titleRef : undefined}
+														id={titleId}
+														title={done ? place.name : undefined}
+													>
+														{place.name}
+													</h3>
 												) : (
 													<span className="slot-name">{place.name}</span>
 												)}
@@ -137,30 +139,24 @@ export default function SlotMachine({
 					</div>
 				</div>
 				<div className="slot-controls">
-					{browsing && (
+					{count > 1 && (
 						<Button
 							size="icon"
 							variant="ghost"
 							aria-label="이전 후보"
+							disabled={phase !== "idle"}
 							onClick={() => setPreview((preview + count - 1) % count)}
 						>
 							<ChevronLeft aria-hidden="true" />
 						</Button>
 					)}
-					{done ? (
-						(resultActions ?? (
-							<div className="slot-outcome">
-								<Award aria-hidden="true" />
-								<span>{category}</span>
-							</div>
-						))
-					) : host ? (
+					{host ? (
 						<Button
 							id={buttonId}
 							ref={buttonRef}
 							className="slot-action"
 							size="lg"
-							disabled={disabled || busy || !count}
+							disabled={disabled || busy || done || !count}
 							aria-busy={busy}
 							onClick={onDraw}
 						>
@@ -169,21 +165,24 @@ export default function SlotMachine({
 									className="motion-safe:animate-spin"
 									aria-hidden="true"
 								/>
+							) : done ? (
+								<Check aria-hidden="true" />
 							) : (
 								<Shuffle aria-hidden="true" />
 							)}
-							{busy ? label : action}
+							{busy || done ? label : action}
 						</Button>
 					) : (
 						<span className="slot-wait">
-							{busy ? label : "방장의 추첨을 기다리는 중"}
+							{busy || done ? label : "방장의 추첨을 기다리는 중"}
 						</span>
 					)}
-					{browsing && (
+					{count > 1 && (
 						<Button
 							size="icon"
 							variant="ghost"
 							aria-label="다음 후보"
+							disabled={phase !== "idle"}
 							onClick={() => setPreview((preview + 1) % count)}
 						>
 							<ChevronRight aria-hidden="true" />
@@ -196,6 +195,7 @@ export default function SlotMachine({
 					</output>
 				)}
 			</div>
+			<div className="slot-reveal">{children}</div>
 		</div>
 	);
 }

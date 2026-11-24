@@ -6,7 +6,7 @@
 }
 .slot-stage-main {
 	position: relative;
-	padding: 66px clamp(8px, 3cqi, 24px) 18px;
+	padding: 66px clamp(8px, 3cqi, 24px) 0;
 }
 .slot-stage .picnic-sound {
 	inset-block-start: 8px;
@@ -18,7 +18,7 @@
 	border: 1px solid var(--paper-edge);
 }
 .slot-machine {
-	--row: clamp(48px, 11cqi, 66px);
+	--row: clamp(3rem, 11cqi, 4.125rem);
 	position: relative;
 	inline-size: min(100%, 500px);
 	margin-inline: auto;
@@ -27,7 +27,7 @@
 	position: absolute;
 	inset: 0;
 	inline-size: 100%;
-	block-size: calc(100% + 3px);
+	block-size: 100%;
 	visibility: hidden;
 	pointer-events: none;
 }
@@ -36,7 +36,7 @@
 		visibility: visible;
 	}
 	/* Native text and shadcn hit targets keep their layout, focus, and scroll behavior. */
-	.slot-art[data-painted] + .slot-cabinet {
+	.slot-art[data-painted] ~ :is(.slot-cabinet, .slot-reveal) {
 		opacity: 0;
 	}
 }
@@ -245,25 +245,27 @@
 .slot-controls button:disabled {
 	cursor: default;
 }
-.slot-controls [data-variant="ghost"],
-.slot-controls .room-result-actions {
+.slot-controls [data-variant="ghost"] {
 	--foreground: var(--slot-type);
 	--accent: var(--paper-green);
 }
-.slot-controls .room-result-actions {
-	--card: var(--slot-shell-dark);
-	--input: var(--slot-brass);
-}
 .slot-controls .slot-action {
-	min-inline-size: 8rem;
+	min-inline-size: min(8rem, 100%);
+	max-inline-size: 100%;
+	padding-inline: min(1rem, 16px);
+	padding-block: 0;
+	gap: min(0.5rem, 8px);
+	overflow-wrap: anywhere;
 }
-.slot-machine:not([data-phase="done"]) .slot-action:disabled {
-	opacity: 1;
-	color: var(--slot-highlight);
-	background: transparent;
-	border-color: transparent;
+.slot-controls [data-size="icon"] {
+	flex: none;
+	inline-size: 44px;
 }
-.slot-outcome,
+/* Reserve both 44px arrows and their 8px gaps for every phase. */
+.slot-controls:has([data-size="icon"]) :is(.slot-action, .slot-wait) {
+	inline-size: min(8rem, calc(100% - 104px));
+	min-inline-size: 0;
+}
 .slot-wait {
 	display: flex;
 	align-items: center;
@@ -271,71 +273,39 @@
 	gap: 8px;
 	color: var(--slot-highlight);
 	font-size: 0.875rem;
+	text-align: center;
 }
-.slot-outcome svg {
-	inline-size: 18px;
-}
-.slot-row h3,
-.slot-name-measure {
-	grid-area: 1 / 2;
-}
-.slot-name-measure,
-.slot-drum[data-full-name] .slot-row[aria-hidden="true"],
-.slot-drum[data-full-name]::after {
-	visibility: hidden;
-}
-/* Use the neighboring rows for a long winner while keeping the reel and its action in place. */
-.slot-drum[data-full-name] .slot-row {
-	grid-template-rows: minmax(0, 1fr);
-	border-color: transparent;
-}
-.slot-drum[data-full-name] h3 {
-	display: block;
-	max-block-size: calc(3 * var(--row) - 12px);
-	overflow-y: auto;
-	font-size: clamp(0.9375rem, 3.5cqi, 1.375rem);
-	line-height: 1.25;
-}
-.slot-drum[data-full-name] .slot-payline {
-	inset-block-start: 0;
-	block-size: 100%;
+.slot-reveal {
+	position: relative;
+	padding-block-start: 18px;
 }
 .slot-reveal .picnic-details {
-	--slot-vote-inset: 4px;
-	inline-size: min(calc(100% - 24px), 508px);
+	width: 100%;
+}
+.slot-machine[data-voting] .picnic-details {
 	min-block-size: calc(
-		var(--slot-vote-inset) +
 		var(--picnic-vote-sheet-height) +
-		var(--picnic-bottom-padding)
+		var(--picnic-bottom-padding) +
+		var(--slot-actions-height, 0px)
 	);
-	padding-inline: 4px;
-	padding-block-start: var(--slot-vote-inset);
 }
-@media (prefers-reduced-motion: no-preference) {
-	.slot-reveal[data-open] .picnic-details {
-		animation: slot-votes-open 340ms ease-out both;
-	}
-	.slot-machine[data-phase="done"] .slot-payline {
-		animation: slot-catch 420ms ease-out;
-	}
+.slot-machine[data-host] {
+	--slot-actions-height: calc(
+		var(--picnic-next-height) +
+		var(--picnic-footer-gap)
+	);
 }
-@keyframes slot-votes-open {
-	from {
-		opacity: 0;
-		transform: translateY(-8px);
-	}
-	to {
-		opacity: 1;
-		transform: none;
-	}
+.slot-reveal .picnic-sheet .room-result-actions {
+	margin-block-start: var(--picnic-footer-gap);
 }
-@keyframes slot-catch {
-	from {
-		box-shadow: inset 0 0 15px rgb(255 220 145 / 50%);
-	}
-	to {
-		box-shadow: inset 0 0 0 transparent;
-	}
+.slot-full-name {
+	display: none;
+	margin: 0 0 var(--picnic-summary-gap);
+	font-weight: 700;
+	overflow-wrap: anywhere;
+}
+.slot-machine[data-clipped-winner] .slot-full-name {
+	display: block;
 }
 @media (forced-colors: active) {
 	.slot-drum::after {

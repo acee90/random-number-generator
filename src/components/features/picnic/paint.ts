@@ -1,10 +1,11 @@
 import { Container } from "pixi.js";
 import { createBoardRenderer } from "../game-art/renderer";
+import { createBallots } from "./ballots";
 import { drawRim, drawTable, drawWheel } from "./board";
 import { drawDetails, observeDetails } from "./details";
 import { type StageScene, stageLayout } from "./layout";
 import { drawCloth, drawHub, drawSound, layer, pen } from "./stationery";
-import { drawBallot, drawTicket } from "./ticket";
+import { drawTicket } from "./ticket";
 
 export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 	const renderer = await createBoardRenderer(canvas);
@@ -24,14 +25,6 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 	// Clip the cached square texture to the disc, including its antialiased edge.
 	const discMask = pen(stage).circle(0, 0, 174.5).fill(0xffffff);
 	disc.mask = discMask;
-	const choices = ["up", "down"] as const;
-	const cards = { up: layer(ballots), down: layer(ballots) };
-	const ink: Partial<
-		Record<(typeof choices)[number], ReturnType<typeof drawBallot>>
-	> = {};
-	const pulses = new Map<(typeof choices)[number], number>();
-	let previousVotes: { round: string; up: number; down: number } | undefined;
-	let motionFrame = 0;
 	const keys = new Map<Container, string>();
 	const destroyChildren = { children: true, context: true, style: true };
 	let angle = 0;
@@ -45,49 +38,9 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 	);
 	let latestScene: StageScene | undefined;
 
-	function paintBallots(scene: StageScene) {
-		const votes = scene.result?.votes;
-		if (!votes || !detailsRoot) return;
-		const origin = canvas.getBoundingClientRect();
-		for (const choice of choices) {
-			const el = detailsRoot.querySelector<HTMLElement>(
-				`[data-hit="${choice}"]`,
-			);
-			if (!el) continue;
-			const rect = el.getBoundingClientRect();
-			const box = {
-				x: rect.left - origin.left,
-				y: rect.top - origin.top,
-				width: rect.width,
-				height: rect.height,
-			};
-			const focused = Boolean(el.querySelector(":focus-visible"));
-			const rtl = el.matches(":dir(rtl)");
-			update(
-				cards[choice],
-				[
-					box,
-					votes[choice],
-					votes.enabled,
-					votes.selected === choice,
-					scene.hover === choice,
-					scene.pressed === choice,
-					focused,
-					rtl,
-				],
-				() => {
-					ink[choice] = drawBallot(
-						cards[choice],
-						box,
-						scene,
-						choice,
-						focused,
-						rtl,
-					);
-				},
-			);
-		}
-	}
+	const voteCards = createBallots(ballots, canvas, detailsRoot, () =>
+		renderer.render({ container: stage }),
+	);
 
 	function refreshLayer(group: Container, root?: HTMLElement | null) {
 		for (const child of group.removeChildren()) child.destroy(destroyChildren);
@@ -106,25 +59,10 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 		});
 	}
 	const disconnectDetails = observeLayer(details, detailsRoot, () => {
-		if (latestScene) paintBallots(latestScene);
+		if (latestScene) voteCards.paint(latestScene);
 	});
 	const disconnectOptions = observeLayer(options, optionsRoot);
 	const disconnectPopup = observeLayer(popup, popupRoot);
-	function animateVotes(now: number) {
-		for (const [choice, start] of pulses) {
-			const glyph = ink[choice];
-			if (!glyph) continue;
-			const progress = Math.min(1, Math.max(0, (now - start) / 420));
-			const remaining = (1 - progress) ** 3;
-			cards[choice].scale.set(1 - 0.04 * remaining);
-			glyph.number.scale.set(glyph.numberScale * (1 + 0.42 * remaining));
-			glyph.stamp.scale.set(0.8 + 0.9 * (1 - remaining));
-			glyph.stamp.alpha = 0.85 * (1 - progress);
-			if (progress === 1) pulses.delete(choice);
-		}
-		renderer.render({ container: stage });
-		motionFrame = pulses.size ? requestAnimationFrame(animateVotes) : 0;
-	}
 	function update(
 		group: Container,
 		values: unknown,
@@ -145,11 +83,11 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 		paint(scene: StageScene, width: number, height: number) {
 			latestScene = scene;
 			const resolution = Math.min(window.devicePixelRatio || 1, 2);
-			if (
+			const resized =
 				width !== renderer.screen.width ||
 				height !== renderer.screen.height ||
-				resolution !== renderer.resolution
-			) {
+				resolution !== renderer.resolution;
+			if (resized) {
 				renderer.resize(width, height, resolution);
 				keys.clear();
 				dirty = true;
@@ -169,42 +107,13 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 				hub.visible =
 					!result;
 			ticket.visible = Boolean(result);
-			ballots.visible = Boolean(result?.votes);
-			const round = scene.voteMotionRound;
-			if (!round || round !== previousVotes?.round) {
-				if (pulses.size) dirty = true;
-				pulses.clear();
-				cancelAnimationFrame(motionFrame);
-				motionFrame = 0;
-				for (const choice of choices) {
-					cards[choice].scale.set(1);
-					const art = ink[choice];
-					if (art) {
-						art.stamp.alpha = 0;
-						art.number.scale.set(art.numberScale);
-					}
-				}
-			}
+			if (voteCards.paint(scene, resized)) dirty = true;
 			if (result) {
 				update(
 					ticket,
 					[result.name, result.category, result.number, layout.ticketTop],
 					() => drawTicket(ticket, layout, result),
 				);
-				const votes = result.votes;
-				if (votes) {
-					paintBallots(scene);
-					for (const choice of choices) {
-						if (
-							round &&
-							previousVotes?.round === round &&
-							votes[choice] > previousVotes[choice]
-						) {
-							pulses.set(choice, performance.now());
-						}
-					}
-					if (pulses.size && !motionFrame) animateVotes(performance.now());
-				}
 			} else {
 				update(
 					rim,
@@ -255,10 +164,6 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 				if (scene.wheel.phase !== "spinning") angle = 0;
 				rotor.rotation = angle;
 			}
-			previousVotes =
-				round && result?.votes
-					? { round, up: result.votes.up, down: result.votes.down }
-					: undefined;
 			const rtl = canvas.matches(":dir(rtl)");
 			update(
 				sound,
@@ -279,7 +184,7 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 			disconnectDetails?.();
 			disconnectOptions?.();
 			disconnectPopup?.();
-			cancelAnimationFrame(motionFrame);
+			voteCards.destroy();
 			stage.destroy(destroyChildren);
 			renderer.destroy();
 		},

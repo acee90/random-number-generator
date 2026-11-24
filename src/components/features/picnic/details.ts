@@ -8,9 +8,10 @@ export function drawDetails(
 	parent: Container,
 	root: HTMLElement,
 	canvas: HTMLCanvasElement,
+	resolution?: number,
 ) {
 	const origin = canvas.getBoundingClientRect();
-	const print = createTextPrinter(origin);
+	const print = createTextPrinter(origin, resolution);
 	const hover = window.matchMedia("(hover: hover)").matches;
 	function visit(el: Element, group: Container, clip?: DOMRect) {
 		if (el.matches(".sr-only, [hidden], legend, [data-hit]")) return;

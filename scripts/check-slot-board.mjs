@@ -48,6 +48,25 @@ const frame = (page) =>
 			),
 	);
 
+// Sample the paper inside the native vote target, directly from the single Pixi canvas.
+function paintedVote() {
+	const canvas = document.querySelector(".slot-art[data-painted]");
+	const target = document.querySelector('.slot-reveal [data-hit="up"]');
+	if (!canvas || !target) return false;
+	const box = canvas.getBoundingClientRect();
+	const card = target.getBoundingClientRect();
+	const scale = canvas.width / box.width;
+	const x = Math.floor((card.left - box.left + 8) * scale);
+	const y = Math.floor((card.top - box.top + 8) * scale);
+	if (
+		card.top <=
+			document.querySelector(".slot-cabinet").getBoundingClientRect().bottom ||
+		y >= canvas.height
+	)
+		return false;
+	return canvas.getContext("2d").getImageData(x, y, 1, 1).data[3] > 245;
+}
+
 try {
 	const host = await browser.newPage({
 		locale: "ko-KR",
@@ -66,7 +85,7 @@ try {
 			candidateIds: [],
 			candidates: Array.from({ length: 200 }, (_, i) => ({
 				id: `menu-${i}`,
-				name: `${["비빔밥", "들기름 막국수", "김치찌개"][i % 3]} ${i + 1}`,
+				name: `${["비빔밥", "들기름 막국수", "김치찌개"][i % 3]} ${i + 1} · 제철 채소와 직접 담근 장으로 준비한 한 상, 갓 지은 밥과 오늘의 국과 반찬을 함께 내는 점심 정식`,
 				category: "점심",
 			})),
 		},
@@ -107,6 +126,9 @@ try {
 	const reduced = await guest.evaluate(readLetters);
 	const idle = await host.evaluate(readLetters);
 	const spin = button(host, "슬롯 돌리기");
+	const canvas = await painted(host).elementHandle();
+	const spinTarget = await spin.elementHandle();
+	const drumBox = await host.locator(".slot-drum").boundingBox();
 	await spin.press("Enter");
 	const spinning = host.locator('.slot-machine[data-phase="spinning"]');
 	await spinning.waitFor();
@@ -138,6 +160,28 @@ try {
 	const result = host.locator('.slot-machine[data-phase="done"] h3');
 	await result.waitFor();
 	const winner = await result.textContent();
+	await host.waitForFunction(paintedVote);
+	assert.ok(await host.locator(".slot-machine[data-clipped-winner]").count());
+	assert.equal(await host.locator(".slot-full-name").innerText(), winner);
+	assert.ok(
+		await canvas.evaluate(
+			(el) => el === document.querySelector(".slot-art[data-painted]"),
+		),
+	);
+	assert.ok(
+		await spinTarget.evaluate(
+			(el) => el === document.querySelector(".slot-action") && el.disabled,
+		),
+	);
+	assert.deepEqual(await host.locator(".slot-drum").boundingBox(), drumBox);
+	assert.equal(
+		await host
+			.locator(".slot-reveal")
+			.evaluate((el) => getComputedStyle(el).opacity),
+		"0",
+	);
+	assert.equal(await host.locator(".picnic-ticket").count(), 0);
+	assert.ok(await button(host, "다음 후보").isDisabled());
 	const guestResult = guest.locator('.slot-machine[data-phase="done"] h3');
 	await guestResult.waitFor();
 	assert.equal(await guestResult.textContent(), winner);
@@ -147,6 +191,12 @@ try {
 	);
 	await button(guest, "좋아요 투표").click();
 	await host.getByRole("heading", { name: "좋아요 1", exact: true }).waitFor();
+	assert.equal(await result.textContent(), winner);
+	assert.ok(await guest.evaluate(paintedVote));
+	assert.equal(
+		await button(guest, "좋아요 투표").getAttribute("aria-pressed"),
+		"true",
+	);
 	await host.emulateMedia({ forcedColors: "active" });
 	await painted(host).waitFor({ state: "hidden" });
 	assert.equal(
@@ -156,6 +206,12 @@ try {
 		"1",
 	);
 	assert.equal(await result.textContent(), winner);
+	assert.equal(
+		await host
+			.locator(".slot-reveal")
+			.evaluate((el) => getComputedStyle(el).opacity),
+		"1",
+	);
 	await host.emulateMedia({ forcedColors: "none" });
 	await painted(host).waitFor();
 	await button(host, "대기화면으로 이동").press("Enter");
@@ -165,7 +221,7 @@ try {
 		true,
 	);
 	console.log(
-		"Passed: painted labels and motion, 320/597/1280px, keyboard, reduced motion, rejoin, voting, high contrast and next round.",
+		"Passed: same canvas, fixed reel and controls, painted voting below the winner, 320/597/1280px, keyboard, reduced motion, rejoin, high contrast and next round.",
 	);
 } finally {
 	await browser.close();

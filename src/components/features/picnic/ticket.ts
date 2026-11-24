@@ -178,7 +178,7 @@ export type BallotBox = { x: number; y: number; width: number; height: number };
 export function drawBallot(
 	card: Container,
 	box: BallotBox,
-	scene: StageScene,
+	scene: Pick<StageScene, "result" | "hover" | "pressed">,
 	choice: VoteChoice,
 	focused: boolean,
 	rtl: boolean,
