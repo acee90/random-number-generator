@@ -19,12 +19,29 @@
 }
 .slot-machine {
 	--row: clamp(48px, 11cqi, 66px);
-	display: grid;
-	justify-items: center;
+	position: relative;
+	inline-size: min(100%, 500px);
+	margin-inline: auto;
+}
+.slot-art {
+	position: absolute;
+	inset: 0;
+	inline-size: 100%;
+	block-size: calc(100% + 3px);
+	visibility: hidden;
+	pointer-events: none;
+}
+@media (forced-colors: none) {
+	.slot-art[data-painted] {
+		visibility: visible;
+	}
+	/* Native text and shadcn hit targets keep their layout, focus, and scroll behavior. */
+	.slot-art[data-painted] + .slot-cabinet {
+		opacity: 0;
+	}
 }
 .slot-cabinet {
 	position: relative;
-	inline-size: min(100%, 500px);
 	min-inline-size: 0;
 	padding: 12px clamp(12px, 4cqi, 28px) 8px;
 	isolation: isolate;
@@ -188,17 +205,13 @@
 	word-break: keep-all;
 	overflow-wrap: anywhere;
 }
-.slot-etching,
 .slot-payline {
 	position: absolute;
 	inset: 0;
-	inline-size: 100%;
-	block-size: 100%;
-	pointer-events: none;
-}
-.slot-payline {
 	inset-block-start: var(--row);
+	inline-size: 100%;
 	block-size: var(--row);
+	pointer-events: none;
 	border-block: 1px solid var(--slot-brass);
 	background: linear-gradient(
 		90deg,
@@ -268,7 +281,6 @@
 }
 .slot-name-measure,
 .slot-drum[data-full-name] .slot-row[aria-hidden="true"],
-.slot-drum[data-full-name] .slot-etching,
 .slot-drum[data-full-name]::after {
 	visibility: hidden;
 }
@@ -326,7 +338,6 @@
 	}
 }
 @media (forced-colors: active) {
-	.slot-etching,
 	.slot-drum::after {
 		display: none;
 	}

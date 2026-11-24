@@ -1,6 +1,5 @@
-import { CanvasRenderer, Container } from "pixi.js";
-import "pixi.js/graphics";
-import "pixi.js/text";
+import { Container } from "pixi.js";
+import { createBoardRenderer } from "../game-art/renderer";
 import { drawRim, drawTable, drawWheel } from "./board";
 import { drawDetails, observeDetails } from "./details";
 import { type StageScene, stageLayout } from "./layout";
@@ -8,20 +7,7 @@ import { drawCloth, drawHub, drawSound, layer, pen } from "./stationery";
 import { drawBallot, drawTicket } from "./ticket";
 
 export async function createPicnicPainter(canvas: HTMLCanvasElement) {
-	const renderer = new CanvasRenderer();
-	try {
-		await renderer.init({
-			canvas,
-			width: 1,
-			height: 1,
-			backgroundAlpha: 0,
-			skipExtensionImports: true,
-			gcActive: false,
-		});
-	} catch (error) {
-		renderer.destroy();
-		throw error;
-	}
+	const renderer = await createBoardRenderer(canvas);
 	const stage = new Container();
 	const cloth = layer(stage),
 		rim = layer(stage),

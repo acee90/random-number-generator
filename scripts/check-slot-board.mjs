@@ -1,0 +1,172 @@
+// Run against the local app. The canvas must contain the labels even when the native reel is still.
+import assert from "node:assert/strict";
+import { chromium } from "playwright-core";
+
+const origin = new URL(process.argv[2] ?? "http://localhost:3000").origin;
+const browser = await chromium.launch(
+	process.env.CHROME_PATH
+		? { executablePath: process.env.CHROME_PATH }
+		: { channel: "chrome" },
+);
+
+// Read just the light-colored lettering in the center row, away from the borders and brass marks.
+function readLetters() {
+	const canvas = document.querySelector(".slot-art[data-painted]");
+	const drum = document.querySelector(".slot-drum").getBoundingClientRect();
+	const box = canvas.getBoundingClientRect();
+	const scale = canvas.width / box.width;
+	const pixels = canvas
+		.getContext("2d")
+		.getImageData(
+			Math.ceil((drum.left - box.left + 40) * scale),
+			Math.ceil((drum.top - box.top + drum.height / 3 + 2) * scale),
+			Math.floor((drum.width - 80) * scale),
+			Math.floor((drum.height / 3 - 4) * scale),
+		).data;
+	let hash = 0,
+		count = 0;
+	for (let p = 0; p < pixels.length; p += 4) {
+		if (pixels[p] < 190 || pixels[p + 1] < 155 || pixels[p + 2] < 110) continue;
+		hash = (Math.imul(hash, 31) + p) >>> 0;
+		count++;
+	}
+	return { hash, count };
+}
+
+async function join(page, path, name) {
+	await page.goto(new URL(path, origin).href);
+	await page.getByRole("textbox", { name: "닉네임" }).fill(name);
+	await page.getByRole("button", { name: "입장하기" }).click();
+}
+const painted = (page) => page.locator("canvas.slot-art[data-painted]");
+const button = (page, name) => page.getByRole("button", { name, exact: true });
+const frame = (page) =>
+	page.evaluate(
+		() =>
+			new Promise((resolve) =>
+				requestAnimationFrame(() => requestAnimationFrame(resolve)),
+			),
+	);
+
+try {
+	const host = await browser.newPage({
+		locale: "ko-KR",
+		viewport: { width: 1280, height: 900 },
+	});
+	const guest = await browser.newPage({
+		locale: "ko-KR",
+		viewport: { width: 320, height: 800 },
+		reducedMotion: "reduce",
+	});
+	const created = await host.request.post(`${origin}/api/lunch/rooms`, {
+		headers: { Origin: origin },
+		data: {
+			title: "슬롯머신 동작 확인",
+			hostName: "방장",
+			candidateIds: [],
+			candidates: Array.from({ length: 200 }, (_, i) => ({
+				id: `menu-${i}`,
+				name: `${["비빔밥", "들기름 막국수", "김치찌개"][i % 3]} ${i + 1}`,
+				category: "점심",
+			})),
+		},
+	});
+	assert.equal(created.status(), 201);
+	const { roomId, hostToken, joinPath } = await created.json();
+	await host.addInitScript(
+		({ roomId, hostToken }) =>
+			localStorage.setItem(`randomlab:lunch-room-host:${roomId}`, hostToken),
+		{ roomId, hostToken },
+	);
+	await join(host, joinPath, "방장");
+	await join(guest, joinPath, "참가자");
+	await button(host, "마감").click();
+	await Promise.all([painted(host).waitFor(), painted(guest).waitFor()]);
+
+	for (const width of [320, 597, 1280]) {
+		await host.setViewportSize({ width, height: 900 });
+		await frame(host);
+		const idle = await host.evaluate(readLetters);
+		assert.ok(
+			idle.count > 40,
+			`${width}px: the canvas must contain the center label`,
+		);
+		assert.equal(
+			await host
+				.locator(".slot-cabinet")
+				.evaluate((el) => getComputedStyle(el).opacity),
+			"0",
+		);
+		await button(host, "다음 후보").press("Enter");
+		await frame(host);
+		assert.notEqual((await host.evaluate(readLetters)).hash, idle.hash);
+		await button(host, "이전 후보").press("Space");
+		await frame(host);
+		assert.equal((await host.evaluate(readLetters)).hash, idle.hash);
+	}
+	const reduced = await guest.evaluate(readLetters);
+	const idle = await host.evaluate(readLetters);
+	const spin = button(host, "슬롯 돌리기");
+	await spin.press("Enter");
+	const spinning = host.locator('.slot-machine[data-phase="spinning"]');
+	await spinning.waitFor();
+	const busy = spinning.getByRole("button", { name: "추첨 중" });
+	assert.ok(await busy.isDisabled());
+	assert.equal(await busy.getAttribute("aria-busy"), "true");
+	const strip = spinning.locator(".slot-strip");
+	const nativePosition = await strip.evaluate((el) => el.style.transform);
+	const deadline = Date.now() + 4500;
+	let moving = await host.evaluate(readLetters);
+	while (moving.hash === idle.hash && Date.now() < deadline) {
+		await frame(host);
+		moving = await host.evaluate(readLetters);
+	}
+	assert.notEqual(
+		moving.hash,
+		idle.hash,
+		"Pixi must move the reel before the result is revealed",
+	);
+	assert.equal(
+		await strip.evaluate((el) => el.style.transform),
+		nativePosition,
+	);
+	assert.equal((await guest.evaluate(readLetters)).hash, reduced.hash);
+	assert.equal(await button(guest, "좋아요 투표").count(), 0);
+	await guest.reload();
+	await button(guest, "입장하기").click();
+	await painted(guest).waitFor();
+	const result = host.locator('.slot-machine[data-phase="done"] h3');
+	await result.waitFor();
+	const winner = await result.textContent();
+	const guestResult = guest.locator('.slot-machine[data-phase="done"] h3');
+	await guestResult.waitFor();
+	assert.equal(await guestResult.textContent(), winner);
+	assert.equal(
+		await result.evaluate((el) => document.activeElement === el),
+		true,
+	);
+	await button(guest, "좋아요 투표").click();
+	await host.getByRole("heading", { name: "좋아요 1", exact: true }).waitFor();
+	await host.emulateMedia({ forcedColors: "active" });
+	await painted(host).waitFor({ state: "hidden" });
+	assert.equal(
+		await host
+			.locator(".slot-cabinet")
+			.evaluate((el) => getComputedStyle(el).opacity),
+		"1",
+	);
+	assert.equal(await result.textContent(), winner);
+	await host.emulateMedia({ forcedColors: "none" });
+	await painted(host).waitFor();
+	await button(host, "대기화면으로 이동").press("Enter");
+	await spin.waitFor();
+	assert.equal(
+		await spin.evaluate((el) => document.activeElement === el),
+		true,
+	);
+	console.log(
+		"Passed: painted labels and motion, 320/597/1280px, keyboard, reduced motion, rejoin, voting, high contrast and next round.",
+	);
+} finally {
+	await browser.close();
+}
