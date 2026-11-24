@@ -370,7 +370,7 @@ describe("Storybook room page with the local transport adapter", () => {
 				.matches(":disabled"),
 		).toBe(false);
 		expect(
-			screen.getByRole("heading", { name: "다음 추첨 대기" }),
+			screen.getByRole("heading", { name: "추첨", exact: true }),
 		).toBeTruthy();
 		await act(async () => {
 			fireEvent.click(screen.getByRole("button", { name: "후보" }));
@@ -562,7 +562,7 @@ describe("Storybook room page with the local transport adapter", () => {
 			fireEvent.click(screen.getByRole("button", { name: "마감" })),
 		);
 		expect(
-			screen.getByRole("heading", { name: "다음 추첨 대기" }),
+			screen.getByRole("heading", { name: "추첨", exact: true }),
 		).toBeTruthy();
 		expectWaitingCandidateCount(0);
 		expect(switchForDrawn().getAttribute("aria-checked")).toBe("true");

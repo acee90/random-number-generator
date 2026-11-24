@@ -97,10 +97,11 @@ describe("shared solo game screen", () => {
 		expect(screen.queryByRole("textbox", { name: /메시지/ })).toBeNull();
 		expect(screen.queryByRole("button", { name: "룰렛·결과" })).toBeNull();
 	});
-	it("opens with the slot and replaces spin with the next game above voting", async () => {
+	it("keeps the stopped slot in place and puts the next round actions below the votes", async () => {
 		renderRoom();
 		const spin = screen.getByRole("button", { name: "슬롯 돌리기" });
 		const controls = spin.parentElement;
+		const canvas = controls?.closest(".slot-machine")?.querySelector("canvas");
 		expect(controls?.closest(".slot-cabinet")).toBeTruthy();
 		expect(
 			screen.queryByRole("button", { name: "대기화면으로 이동" }),
@@ -113,14 +114,18 @@ describe("shared solo game screen", () => {
 		const next = screen.getByRole("button", {
 			name: "대기화면으로 이동",
 		});
-		expect(controls?.contains(next)).toBe(true);
+		expect(screen.getByRole("button", { name: "추첨 완료" })).toBe(spin);
+		expect(spin.hasAttribute("disabled")).toBe(true);
+		expect(controls?.closest(".slot-machine")?.querySelector("canvas")).toBe(
+			canvas,
+		);
+		const sheet = up.closest(".picnic-sheet");
+		expect(sheet?.contains(next)).toBe(true);
 		expect(
-			controls?.contains(
-				screen.getByRole("button", { name: "바로 다시 뽑기" }),
-			),
+			sheet?.contains(screen.getByRole("button", { name: "바로 다시 뽑기" })),
 		).toBe(true);
 		expect(
-			next.compareDocumentPosition(up) & Node.DOCUMENT_POSITION_FOLLOWING,
+			up.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING,
 		).toBeTruthy();
 		next.focus();
 		fireEvent.click(next);

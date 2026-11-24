@@ -148,12 +148,23 @@ export default function RoomGameStage({
 				onRedraw={onRedraw}
 			/>
 		) : null;
+	const voteMotionRound =
+		result?.votes && voting.connected && !voting.readOnly && !reducedMotion
+			? draw?.id
+			: undefined;
+	const fullSlotName = slot && result && (
+		<p className="slot-full-name" aria-hidden="true">
+			{result.name}
+		</p>
+	);
 	const details = (
 		<div className="picnic-details">
-			{result?.votes && draw && (
+			{result?.votes && draw ? (
 				<div className="picnic-sheet">
+					{fullSlotName}
 					<span className="picnic-participation">
-						{result.votes.up + result.votes.down}명 참여
+						{slot && result.category && `${result.category} · `}
+						<span>{result.votes.up + result.votes.down}명 참여</span>
 					</span>
 					<RoomFeedbackDetails
 						draw={draw}
@@ -164,9 +175,12 @@ export default function RoomGameStage({
 						onBoard
 						reducedMotion={reducedMotion}
 					/>
+					{slot && resultActions}
 				</div>
+			) : (
+				fullSlotName
 			)}
-			{!slot && resultActions}
+			{(!slot || !result?.votes) && resultActions}
 		</div>
 	);
 	const options = exclusion && <RoomExclusionPanel {...exclusion} />;
@@ -192,21 +206,17 @@ export default function RoomGameStage({
 							host={isHost}
 							disabled={wheel.covered || wheel.canDraw === false}
 							onDraw={wheel.onDraw}
-							resultActions={resultActions}
+							result={result}
+							voteMotionRound={voteMotionRound}
+							showVoting={showVoting}
 							buttonRef={wheel.buttonRef}
 							buttonId={wheel.buttonId}
 							titleRef={titleRef}
 							titleId={headingId}
-						/>
-					</div>
-					{showVoting && (
-						<div
-							className="slot-reveal"
-							data-open={Boolean(result) || undefined}
 						>
 							{details}
-						</div>
-					)}
+						</SlotMachine>
+					</div>
 				</section>
 			</div>
 		);
@@ -222,10 +232,7 @@ export default function RoomGameStage({
 					: (wheel.drawText ?? "돌리기");
 	const scene: StageScene = {
 		mainHeight: size.mainHeight,
-		voteMotionRound:
-			result?.votes && voting.connected && !voting.readOnly && !reducedMotion
-				? draw?.id
-				: undefined,
+		voteMotionRound,
 		sound: sound && { enabled: sound.enabled, supported: sound.supported },
 		wheel: {
 			labels:

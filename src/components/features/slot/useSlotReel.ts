@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
+import type { BallotScene } from "../picnic/ballots";
 import { slotMotion, slotStripOffset } from "./motion";
 import type { createSlotPainter } from "./paint";
 
-type Timing = {
+type SlotState = Pick<BallotScene, "result" | "voteMotionRound"> & {
 	phase: "idle" | "fetching" | "spinning" | "done";
 	rowCount: number;
 	startedAt?: number;
@@ -11,20 +12,34 @@ type Timing = {
 	reduced: boolean;
 };
 
-export function useSlotReel({
-	phase,
-	rowCount,
-	startedAt,
-	duration,
-	clockOffset,
-	reduced,
-}: Timing) {
+export function useSlotReel(next: SlotState) {
+	const state = useRef(next);
+	const invalidate = useRef<
+		((part: "layout" | "round" | "sheet") => void) | null
+	>(null);
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const cabinetRef = useRef<HTMLDivElement>(null);
 	const painter = useRef<Awaited<ReturnType<typeof createSlotPainter>> | null>(
 		null,
 	);
-	const refresh = useRef<(() => void) | null>(null);
+	useLayoutEffect(() => {
+		const prev = state.current;
+		state.current = next;
+		if (prev.rowCount !== next.rowCount) invalidate.current?.("layout");
+		else if (
+			prev.phase !== next.phase ||
+			prev.startedAt !== next.startedAt ||
+			prev.duration !== next.duration ||
+			prev.clockOffset !== next.clockOffset ||
+			prev.reduced !== next.reduced
+		)
+			invalidate.current?.("round");
+		else if (
+			prev.result !== next.result ||
+			prev.voteMotionRound !== next.voteMotionRound
+		)
+			invalidate.current?.("sheet");
+	}, [next]);
 
 	useEffect(() => {
 		const canvas = canvasRef.current;
@@ -39,7 +54,7 @@ export function useSlotReel({
 		}
 		async function connect() {
 			release();
-			refresh.current?.();
+			invalidate.current?.("layout");
 			if (!canvas || contrast.matches) return;
 			const current = generation;
 			try {
@@ -51,7 +66,7 @@ export function useSlotReel({
 					return;
 				}
 				painter.current = instance;
-				refresh.current?.();
+				invalidate.current?.("layout");
 			} catch (error) {
 				// The native cabinet is visible until a complete Pixi frame has been drawn.
 				if (import.meta.env.DEV)
@@ -72,25 +87,40 @@ export function useSlotReel({
 		const drum = cabinet?.querySelector<HTMLElement>(".slot-drum");
 		const strip = drum?.querySelector<HTMLElement>(".slot-strip");
 		const controls = cabinet?.querySelector<HTMLElement>(".slot-controls");
-		if (!canvas || !cabinet || !drum || !strip || !controls) return;
+		const machine = canvas?.parentElement;
+		const sheet = machine?.querySelector<HTMLElement>(".slot-reveal");
+		if (
+			!canvas ||
+			!cabinet ||
+			!drum ||
+			!strip ||
+			!controls ||
+			!machine ||
+			!sheet
+		)
+			return;
 		const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
-		const landing = rowCount - 3;
-		const done = phase === "done";
 		let raf = 0,
 			layoutDirty = true,
+			roundDirty = true,
 			controlsDirty = true,
+			sheetDirty = true,
 			canPaint = false;
 		let appearanceDirty = true,
 			transitioning = false,
 			focused = false;
 		const moveStrip = (row: number) => {
-			strip.style.transform = `translateY(${(-row * 100) / rowCount}%)`;
+			strip.style.transform = `translateY(${(-row * 100) / state.current.rowCount}%)`;
 		};
 		const schedule = () => {
 			if (!raf && !document.hidden) raf = requestAnimationFrame(frame);
 		};
 		const frame = (now: number) => {
 			raf = 0;
+			const { phase, rowCount, startedAt, duration, clockOffset, reduced } =
+				state.current;
+			const landing = rowCount - 3;
+			const done = phase === "done";
 			const still = reduced || motion.matches;
 			const elapsed =
 				startedAt === undefined ? 0 : Date.now() + clockOffset - startedAt;
@@ -100,22 +130,27 @@ export function useSlotReel({
 				? slotMotion(elapsed, duration, landing)
 				: { travel: 0, speed: 0 };
 			const row = done ? landing : slotStripOffset(travel);
-			const glow =
+			const reveal =
 				done && !still && duration !== undefined
-					? Math.max(0, 1 - Math.max(0, elapsed - duration) / 420) ** 2
-					: 0;
+					? Math.min(1, Math.max(0, (elapsed - duration) / 260))
+					: 1;
 			const art = painter.current;
 			try {
-				if (layoutDirty) {
+				if (layoutDirty || roundDirty) {
 					moveStrip(done ? landing : 0);
-					const name = drum.querySelector<HTMLElement>(".slot-name-measure");
-					drum.toggleAttribute(
-						"data-full-name",
+					const name = drum.querySelector<HTMLElement>("h3");
+					machine.toggleAttribute(
+						"data-clipped-winner",
 						Boolean(done && name && name.scrollHeight > name.clientHeight + 1),
 					);
-					canPaint = art?.layout(cabinet, drum, strip) ?? false;
+					// A reveal changes the controls and sheet. Keep the final printed strip
+					// and its Pixi containers when the reel geometry did not change.
+					if (layoutDirty)
+						canPaint = art?.layout(cabinet, drum, strip) ?? false;
+					roundDirty = false;
 					layoutDirty = false;
 					controlsDirty = true;
+					sheetDirty = true;
 				}
 				if (art && canPaint) {
 					if (transitioning)
@@ -128,6 +163,8 @@ export function useSlotReel({
 							);
 					if (controlsDirty) art.controls(controls);
 					else if (appearanceDirty || transitioning) art.restyleControls();
+					if (sheetDirty) art.sheet(state.current);
+					sheetDirty = false;
 					if (controlsDirty || appearanceDirty)
 						focused = drum.matches(":has(h3:focus-visible)");
 					controlsDirty = false;
@@ -135,7 +172,7 @@ export function useSlotReel({
 					art.paint(
 						row,
 						speed,
-						glow,
+						reveal,
 						focused,
 						still ? 0 : ((now % 1000) * Math.PI) / 500,
 					);
@@ -159,7 +196,7 @@ export function useSlotReel({
 				art?.hasSpinner;
 			if (
 				(spinning && elapsed < duration) ||
-				glow > 0 ||
+				(canPaint && reveal < 1) ||
 				loadingIcon ||
 				(canPaint && transitioning)
 			)
@@ -167,6 +204,10 @@ export function useSlotReel({
 		};
 		function layout() {
 			layoutDirty = true;
+			schedule();
+		}
+		function updateSheet() {
+			sheetDirty = true;
 			schedule();
 		}
 		function interactions(event: Event) {
@@ -179,15 +220,26 @@ export function useSlotReel({
 			raf = 0;
 			if (!document.hidden) layout();
 		}
-		refresh.current = layout;
+		invalidate.current = (part) => {
+			if (part === "layout") layoutDirty = true;
+			if (part === "round") roundDirty = true;
+			sheetDirty = true;
+			schedule();
+		};
 		frame(performance.now());
 		const sizes =
-			typeof ResizeObserver === "undefined" ? null : new ResizeObserver(layout);
+			typeof ResizeObserver === "undefined"
+				? null
+				: new ResizeObserver((entries) => {
+						if (entries.some((entry) => entry.target !== machine)) layout();
+						else updateSheet();
+					});
 		sizes?.observe(cabinet);
 		sizes?.observe(drum);
+		sizes?.observe(machine);
 		const changes = new MutationObserver((records) => {
-			if (records.some(({ target }) => !controls.contains(target))) layout();
-			else {
+			if (records.some(({ target }) => strip.contains(target))) layout();
+			if (records.some(({ target }) => controls.contains(target))) {
 				controlsDirty = true;
 				schedule();
 			}
@@ -198,6 +250,13 @@ export function useSlotReel({
 			characterData: true,
 			attributes: true,
 			attributeFilter: ["class", "disabled", "aria-busy"],
+		});
+		const sheetChanges = new MutationObserver(updateSheet);
+		sheetChanges.observe(sheet, {
+			subtree: true,
+			childList: true,
+			characterData: true,
+			attributes: true,
 		});
 		const events = [
 			"focusin",
@@ -213,25 +272,31 @@ export function useSlotReel({
 			"transitionend",
 			"transitioncancel",
 		];
-		for (const event of events) cabinet.addEventListener(event, interactions);
-		drum.addEventListener("scroll", layout, true);
+		for (const event of events) {
+			cabinet.addEventListener(event, interactions);
+			sheet.addEventListener(event, updateSheet);
+		}
+		sheet.addEventListener("scroll", updateSheet, true);
 		window.addEventListener("resize", layout);
 		document.fonts?.addEventListener("loadingdone", layout);
 		motion.addEventListener("change", layout);
 		document.addEventListener("visibilitychange", visibility);
 		return () => {
-			refresh.current = null;
+			invalidate.current = null;
 			cancelAnimationFrame(raf);
 			sizes?.disconnect();
 			changes.disconnect();
-			for (const event of events)
+			sheetChanges.disconnect();
+			for (const event of events) {
 				cabinet.removeEventListener(event, interactions);
-			drum.removeEventListener("scroll", layout, true);
+				sheet.removeEventListener(event, updateSheet);
+			}
+			sheet.removeEventListener("scroll", updateSheet, true);
 			window.removeEventListener("resize", layout);
 			document.fonts?.removeEventListener("loadingdone", layout);
 			motion.removeEventListener("change", layout);
 			document.removeEventListener("visibilitychange", visibility);
 		};
-	}, [clockOffset, duration, phase, reduced, rowCount, startedAt]);
+	}, []);
 	return { canvasRef, cabinetRef };
 }

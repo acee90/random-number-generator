@@ -21,7 +21,6 @@ export function drawCabinet(
 	cabinet: HTMLElement,
 	origin: DOMRect,
 	drum: Box,
-	expanded: boolean,
 ) {
 	const style = getComputedStyle(cabinet);
 	const token = (name: string) => style.getPropertyValue(name).trim();
@@ -104,12 +103,11 @@ export function drawCabinet(
 
 	const windowInk = glass.addChild(new Graphics());
 	const row = height / 3;
-	const bandY = expanded ? y : y + row;
-	const bandHeight = expanded ? height : row;
+	const bandY = y + row;
 	windowInk
-		.rect(x, bandY, width, bandHeight)
+		.rect(x, bandY, width, row)
 		.fill(
-			gradient({ x, y: bandY, width, height: bandHeight }, 90, [
+			gradient({ x, y: bandY, width, height: row }, 90, [
 				[0, "#ffda911c"],
 				[0.3, "#ffda9100"],
 				[0.7, "#ffda9100"],
@@ -118,18 +116,16 @@ export function drawCabinet(
 		)
 		.rect(x, bandY, width, 1)
 		.fill(brass)
-		.rect(x, bandY + bandHeight - 1, width, 1)
+		.rect(x, bandY + row - 1, width, 1)
 		.fill(brass);
-	if (!expanded) {
-		windowInk.roundRect(x, y, width, height, 6).fill(
-			gradient(drum, 180, [
-				[0, "#120c0ca3"],
-				[0.31, "#120c0c00"],
-				[0.69, "#120c0c00"],
-				[1, "#120c0ca1"],
-			]),
-		);
-	}
+	windowInk.roundRect(x, y, width, height, 6).fill(
+		gradient(drum, 180, [
+			[0, "#120c0ca3"],
+			[0.31, "#120c0c00"],
+			[0.69, "#120c0c00"],
+			[1, "#120c0ca1"],
+		]),
+	);
 	const cy = y + height / 2;
 	for (const direction of [1, -1]) {
 		const tip = direction === 1 ? x - 10 : x + width + 10;

@@ -102,7 +102,7 @@ export function drawCloth(
 }
 
 export function stateFill(
-	scene: StageScene,
+	scene: Pick<StageScene, "hover" | "pressed">,
 	control: Control,
 	normal: number,
 	hover: number,

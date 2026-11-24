@@ -11,9 +11,7 @@ export function drawControls(
 	const print = createTextPrinter(origin, 2);
 	const faces: (() => void)[] = [];
 	let spinner: Graphics | undefined;
-	for (const el of root.querySelectorAll<HTMLElement>(
-		"button, .slot-outcome, .slot-wait",
-	)) {
+	for (const el of root.querySelectorAll<HTMLElement>("button, .slot-wait")) {
 		const style = getComputedStyle(el);
 		const control = group.addChild(new Container());
 		control.alpha = Number(style.opacity);
