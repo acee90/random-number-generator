@@ -1,7 +1,3 @@
-.ui-combobox-trigger {
-	justify-content: space-between;
-	gap: 12px;
-}
 .ui-combobox-positioner {
 	z-index: 1010;
 	max-inline-size: var(--available-width);

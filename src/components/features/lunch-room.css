@@ -213,7 +213,6 @@
 	font-variant-numeric: tabular-nums;
 }
 .room-draw-panel,
-.room-history-panel,
 .room-candidates-panel,
 .room-chat-panel,
 .room-copy-panel {
@@ -226,8 +225,7 @@
 .room-primary-column > [hidden] {
 	display: none;
 }
-.room-draw-panel,
-.room-history-panel {
+.room-draw-panel {
 	padding: 0;
 	border-block-start: 0;
 	border-start-start-radius: 0;
@@ -400,77 +398,6 @@
 		opacity: 1;
 		translate: 0 0;
 	}
-}
-.room-history-list {
-	display: flex;
-	flex-direction: column;
-	gap: 12px;
-	list-style: none;
-	max-block-size: min(65dvh, 640px);
-	min-inline-size: 0;
-	padding: 4px;
-	margin: 16px;
-	overflow-y: auto;
-	overscroll-behavior: contain;
-}
-.room-history-list > li {
-	flex-shrink: 0;
-	padding: 12px;
-	border: 1px solid #d8decd;
-	border-radius: var(--control-radius);
-	background: #f7f9f1;
-	overflow-wrap: anywhere;
-}
-.room-history-list p {
-	font-size: 12px;
-	line-height: 1.5;
-	margin: 6px 0;
-}
-.room-history-list li > span,
-.room-history-list time {
-	display: block;
-	font-size: 11px;
-	line-height: 1.6;
-	color: #556247;
-}
-.room-history-list > .room-history-item {
-	display: grid;
-	gap: 16px;
-	padding: 16px;
-}
-.room-history-summary {
-	min-inline-size: 0;
-}
-.room-history-summary > span {
-	display: block;
-	font-size: 12px;
-	line-height: 1.6;
-	color: var(--muted);
-}
-.room-history-summary > strong,
-.room-history-summary > h3 {
-	display: block;
-	font-size: 15px;
-	font-weight: 700;
-	line-height: 1.4;
-	margin: 0 0 4px;
-}
-.room-history-item:has(.room-history-details) {
-	grid-template-columns: minmax(0, 1fr) auto;
-	align-items: center;
-}
-.room-history-heading-actions {
-	display: flex;
-	align-items: center;
-	flex-shrink: 0;
-	gap: 8px;
-}
-.room-history-heading-actions > span {
-	font-size: 13px;
-	white-space: nowrap;
-}
-.room-history-title:focus {
-	outline: none;
 }
 .room-record-overlay {
 	position: fixed;
@@ -889,8 +816,7 @@
 	.room-copy-panel {
 		padding: 14px;
 	}
-	.room-draw-panel,
-	.room-history-panel {
+	.room-draw-panel {
 		padding: 0;
 	}
 	.room-panel-heading h2 {

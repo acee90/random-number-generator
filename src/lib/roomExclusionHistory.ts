@@ -43,7 +43,7 @@ function recordForDraw(draw: RoomDraw): RoomExclusionRecord | undefined {
 export function getRoomExclusionHistory(
 	snapshot: RoomSnapshot | null,
 ): RoomExclusionHistoryEntry[] {
-	if (!snapshot) return [];
+	if (!snapshot?.excludedIds?.length) return [];
 	const candidates = new Map(
 		snapshot.candidates.map((candidate) => [candidate.id, candidate]),
 	);

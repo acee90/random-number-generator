@@ -10,6 +10,7 @@ import {
 	type RoomSnapshot,
 	type ServerMessage,
 } from "../src/lib/lunchRoom";
+import { summarizeRoomWin } from "../src/lib/roomWinHistory";
 import { LunchRoomServer, type RoomEnv } from "../src/rooms/LunchRoomServer";
 import {
 	drawFromPreparedEntropy,
@@ -4971,6 +4972,9 @@ describe("LunchRoomServer game lifecycle", () => {
 		});
 		const recordsBeforeWake = latestSnapshot(host).snapshot.exclusionRecords;
 		await createServer(context).onStart();
+		expect(
+			latestSnapshot(host).snapshot.olderWins?.map((win) => win.id),
+		).toEqual(["history-round-2", "history-round-1"]);
 		expect(latestSnapshot(host).snapshot.excludedIds).toEqual(expected);
 		expect(latestSnapshot(host).snapshot.drawCount).toBe(22);
 		expect(latestSnapshot(host).snapshot.exclusionRecords).toEqual(
@@ -4980,6 +4984,7 @@ describe("LunchRoomServer game lifecycle", () => {
 
 	it.each([
 		"exclusion-record",
+		"older-win",
 		"history",
 		"current-result",
 	] as const)("acknowledges an evicted start ID retained by %s without drawing again", async (retainedBy) => {
@@ -5001,6 +5006,10 @@ describe("LunchRoomServer game lifecycle", () => {
 		else {
 			saved.snapshot.excludedIds = [];
 			saved.snapshot.exclusionRecords = [];
+			if (retainedBy === "older-win") {
+				saved.snapshot.olderWins = saved.snapshot.history.map(summarizeRoomWin);
+				saved.snapshot.history = [];
+			}
 		}
 		expect(parseRoomSnapshot(saved.snapshot)).not.toBeNull();
 		context.storage.values.set("lunch-room:v1", saved);

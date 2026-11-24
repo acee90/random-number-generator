@@ -10,8 +10,8 @@
 	flex-wrap: wrap;
 	align-items: center;
 	justify-content: space-between;
-	gap: 12px;
-	padding: 14px 16px;
+	gap: 8px;
+	padding: 4px 8px;
 	border-block-end: 1px solid var(--line);
 }
 .room-phase-title {
@@ -19,9 +19,6 @@
 	align-items: center;
 	flex-wrap: wrap;
 	gap: 8px;
-}
-.room-lifecycle-heading :is(.ui-combobox-trigger, .room-candidates-trigger) {
-	min-inline-size: 6.5rem;
 }
 .room-view-label {
 	color: var(--muted);
@@ -101,11 +98,6 @@
 	display: flex;
 	flex-wrap: wrap;
 	gap: 4px;
-}
-@container (max-width: 340px) {
-	.room-lifecycle-tools > button {
-		padding-inline: 8px;
-	}
 }
 .room-lifecycle-panel .room-draw-panel {
 	border: 0;
@@ -275,16 +267,6 @@
 	font-size: 13px;
 	line-height: 1.6;
 }
-.room-history-dialog {
-	overscroll-behavior: contain;
-	inline-size: min(760px, calc(100vw - 24px));
-	max-inline-size: 760px;
-	max-block-size: calc(100dvh - 24px);
-	overflow: auto;
-}
-.room-history-dialog .room-history-panel {
-	border: 0;
-}
 @container (max-width: 560px) {
 	.room-roulette-and-exclusions {
 		grid-template-columns: minmax(0, 1fr);
@@ -297,10 +279,6 @@
 
 	.room-lifecycle-panel .room-wheel-stage {
 		--room-wheel-height: clamp(250px, 75cqi, 400px);
-	}
-	.room-lifecycle-heading {
-		padding: 10px 12px;
-		gap: 8px;
 	}
 	.room-lifecycle-heading h2 {
 		font-size: 16px;

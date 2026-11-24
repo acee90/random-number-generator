@@ -175,12 +175,11 @@ export default function RoomGameStage({
 						onBoard
 						reducedMotion={reducedMotion}
 					/>
-					{slot && resultActions}
 				</div>
 			) : (
 				fullSlotName
 			)}
-			{(!slot || !result?.votes) && resultActions}
+			{!slot && resultActions}
 		</div>
 	);
 	const options = exclusion && <RoomExclusionPanel {...exclusion} />;
@@ -206,6 +205,7 @@ export default function RoomGameStage({
 							host={isHost}
 							disabled={wheel.covered || wheel.canDraw === false}
 							onDraw={wheel.onDraw}
+							resultActions={resultActions}
 							result={result}
 							voteMotionRound={voteMotionRound}
 							showVoting={showVoting}

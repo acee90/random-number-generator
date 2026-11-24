@@ -24,6 +24,7 @@ type Props = {
 	host: boolean;
 	disabled: boolean;
 	onDraw: () => void;
+	resultActions: ReactElement | null;
 	result: BallotScene["result"];
 	voteMotionRound?: string;
 	showVoting: boolean;
@@ -44,6 +45,7 @@ export default function SlotMachine({
 	host,
 	disabled,
 	onDraw,
+	resultActions,
 	result,
 	voteMotionRound,
 	showVoting,
@@ -54,6 +56,7 @@ export default function SlotMachine({
 	titleId,
 }: Props) {
 	const count = candidates.length;
+	const showPreviewArrows = count > 1 && !resultActions;
 	const [preview, setPreview] = useState(0);
 	const done = phase === "done";
 	const busy = phase === "fetching" || phase === "spinning";
@@ -87,7 +90,6 @@ export default function SlotMachine({
 			className="slot-machine"
 			data-phase={phase}
 			data-voting={showVoting || undefined}
-			data-host={host || undefined}
 		>
 			<canvas className="slot-art" ref={canvasRef} inert />
 			<div className="slot-cabinet" ref={cabinetRef}>
@@ -139,7 +141,7 @@ export default function SlotMachine({
 					</div>
 				</div>
 				<div className="slot-controls">
-					{count > 1 && (
+					{showPreviewArrows && (
 						<Button
 							size="icon"
 							variant="ghost"
@@ -150,7 +152,9 @@ export default function SlotMachine({
 							<ChevronLeft aria-hidden="true" />
 						</Button>
 					)}
-					{host ? (
+					{resultActions ? (
+						resultActions
+					) : host ? (
 						<Button
 							id={buttonId}
 							ref={buttonRef}
@@ -177,7 +181,7 @@ export default function SlotMachine({
 							{busy || done ? label : "방장의 추첨을 기다리는 중"}
 						</span>
 					)}
-					{count > 1 && (
+					{showPreviewArrows && (
 						<Button
 							size="icon"
 							variant="ghost"

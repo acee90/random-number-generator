@@ -227,16 +227,26 @@ export function useSlotReel(next: SlotState) {
 			schedule();
 		};
 		frame(performance.now());
+		let boardWidth = canvas.clientWidth;
 		const sizes =
 			typeof ResizeObserver === "undefined"
 				? null
 				: new ResizeObserver((entries) => {
-						if (entries.some((entry) => entry.target !== machine)) layout();
+						const width = canvas.clientWidth;
+						if (
+							width !== boardWidth ||
+							entries.some(
+								(entry) => entry.target === cabinet || entry.target === drum,
+							)
+						)
+							layout();
 						else updateSheet();
+						boardWidth = width;
 					});
 		sizes?.observe(cabinet);
 		sizes?.observe(drum);
 		sizes?.observe(machine);
+		sizes?.observe(canvas);
 		const changes = new MutationObserver((records) => {
 			if (records.some(({ target }) => strip.contains(target))) layout();
 			if (records.some(({ target }) => controls.contains(target))) {

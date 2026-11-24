@@ -94,6 +94,7 @@ export interface RoomDraw {
 	/** Position inside the winning slice; old centered draws omit this field. */
 	landingFraction?: number;
 	listVersion: number;
+	candidateSetVersion?: number;
 	participants?: RoomParticipant[];
 	requestedAt?: number;
 	probabilities?: number[];
@@ -105,6 +106,20 @@ export interface RoomDraw {
 	roundNumberIsExact?: boolean;
 }
 
+/** Winner retained after its full candidate and vote snapshot ages out. */
+export interface RoomWinSummary {
+	id: string;
+	name: string;
+	timestamp: number;
+	candidateSetVersion: number;
+}
+
+export interface RoomCandidateChange {
+	candidateSetVersion: number;
+	timestamp: number;
+	summary: string;
+}
+
 export interface RoomSnapshot {
 	viewMode?: DrawView;
 	roomId: string;
@@ -112,12 +127,16 @@ export interface RoomSnapshot {
 	createdAt: number;
 	expiresAt: number;
 	listVersion: number;
+	/** Tracks candidate changes across draws, including manual game filters. */
+	candidateSetVersion?: number;
 	candidates: RoomCandidate[];
 	participants: RoomParticipant[];
 	members?: RoomMember[];
 	messages: ChatMessage[];
 	draw: RoomDraw | null;
 	history: RoomDraw[];
+	olderWins?: RoomWinSummary[];
+	candidateChanges?: RoomCandidateChange[];
 	status:
 		| "waiting"
 		| "editing"
@@ -854,6 +873,8 @@ function parseDraw(value: unknown): RoomDraw | null {
 			(typeof value.roundNumberIsExact !== "boolean" ||
 				value.roundNumber === undefined)) ||
 		!isVersion(value.listVersion) ||
+		(value.candidateSetVersion !== undefined &&
+			!isVersion(value.candidateSetVersion)) ||
 		(value.durationMs !== lunchRoomLimits.drawDurationMs &&
 			value.durationMs !== 7200) ||
 		value.fromRotation !== 0 ||
@@ -929,6 +950,9 @@ function parseDraw(value: unknown): RoomDraw | null {
 			? {}
 			: { landingFraction: value.landingFraction as number }),
 		listVersion: value.listVersion,
+		...(isVersion(value.candidateSetVersion) && {
+			candidateSetVersion: value.candidateSetVersion,
+		}),
 		...(participants === undefined ? {} : { participants }),
 		...(value.requestedAt === undefined
 			? {}
@@ -1153,6 +1177,89 @@ export function parseRoomDrawHistory(value: unknown): RoomDraw[] | null {
 	return parseList(value, lunchRoomLimits.maxHistory, parseDraw);
 }
 
+function parseWinSummary(value: unknown): RoomWinSummary | null {
+	if (
+		!isRecord(value) ||
+		!isId(value.id) ||
+		!isTime(value.timestamp) ||
+		!isVersion(value.candidateSetVersion)
+	)
+		return null;
+	const name = text(value.name, 80);
+	return name
+		? {
+				id: value.id,
+				name,
+				timestamp: value.timestamp,
+				candidateSetVersion: value.candidateSetVersion,
+			}
+		: null;
+}
+
+function parseCandidateChanges(
+	value: unknown,
+	version: number,
+): RoomCandidateChange[] | null {
+	if (!Array.isArray(value) || value.length > version) return null;
+	const changes: RoomCandidateChange[] = [];
+	const seen = new Set<number>();
+	for (const change of value) {
+		if (
+			!isRecord(change) ||
+			!isTime(change.timestamp) ||
+			!isVersion(change.candidateSetVersion) ||
+			change.candidateSetVersion > version ||
+			seen.has(change.candidateSetVersion)
+		)
+			return null;
+		const summary = text(change.summary, 512);
+		if (!summary) return null;
+		seen.add(change.candidateSetVersion);
+		changes.push({
+			candidateSetVersion: change.candidateSetVersion,
+			timestamp: change.timestamp,
+			summary,
+		});
+	}
+	return changes;
+}
+
+/** Old game filters changed independently of listVersion. Recover visible changes in the retained rounds. */
+function restoreLegacyWinGroups(snapshot: RoomSnapshot) {
+	if (snapshot.candidateSetVersion !== undefined) return;
+	const rounds = [...snapshot.history].reverse();
+	if (snapshot.draw) rounds.push(snapshot.draw);
+	const sameList = rounds.filter(
+		(draw) => draw.listVersion === snapshot.listVersion,
+	);
+	if (
+		!sameList.length ||
+		![...sameList, snapshot].some((entry) => entry.gameFilter)
+	)
+		return;
+	const pool = (gameFilter?: RoomGameFilter) =>
+		JSON.stringify(
+			getEligibleRoomCandidates({
+				candidates: snapshot.candidates,
+				gameFilter,
+			}).map(({ id }) => id),
+		);
+	let version = snapshot.listVersion;
+	let previous: string | undefined;
+	const versions = sameList.map((draw) => {
+		const key = pool(draw.gameFilter);
+		if (previous !== undefined && previous !== key) version++;
+		previous = key;
+		return version;
+	});
+	if (previous !== pool(snapshot.gameFilter)) version++;
+	if (version === snapshot.listVersion) return;
+	snapshot.candidateSetVersion = version;
+	sameList.forEach((draw, index) => {
+		draw.candidateSetVersion = versions[index];
+	});
+}
+
 export function parseRoomSnapshot(value: unknown): RoomSnapshot | null {
 	if (
 		!isRecord(value) ||
@@ -1162,6 +1269,8 @@ export function parseRoomSnapshot(value: unknown): RoomSnapshot | null {
 		value.expiresAt <= value.createdAt ||
 		value.expiresAt - value.createdAt > lunchRoomLimits.ttlMs ||
 		!isVersion(value.listVersion) ||
+		(value.candidateSetVersion !== undefined &&
+			!isVersion(value.candidateSetVersion)) ||
 		![
 			"waiting",
 			"editing",
@@ -1185,6 +1294,14 @@ export function parseRoomSnapshot(value: unknown): RoomSnapshot | null {
 		parseChatMessage,
 	);
 	const history = parseRoomDrawHistory(value.history);
+	const olderWins =
+		value.olderWins === undefined
+			? undefined
+			: parseList(
+					value.olderWins,
+					Math.ceil(lunchRoomLimits.ttlMs / lunchRoomLimits.drawDurationMs),
+					parseWinSummary,
+				);
 	const draw = value.draw === null ? null : parseDraw(value.draw);
 	const excludedIds =
 		value.excludedIds === undefined
@@ -1205,6 +1322,7 @@ export function parseRoomSnapshot(value: unknown): RoomSnapshot | null {
 		members === null ||
 		!messages ||
 		!history ||
+		olderWins === null ||
 		!excludedIds ||
 		exclusionRecords === null ||
 		exclusionRecords?.some(
@@ -1254,7 +1372,23 @@ export function parseRoomSnapshot(value: unknown): RoomSnapshot | null {
 		history.some((entry) => entry.listVersion > (value.listVersion as number))
 	)
 		return null;
-	return {
+	const recentIds = new Set([draw?.id, ...history.map((entry) => entry.id)]);
+	const setVersion = (value.candidateSetVersion ?? value.listVersion) as number;
+	const candidateChanges =
+		value.candidateChanges === undefined
+			? undefined
+			: parseCandidateChanges(value.candidateChanges, setVersion);
+	if (
+		candidateChanges === null ||
+		olderWins?.some(
+			(entry) =>
+				recentIds.has(entry.id) || entry.candidateSetVersion > setVersion,
+		) ||
+		(draw?.candidateSetVersion ?? 0) > setVersion ||
+		history.some((entry) => (entry.candidateSetVersion ?? 0) > setVersion)
+	)
+		return null;
+	const snapshot: RoomSnapshot = {
 		roomId: value.roomId,
 		title,
 		...(value.viewMode !== undefined && {
@@ -1263,12 +1397,17 @@ export function parseRoomSnapshot(value: unknown): RoomSnapshot | null {
 		createdAt: value.createdAt,
 		expiresAt: value.expiresAt,
 		listVersion: value.listVersion,
+		...(isVersion(value.candidateSetVersion) && {
+			candidateSetVersion: value.candidateSetVersion,
+		}),
+		...(candidateChanges && { candidateChanges }),
 		candidates,
 		participants,
 		...(members === undefined ? {} : { members }),
 		messages,
 		draw,
 		history,
+		...(olderWins && { olderWins }),
 		status:
 			value.status === "waiting" && draw
 				? "result"
@@ -1289,6 +1428,8 @@ export function parseRoomSnapshot(value: unknown): RoomSnapshot | null {
 			: { drawCountIsExact: value.drawCountIsExact as boolean }),
 		...(gameFilter === undefined ? {} : { gameFilter }),
 	};
+	restoreLegacyWinGroups(snapshot);
+	return snapshot;
 }
 
 export function parseServerMessage(raw: unknown): ServerMessage | null {

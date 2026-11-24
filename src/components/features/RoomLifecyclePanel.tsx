@@ -1,12 +1,5 @@
 import { List, LoaderCircle, Trash2 } from "lucide-react";
-import {
-	type ReactNode,
-	type RefObject,
-	useEffect,
-	useId,
-	useRef,
-	useState,
-} from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -83,8 +76,6 @@ export default function RoomLifecyclePanel({
 	showResult,
 	onEditResult,
 	onStart,
-	onHistory,
-	historyButtonRef,
 	children,
 }: {
 	room: Room;
@@ -92,8 +83,6 @@ export default function RoomLifecyclePanel({
 	showResult: boolean;
 	onEditResult?: () => boolean;
 	onStart: (options?: StartOptions) => void;
-	onHistory: () => void;
-	historyButtonRef?: RefObject<HTMLButtonElement | null>;
 	children: (
 		requestStart: () => void,
 		exclusion: ExclusionOptions,
@@ -222,21 +211,14 @@ export default function RoomLifecyclePanel({
 	]);
 	const observedLive = useRef<string | null>(null);
 	const lastEditAttempt = useRef<string | null>(null);
-	const phaseLabel = listScreen
-		? phase === "editing"
+	const phaseLabel =
+		phase === "editing"
 			? candidates.length === 0
 				? "후보 만들기"
 				: "후보 편집 중"
 			: phase === "collecting"
 				? "후보 추천 접수 중"
-				: "접수 종료 · 목록 확인"
-		: viewMode === "slot-v1"
-			? "추첨"
-			: showResult
-				? "추첨 결과"
-				: busy
-					? "추첨 진행 중"
-					: "다음 추첨 대기";
+				: "접수 종료 · 목록 확인";
 	// Inclusion is a game condition. A saved draft may predate the migration of
 	// legacy included flags, so always project that condition from the live room.
 	const currentById = new Map(
@@ -596,9 +578,11 @@ export default function RoomLifecyclePanel({
 		>
 			<div className="room-lifecycle-heading" hidden={isHost && listScreen}>
 				<div className="room-phase-title">
-					<h2 ref={phaseTitleRef} tabIndex={-1}>
-						{phaseLabel}
-					</h2>
+					{listScreen && (
+						<h2 ref={phaseTitleRef} tabIndex={-1}>
+							{phaseLabel}
+						</h2>
+					)}
 					{!listScreen &&
 						snapshot &&
 						(isHost ? (
@@ -626,8 +610,6 @@ export default function RoomLifecyclePanel({
 					{!listScreen && snapshot && (isHost || candidates.length > 0) && (
 						<Button
 							variant="outline"
-							size="touch"
-							className="room-candidates-trigger"
 							aria-describedby={`${id}-candidate-count`}
 							title={
 								isHost && onEditResult ? "투표를 마감하고 후보 편집" : undefined
@@ -664,14 +646,6 @@ export default function RoomLifecyclePanel({
 					<span className="sr-only" id={`${id}-candidate-count`}>
 						전체 후보 {candidates.length}개 중 이번 추첨 {eligible.length}개
 					</span>
-					<Button
-						variant="ghost"
-						size="touch"
-						onClick={onHistory}
-						ref={historyButtonRef}
-					>
-						지난 기록
-					</Button>
 				</div>
 			</div>
 

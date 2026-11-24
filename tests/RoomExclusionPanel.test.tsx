@@ -57,10 +57,11 @@ function props(state = snapshot()) {
 	};
 }
 
-function openHistory() {
-	const trigger = screen.getByRole("button", { name: "당첨 제외 내역 열기" });
-	fireEvent.click(trigger);
-	return screen.getByRole("dialog", { name: "당첨 제외 내역" });
+function openExclusions() {
+	fireEvent.click(
+		screen.getByRole("button", { name: /당첨 제외 후보 \d+개 보기/ }),
+	);
+	return screen.getByRole("dialog", { name: "당첨 제외 후보" });
 }
 
 describe("RoomExclusionPanel", () => {
@@ -73,7 +74,7 @@ describe("RoomExclusionPanel", () => {
 		);
 		expect(input.onToggle).toHaveBeenCalledExactlyOnceWith(false, 1);
 		expect(screen.queryByRole("dialog")).toBeNull();
-		const popup = openHistory();
+		const popup = openExclusions();
 		expect(input.onToggle).toHaveBeenCalledTimes(1);
 		expect(within(popup).queryByRole("switch")).toBeNull();
 		const list = screen.getByRole("list", { name: "당첨 제외 내역" });
@@ -108,7 +109,7 @@ describe("RoomExclusionPanel", () => {
 			gameFilter: { categories: null, excludedIds: ["candidate-1"] },
 		});
 		render(<RoomExclusionPanel {...props(state)} />);
-		openHistory();
+		openExclusions();
 		expect(
 			screen.queryByRole("heading", { name: "저장된 당첨 내역" }),
 		).toBeNull();
@@ -136,7 +137,7 @@ describe("RoomExclusionPanel", () => {
 			],
 		});
 		render(<RoomExclusionPanel {...props(state)} />);
-		openHistory();
+		openExclusions();
 		expect(screen.getByText("기록 22번째")).toBeTruthy();
 		expect(
 			screen.getByText("‘기록’ 번호는 남아 있는 추첨 기록 기준입니다."),
@@ -156,7 +157,7 @@ describe("RoomExclusionPanel", () => {
 		expect((screen.getByRole("switch") as HTMLButtonElement).disabled).toBe(
 			true,
 		);
-		openHistory();
+		openExclusions();
 		expect(
 			(
 				screen.getByRole("button", {
@@ -189,12 +190,12 @@ describe("RoomExclusionPanel", () => {
 			listVersion: 1,
 		};
 		const view = render(<RoomExclusionPanel {...props(state)} showResult />);
-		openHistory();
+		openExclusions();
 		expect(screen.getByText("후보 2")).toBeTruthy();
 		expect(screen.getByText("후보 1")).toBeTruthy();
 		expect(screen.getAllByRole("listitem")).toHaveLength(2);
 		expect(
-			screen.getByRole("heading", { name: "당첨 제외 내역" }).parentElement
+			screen.getByRole("heading", { name: "당첨 제외 후보" }).parentElement
 				?.textContent,
 		).toMatch(/2.*개/);
 		view.rerender(
@@ -210,7 +211,7 @@ describe("RoomExclusionPanel", () => {
 		view.rerender(<RoomExclusionPanel {...props(state)} showResult />);
 		expect(screen.getAllByRole("listitem")).toHaveLength(2);
 		expect(
-			within(screen.getByRole("dialog", { name: "당첨 제외 내역" })).getByRole(
+			within(screen.getByRole("dialog", { name: "당첨 제외 후보" })).getByRole(
 				"button",
 				{ name: "제외 목록 초기화" },
 			),
