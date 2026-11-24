@@ -1,4 +1,3 @@
-import { ChevronRight, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import CopyFallback from "@/components/features/CopyFallback";
 import { roomCandidateNumbers } from "@/components/features/RoomCandidateList";
@@ -9,14 +8,6 @@ import RoomGameStage from "@/components/features/RoomGameStage";
 import RoomHeader from "@/components/features/RoomHeader";
 import RoomLifecyclePanel from "@/components/features/RoomLifecyclePanel";
 import SiteHeader from "@/components/layout/SiteHeader";
-import { Button } from "@/components/ui/button";
-import {
-	Dialog,
-	DialogClose,
-	DialogContent,
-	DialogDescription,
-	DialogTitle,
-} from "@/components/ui/dialog";
 import { useDrawSound } from "@/hooks/useDrawPresentation";
 import type { useLunchRoom } from "@/hooks/useLunchRoom";
 import { useRoomTimeline } from "@/hooks/useRoomTimeline";
@@ -26,11 +17,9 @@ import {
 	getEligibleRoomCandidates,
 	getRoomDrawView,
 	getRoomPhase,
-	lunchRoomLimits,
 	type RoomDraw,
 } from "@/lib/lunchRoom";
 import { getRoomArchiveDraws } from "@/lib/roomGame";
-import { getSourceDisplayName } from "@/services/randomService";
 import ClosedRoomHistory, {
 	ClosedRoomArchive,
 	RoomTerminalActions,
@@ -66,7 +55,10 @@ export default function LunchSessionPage({
 		text: string;
 	} | null>(null);
 	const [inviteUrl, setInviteUrl] = useState("");
-	const [selectedDraw, setSelectedDraw] = useState<RoomDraw | null>(null);
+	const [selectedDraw, setSelectedDraw] = useState<{
+		draw: RoomDraw;
+		votingWasOpen: boolean;
+	} | null>(null);
 	const roomViewportRef = useRef<HTMLDivElement>(null);
 	const primaryColumnRef = useRef<HTMLDivElement>(null);
 	const selectedDrawTriggerRef = useRef<HTMLButtonElement>(null);
@@ -95,6 +87,12 @@ export default function LunchSessionPage({
 		(!drawMatchesCandidates && drawArchived)
 			? null
 			: draw;
+	const phase = snapshot && getRoomPhase(snapshot);
+	const boardVisible =
+		phase !== "editing" && phase !== "collecting" && phase !== "reviewing";
+	useEffect(() => {
+		if (!boardVisible) setView("wheel");
+	}, [boardVisible]);
 	const viewMode = getRoomDrawView(snapshot);
 	const viewLabel = drawViewLabels[viewMode];
 	const finished = useRoomTimeline(
@@ -128,9 +126,6 @@ export default function LunchSessionPage({
 		!room.mutationPending &&
 		Boolean(snapshot && getRoomPhase(snapshot) === "waiting") &&
 		eligibleCandidates.length >= 1;
-	const completedHistory = (snapshot?.history ?? [])
-		.filter((entry) => room.serverNow() >= entry.startedAt + entry.durationMs)
-		.slice(0, lunchRoomLimits.maxHistory);
 	const closed = room.connection === "closed";
 	const awaitingEntry =
 		!closed && (room.entryLoading || room.waitingForEntry || room.entryPending);
@@ -257,7 +252,6 @@ export default function LunchSessionPage({
 		copyAttemptRef.current++;
 		setCopyHelp(null);
 		setView(next);
-		if (primaryColumnRef.current) primaryColumnRef.current.scrollTop = 0;
 	}
 	function keepChatFocus() {
 		focusResultRef.current = false;
@@ -268,81 +262,10 @@ export default function LunchSessionPage({
 		focusResultRef.current = false;
 		selectedDrawTriggerRef.current = trigger;
 		setSelectedDraw({
-			...draw,
-			candidates: draw.candidates.map((place) => ({ ...place })),
-			...(draw.participants === undefined
-				? {}
-				: {
-						participants: draw.participants.map((participant) => ({
-							...participant,
-						})),
-					}),
-			...(draw.probabilities === undefined
-				? {}
-				: { probabilities: [...draw.probabilities] }),
-			...(draw.votes === undefined
-				? {}
-				: { votes: draw.votes.map((vote) => ({ ...vote })) }),
+			draw: structuredClone(draw),
+			votingWasOpen: draw.id === snapshot?.draw?.id && !drawArchived,
 		});
 	}
-	function renderHistoryList(entries: readonly RoomDraw[]) {
-		if (!entries.length) return null;
-		return (
-			<ol className="room-history-list">
-				{entries.map((entry) => {
-					const place = entry.candidates[entry.winnerIndex];
-					return (
-						<li key={entry.id} className="room-history-item">
-							<div className="room-history-summary">
-								<strong>{place.name}</strong>
-								<span>{place.category}</span>
-								<span>
-									{entry.candidates.length}곳 중 추첨 ·{" "}
-									{getSourceDisplayName(entry.source)}
-								</span>
-								<time dateTime={new Date(entry.timestamp).toISOString()}>
-									{new Date(entry.timestamp).toLocaleString("ko-KR", {
-										month: "2-digit",
-										day: "2-digit",
-										hour: "2-digit",
-										minute: "2-digit",
-									})}
-								</time>
-
-								{entry.votes && (
-									<span>
-										좋아요{" "}
-										{entry.votes.filter((vote) => vote.vote === "up").length} ·
-										싫어요{" "}
-										{entry.votes.filter((vote) => vote.vote === "down").length}
-									</span>
-								)}
-							</div>
-							<Button
-								variant="ghost"
-								size="icon"
-								type="button"
-								className="room-history-details"
-								title="상세 보기"
-								data-draw-id={entry.id}
-								ref={(node) => {
-									if (node && entry.id === historyRecordFocusRef.current)
-										selectedDrawTriggerRef.current = node;
-								}}
-								aria-expanded={selectedDraw?.id === entry.id}
-								aria-label={`${place.name} 상세 기록 열기`}
-								aria-haspopup="dialog"
-								onClick={(event) => openRecord(entry, event.currentTarget)}
-							>
-								<ChevronRight size={20} aria-hidden="true" />
-							</Button>
-						</li>
-					);
-				})}
-			</ol>
-		);
-	}
-
 	function start(options?: {
 		expectedRevision?: number;
 		previousDrawId?: string;
@@ -523,7 +446,6 @@ export default function LunchSessionPage({
 								<RoomLifecyclePanel
 									room={room}
 									key={roomId}
-									historyButtonRef={historyTriggerRef}
 									busy={busy}
 									showResult={showResult}
 									onEditResult={
@@ -532,7 +454,6 @@ export default function LunchSessionPage({
 											: undefined
 									}
 									onStart={start}
-									onHistory={() => changeView("history")}
 								>
 									{(requestStart, exclusion) => (
 										<section
@@ -582,7 +503,22 @@ export default function LunchSessionPage({
 													controlled: true,
 												}}
 												sound={sound}
-												exclusion={exclusion}
+												exclusion={{
+													...exclusion,
+													history: {
+														open: view === "history" && !selectedDraw,
+														onOpenChange: (open) =>
+															changeView(open ? "history" : "wheel"),
+														onRecord: openRecord,
+														triggerRef: historyTriggerRef,
+														titleRef: historyTitleRef,
+														recordRef: selectedDrawTriggerRef,
+														returnDrawId: historyRecordFocusRef.current,
+														serverNow: room.serverNow,
+														previousDraws,
+														legacyHistory,
+													},
+												}}
 												canNext={
 													connected &&
 													!busy &&
@@ -631,106 +567,6 @@ export default function LunchSessionPage({
 										</section>
 									)}
 								</RoomLifecyclePanel>
-								<Dialog
-									open={view === "history" && !selectedDraw}
-									onOpenChange={(open) => {
-										if (!open) setView("wheel");
-									}}
-								>
-									<DialogContent
-										className="room-history-dialog"
-										showCloseButton={false}
-										onOpenAutoFocus={(event) => {
-											event.preventDefault();
-											const record = historyRecordFocusRef.current
-												? document.querySelector<HTMLButtonElement>(
-														`[data-draw-id="${historyRecordFocusRef.current}"]`,
-													)
-												: null;
-											(record ?? historyTitleRef.current)?.focus();
-										}}
-										onCloseAutoFocus={(event) => {
-											event.preventDefault();
-											if (!selectedDraw) historyTriggerRef.current?.focus();
-										}}
-									>
-										<DialogTitle className="sr-only">
-											지난 추첨 기록
-										</DialogTitle>
-										<DialogDescription className="sr-only">
-											같은 방에서 완료한 추첨과 당시 후보를 확인합니다.
-										</DialogDescription>
-										<section
-											id={`${id}-history-panel`}
-											className="room-history-panel"
-											hidden={false}
-											aria-labelledby={`${id}-history-title`}
-										>
-											<div className="room-panel-heading">
-												<h2
-													id={`${id}-history-title`}
-													ref={historyTitleRef}
-													className="room-history-title"
-													tabIndex={-1}
-												>
-													추첨 기록
-												</h2>
-												<div className="room-history-heading-actions">
-													<span>최근 {lunchRoomLimits.maxHistory}개</span>
-													<DialogClose asChild>
-														<Button
-															variant="ghost"
-															size="icon"
-															aria-label="닫기"
-														>
-															<X size={18} aria-hidden="true" />
-														</Button>
-													</DialogClose>
-												</div>
-											</div>
-											{completedHistory.length === 0 && (
-												<p className="room-panel-note">
-													아직 확정된 추첨 기록이 없습니다.
-												</p>
-											)}
-											{renderHistoryList(completedHistory)}
-											{previousDraws.length > 0 && (
-												<section aria-label="이전 혼자 추첨 기록">
-													<h3>이전 혼자 추첨 기록</h3>
-													{renderHistoryList(previousDraws)}
-												</section>
-											)}
-										</section>
-										{legacyHistory.length > 0 && (
-											<section aria-label="이전 추첨 기록">
-												<h2>이전 추첨 기록</h2>
-												<ol className="room-history-list">
-													{legacyHistory.map((record) => (
-														<li key={record.id} className="room-history-item">
-															<div className="room-history-summary">
-																<h3>{record.place.name}</h3>
-																<span>{record.place.category}</span>
-																<span>
-																	{record.candidateCount}곳 중 추첨 ·{" "}
-																	{getSourceDisplayName(record.source)}
-																</span>
-																<time
-																	dateTime={new Date(
-																		record.timestamp,
-																	).toISOString()}
-																>
-																	{new Date(record.timestamp).toLocaleString(
-																		"ko-KR",
-																	)}
-																</time>
-															</div>
-														</li>
-													))}
-												</ol>
-											</section>
-										)}
-									</DialogContent>
-								</Dialog>
 							</div>
 							{!solo && (
 								<RoomChatPanel
@@ -750,7 +586,8 @@ export default function LunchSessionPage({
 			</main>
 			{selectedDraw && !closed && (
 				<RoomDrawDialog
-					draw={selectedDraw}
+					draw={selectedDraw.draw}
+					votingWasOpen={selectedDraw.votingWasOpen}
 					columnRef={primaryColumnRef}
 					returnFocusRef={selectedDrawTriggerRef}
 					fallbackFocusRef={

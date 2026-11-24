@@ -20,7 +20,7 @@ function probabilityLabel(draw: RoomDraw, index: number) {
 	return `1/${draw.candidates.length} · 약 ${new Intl.NumberFormat("ko-KR", { style: "percent", maximumFractionDigits: 2 }).format(probability)}`;
 }
 
-export function roomDrawCopyText(draw: RoomDraw) {
+export function roomDrawCopyText(draw: RoomDraw, votingWasOpen = false) {
 	const winner = draw.candidates[draw.winnerIndex];
 	return [
 		`음식점: ${winner.name}`,
@@ -36,7 +36,7 @@ export function roomDrawCopyText(draw: RoomDraw) {
 			? []
 			: [
 					"",
-					"확정 투표:",
+					votingWasOpen ? "조회 시점의 투표:" : "확정 투표:",
 					...draw.votes.map(
 						(vote) =>
 							`- ${vote.name}: ${vote.vote === "up" ? "좋아요" : "싫어요"} (+${vote.reactionMs}ms · ${new Date(vote.timestamp).toISOString()})`,
@@ -147,6 +147,7 @@ export function RoomDrawRecordBody({ draw }: { draw: RoomDraw }) {
 
 export default function RoomDrawDialog({
 	draw,
+	votingWasOpen = false,
 	columnRef,
 	returnFocusRef,
 	fallbackFocusRef,
@@ -155,6 +156,7 @@ export default function RoomDrawDialog({
 	onClose,
 }: {
 	draw: RoomDraw;
+	votingWasOpen?: boolean;
 	columnRef: RefObject<HTMLDivElement | null>;
 	returnFocusRef: RefObject<HTMLButtonElement | null>;
 	fallbackFocusRef: RefObject<HTMLElement | null>;
@@ -213,7 +215,9 @@ export default function RoomDrawDialog({
 		setCopied(false);
 		setCopyFailure(false);
 		try {
-			await navigator.clipboard.writeText(roomDrawCopyText(draw));
+			await navigator.clipboard.writeText(
+				roomDrawCopyText(draw, votingWasOpen),
+			);
 			if (attempt !== copyAttemptRef.current) return;
 			setCopied(true);
 			copyButtonRef.current?.focus();
@@ -304,13 +308,18 @@ export default function RoomDrawDialog({
 									isHost={false}
 									connected={false}
 									pending={false}
+									readOnlyNotice={
+										votingWasOpen
+											? "상세 기록을 열었을 때의 투표 현황입니다."
+											: undefined
+									}
 									readOnly
 									onVote={() => false}
 								/>
 							)}
 							{copyFailure && (
 								<CopyFallback
-									text={roomDrawCopyText(draw)}
+									text={roomDrawCopyText(draw, votingWasOpen)}
 									onRetry={() => void copyRecord()}
 									onClose={() => {
 										copyAttemptRef.current++;

@@ -15,6 +15,16 @@ import {
 	visibleRoomExclusions,
 } from "../src/lib/roomDrawMetadata";
 
+import {
+	advanceRoomRound,
+	applyRoomCommand,
+	beginRoomDraw,
+	type LifecycleCommand,
+	prepareRoomDraw,
+	startRoomSpin,
+} from "../src/lib/roomGame";
+import { getRoomHistoryTimeline, getRoomWins } from "../src/lib/roomWinHistory";
+
 const epoch = 1_800_000_000_000;
 const candidates = Array.from({ length: 24 }, (_, index) => ({
 	id: `choice-${index + 1}`,
@@ -294,5 +304,247 @@ describe("result-time exclusion options", () => {
 			candidates[0].id,
 			candidates[1].id,
 		]);
+	});
+});
+
+describe("room winner history", () => {
+	const host = { id: "host", isHost: true, name: "방장" };
+	function play(snapshot: RoomSnapshot, id: string) {
+		const prepared = prepareRoomDraw(snapshot, [host]);
+		beginRoomDraw(snapshot);
+		startRoomSpin(
+			snapshot,
+			prepared,
+			{ numbers: [0], source: "csprng" },
+			id,
+			0,
+		);
+		const draw = snapshot.draw as RoomDraw;
+		snapshot.status = "result";
+		return draw;
+	}
+	function command(snapshot: RoomSnapshot, msg: LifecycleCommand) {
+		applyRoomCommand(snapshot, msg, host, host.id);
+	}
+	const wins = (snapshot: RoomSnapshot, current = true) =>
+		getRoomWins(snapshot, Number.MAX_SAFE_INTEGER, true, current);
+	it("retains saved candidate edits between draws and merges solo records by time without duplicating a win", () => {
+		const snapshot = room({
+			candidates: candidates.slice(0, 2),
+			excludeDrawn: false,
+		});
+		const first = play(snapshot, "first");
+		advanceRoomRound(snapshot, true);
+		const edit = (places: RoomSnapshot["candidates"]) =>
+			command(snapshot, {
+				type: "room-edit",
+				id: "edit",
+				baseListVersion: snapshot.listVersion,
+				candidates: places,
+			});
+		edit([candidates[0], candidates[2]]);
+		edit([{ ...candidates[0], name: "새 이름" }, candidates[2]]);
+		edit([...snapshot.candidates].reverse());
+		expect(snapshot.candidateChanges?.map((change) => change.summary)).toEqual([
+			"2번 → 3번",
+			"1번 → 새 이름",
+		]);
+		const restored = parseRoomSnapshot(snapshot);
+		expect(restored?.candidateChanges).toEqual(snapshot.candidateChanges);
+		const legacy = {
+			id: "legacy",
+			place: candidates[1],
+			timestamp: first.timestamp - 1,
+			source: "csprng" as const,
+			candidateCount: 2,
+		};
+		const timeline = getRoomHistoryTimeline(
+			restored,
+			Number.MAX_SAFE_INTEGER,
+			false,
+			[first],
+			[legacy],
+		);
+		expect(
+			timeline.map((entry) =>
+				entry.kind === "change" ? entry.summary : entry.id,
+			),
+		).toEqual(["1번 → 새 이름", "2번 → 3번", "first", "legacy"]);
+		expect(
+			parseRoomSnapshot({
+				...snapshot,
+				candidateChanges: [
+					snapshot.candidateChanges?.[0],
+					snapshot.candidateChanges?.[0],
+				],
+			}),
+		).toBeNull();
+	});
+	it("uses an un-timed boundary for legacy pool versions without guessing from a no-repeat draw", () => {
+		const old = { ...draw(1), candidateSetVersion: 1, excludeDrawn: true };
+		const next = { ...draw(2), candidateSetVersion: 2, excludeDrawn: true };
+		const state = room({ candidateSetVersion: 2, history: [next, old] });
+		const events = getRoomHistoryTimeline(
+			state,
+			Number.MAX_SAFE_INTEGER,
+			false,
+		);
+		expect(events.map((event) => event.kind)).toEqual([
+			"draw",
+			"change",
+			"draw",
+		]);
+		expect(events[1]).toMatchObject({ summary: "", exactTime: false });
+	});
+	it("interleaves imported solo draws and reports an observed menu replacement even if menu IDs were regenerated", () => {
+		const imported = (index: number, menu: string) => ({
+			...draw(index),
+			excludeDrawn: false,
+			candidates: [
+				{ id: `a-${index}`, name: "김밥", category: "점심" },
+				{ id: `b-${index}`, name: menu, category: "점심" },
+			],
+			winnerIndex: 0,
+		});
+		const events = getRoomHistoryTimeline(
+			null,
+			Number.MAX_SAFE_INTEGER,
+			false,
+			[imported(1, "쌀국수"), imported(2, "쌀국수"), imported(3, "된장찌개")],
+		);
+		expect(
+			events.map((event) =>
+				event.kind === "change" ? event.summary : event.id,
+			),
+		).toEqual(["draw-3", "쌀국수 → 된장찌개", "draw-2", "draw-1"]);
+	});
+	it("starts a fresh history on actual manual pool changes, including a change back to an earlier pool", () => {
+		const snapshot = room({
+			candidates: candidates.slice(0, 2),
+			excludeDrawn: false,
+		});
+		const first = play(snapshot, "first");
+		const end = first.startedAt + first.durationMs;
+		expect(getRoomWins(snapshot, end - 1, true, false).recent).toEqual([]);
+		expect(
+			getRoomWins({ ...snapshot, history: [first] }, end, true, true).recent,
+		).toEqual([first]);
+		advanceRoomRound(snapshot, true);
+		const filter = (excludedIds: string[]) =>
+			command(snapshot, {
+				type: "game-filter",
+				id: "filter",
+				expectedRevision: snapshot.revision ?? 1,
+				filter: { categories: null, excludedIds },
+			});
+		filter([]);
+		command(snapshot, {
+			type: "room-edit",
+			id: "edit",
+			baseListVersion: snapshot.listVersion,
+			candidates: [...snapshot.candidates].reverse(),
+		});
+		command(snapshot, {
+			type: "draw-view",
+			id: "view",
+			viewMode: "wheel",
+			expectedRevision: snapshot.revision ?? 1,
+		});
+		command(snapshot, {
+			type: "options",
+			id: "option",
+			excludeDrawn: true,
+			expectedRevision: snapshot.revision ?? 1,
+		});
+		expect(wins(snapshot).recent).toEqual([first]);
+		filter([candidates[0].id]);
+		expect(wins(snapshot).recent).toEqual([]);
+		const second = play(snapshot, "second");
+		advanceRoomRound(snapshot, true);
+		command(snapshot, {
+			type: "reset-exclusions",
+			id: "reset",
+			expectedRevision: snapshot.revision ?? 1,
+		});
+		expect(wins(snapshot).recent).toEqual([second]);
+		filter([]);
+		expect(wins(snapshot).recent).toEqual([]);
+		expect(wins(snapshot, false).recent).toEqual([second, first]);
+		const third = play(snapshot, "third");
+		advanceRoomRound(snapshot, true);
+		command(snapshot, {
+			type: "room-edit",
+			id: "rename",
+			baseListVersion: snapshot.listVersion,
+			candidates: snapshot.candidates.map((entry) => ({
+				...entry,
+				name: `${entry.name} 수정`,
+			})),
+		});
+		const restored = parseRoomSnapshot(snapshot);
+		expect(restored).toBeTruthy();
+		expect(wins(restored as RoomSnapshot).recent).toEqual([]);
+		expect(
+			wins(restored as RoomSnapshot, false).recent.map((draw) => draw.id),
+		).toEqual([third.id, second.id, first.id]);
+	});
+	it("separates retained legacy rounds when the same list was filtered and then restored", () => {
+		const old = room({
+			excludeDrawn: false,
+			candidates: candidates.slice(0, 2),
+		});
+		const all = { categories: null, excludedIds: [] };
+		const filtered = { categories: null, excludedIds: [candidates[1].id] };
+		old.gameFilter = all;
+		old.history = [3, 2, 1].map((round) => ({
+			...draw(1),
+			id: `draw-${round}`,
+			gameFilter: round === 2 ? filtered : all,
+		}));
+		const restored = parseRoomSnapshot(old);
+		expect(restored).toBeTruthy();
+		expect(
+			wins(restored as RoomSnapshot).recent.map((entry) => entry.id),
+		).toEqual(["draw-3"]);
+		expect(wins(restored as RoomSnapshot, false).recent).toHaveLength(3);
+		expect(parseRoomSnapshot(restored)).toEqual(restored);
+	});
+	it("keeps repeated wins beyond twenty with their original names after a replacement and reload", () => {
+		const snapshot = room({ candidates: [candidates[0]], excludeDrawn: false });
+		for (let round = 1; round <= 23; round++) {
+			play(snapshot, `win-${round}`);
+			advanceRoomRound(snapshot, false);
+		}
+		expect(wins(snapshot).recent).toHaveLength(20);
+		expect(wins(snapshot).older.map((win) => win.id)).toEqual([
+			"win-3",
+			"win-2",
+			"win-1",
+		]);
+		const winner = snapshot.candidates[0].name;
+		command(snapshot, {
+			type: "room-edit",
+			id: "replace",
+			baseListVersion: snapshot.listVersion,
+			candidates: [candidates[1]],
+		});
+		const current = play(snapshot, "new-pool");
+		const restored = parseRoomSnapshot(
+			JSON.parse(JSON.stringify(snapshot)),
+		) as RoomSnapshot;
+		expect(wins(restored).recent.map((draw) => draw.id)).toEqual([current.id]);
+		expect(wins(restored).older).toEqual([]);
+		const all = wins(restored, false);
+		expect(all.recent).toHaveLength(20);
+		expect(all.older.map((win) => [win.id, win.name])).toEqual(
+			["win-4", "win-3", "win-2", "win-1"].map((id) => [id, winner]),
+		);
+		expect(restored.olderWins?.[0]).not.toHaveProperty("candidates");
+		expect(
+			parseRoomSnapshot({
+				...restored,
+				olderWins: [{ ...all.older[0], candidateSetVersion: 0 }],
+			}),
+		).toBeNull();
 	});
 });

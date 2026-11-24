@@ -23,6 +23,10 @@
 	inline-size: min(100%, 500px);
 	margin-inline: auto;
 }
+.slot-stage-main .slot-machine {
+	/* The art spans the board toolbar while the cabinet stays centered. */
+	position: static;
+}
 .slot-art {
 	position: absolute;
 	inset: 0;
@@ -37,6 +41,10 @@
 	}
 	/* Native text and shadcn hit targets keep their layout, focus, and scroll behavior. */
 	.slot-art[data-painted] ~ :is(.slot-cabinet, .slot-reveal) {
+		opacity: 0;
+	}
+	.slot-stage:has(.slot-art[data-painted])
+		> :is(.picnic-options, .picnic-popup-layer) {
 		opacity: 0;
 	}
 }
@@ -245,9 +253,16 @@
 .slot-controls button:disabled {
 	cursor: default;
 }
-.slot-controls [data-variant="ghost"] {
+.slot-controls [data-variant="ghost"],
+.slot-controls .room-result-actions {
 	--foreground: var(--slot-type);
 	--accent: var(--paper-green);
+}
+.slot-controls .room-result-actions {
+	--card: var(--slot-shell-dark);
+	--input: var(--slot-brass);
+	word-break: keep-all;
+	overflow-wrap: anywhere;
 }
 .slot-controls .slot-action {
 	min-inline-size: min(8rem, 100%);
@@ -261,7 +276,7 @@
 	flex: none;
 	inline-size: 44px;
 }
-/* Reserve both 44px arrows and their 8px gaps for every phase. */
+/* Leave room for both 44px preview arrows and their 8px gaps. */
 .slot-controls:has([data-size="icon"]) :is(.slot-action, .slot-wait) {
 	inline-size: min(8rem, calc(100% - 104px));
 	min-inline-size: 0;
@@ -285,18 +300,8 @@
 .slot-machine[data-voting] .picnic-details {
 	min-block-size: calc(
 		var(--picnic-vote-sheet-height) +
-		var(--picnic-bottom-padding) +
-		var(--slot-actions-height, 0px)
+		var(--picnic-bottom-padding)
 	);
-}
-.slot-machine[data-host] {
-	--slot-actions-height: calc(
-		var(--picnic-next-height) +
-		var(--picnic-footer-gap)
-	);
-}
-.slot-reveal .picnic-sheet .room-result-actions {
-	margin-block-start: var(--picnic-footer-gap);
 }
 .slot-full-name {
 	display: none;

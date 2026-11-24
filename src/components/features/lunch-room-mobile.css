@@ -75,8 +75,7 @@
 	.lunch-room.room-live .room-readonly-candidates li {
 		scroll-margin-block-start: 60px;
 	}
-	.lunch-room.room-live .room-draw-panel,
-	.lunch-room.room-live .room-history-panel {
+	.lunch-room.room-live .room-draw-panel {
 		padding: 0;
 	}
 	.lunch-room.room-live .room-candidates-panel {
@@ -150,10 +149,6 @@
 		margin-block-start: 8px;
 	}
 
-	.lunch-room.room-live .room-history-list {
-		max-block-size: none;
-		overflow: visible;
-	}
 	.lunch-room.room-live .room-feedback-list ul {
 		gap: 0;
 		margin-block-start: 6px;

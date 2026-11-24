@@ -42,20 +42,50 @@ export function drawDetails(
 				.stroke({ color: style.borderTopColor, width: 1 });
 		} else if (
 			el.matches(
-				".picnic-exclusion, .picnic-history-button, .picnic-options-error, .room-next-round",
+				".picnic-exclusion-group, .picnic-exclusion, .picnic-exclusion-count, .picnic-history-button, .picnic-options-error, .room-next-round",
 			)
 		) {
 			const radius = Math.min(
 				h / 2,
 				Number.parseFloat(style.borderTopLeftRadius),
 			);
-			pen(group)
+			const shape = pen(group)
 				.roundRect(x, y, w, h, radius)
-				.fill(style.backgroundColor)
-				.stroke({
-					color: style.borderTopColor,
-					width: Number.parseFloat(style.borderTopWidth),
-				});
+				.fill(style.backgroundColor);
+			const border = Number.parseFloat(style.borderTopWidth);
+			if (border > 0)
+				shape.stroke({ color: style.borderTopColor, width: border });
+			if (el.matches(".picnic-exclusion-count")) {
+				const start = style.direction === "rtl" ? x + w - 1 : x;
+				pen(group)
+					.moveTo(start, y + 12)
+					.lineTo(start, y + h - 12)
+					.stroke({
+						color: style.getPropertyValue("--paper-edge").trim(),
+						width: 1,
+					});
+			}
+		} else if (el.matches(".room-win-filter")) {
+			if (el.matches(":active") || (hover && el.matches(":hover"))) {
+				pen(group)
+					.roundRect(x, y, w, h, Number.parseFloat(style.borderTopLeftRadius))
+					.fill(style.backgroundColor);
+			}
+		} else if (el instanceof HTMLInputElement && el.type === "checkbox") {
+			const paper = style.getPropertyValue("--paper-sheet").trim();
+			const border = el.checked
+				? style.accentColor
+				: style.getPropertyValue("--paper-muted").trim();
+			const g = pen(group);
+			g.roundRect(x + 0.75, y + 0.75, w - 1.5, h - 1.5, 3)
+				.fill(el.checked ? border : paper)
+				.stroke({ color: border, width: 1.5 });
+			if (el.checked) {
+				g.moveTo(x + w * 0.24, y + h * 0.5)
+					.lineTo(x + w * 0.43, y + h * 0.69)
+					.lineTo(x + w * 0.77, y + h * 0.31)
+					.stroke({ color: paper, width: 2, cap: "round", join: "round" });
+			}
 		} else if (el.matches('[role="switch"]')) {
 			const checked = el.getAttribute("aria-checked") === "true";
 			const thumbAtRight = checked !== (style.direction === "rtl");
@@ -91,10 +121,16 @@ export function drawDetails(
 					.fill(active ? 0xefd9b5 : 0xf6e6ca);
 			}
 		} else if (el.matches("li")) {
-			pen(group)
-				.moveTo(x, y + h - 0.5)
-				.lineTo(x + w, y + h - 0.5)
-				.stroke({ color: 0xdcc9b3, width: 1 });
+			const winHistory = el.closest(".room-win-history");
+			if (!winHistory || Number.parseFloat(style.borderBlockEndWidth) > 0) {
+				pen(group)
+					.moveTo(x, y + h - 0.5)
+					.lineTo(x + w, y + h - 0.5)
+					.stroke({
+						color: winHistory ? style.borderBlockEndColor : 0xdcc9b3,
+						width: 1,
+					});
+			}
 		} else if (el.matches(".room-feedback-voter small")) {
 			pen(group).roundRect(x, y, w, h, 3).fill(0xd7e8d7);
 		} else if (el instanceof SVGSVGElement) {
@@ -109,6 +145,9 @@ export function drawDetails(
 					.moveTo(0, -5)
 					.lineTo(0, 0)
 					.lineTo(3.8, 2.4);
+			} else if (el.classList.contains("lucide-chevron-right")) {
+				if (style.direction === "rtl") g.scale.x *= -1;
+				g.moveTo(-3, -6).lineTo(3, 0).lineTo(-3, 6);
 			} else if (el.classList.contains("lucide-arrow-right")) {
 				if (style.direction === "rtl") g.scale.x *= -1;
 				g.moveTo(-8, 0).lineTo(8, 0).moveTo(1, -7).lineTo(8, 0).lineTo(1, 7);
@@ -144,12 +183,18 @@ export function drawDetails(
 			const offset =
 				((h - thumb) * el.scrollTop) / (el.scrollHeight - el.clientHeight);
 			pen(group)
-				.roundRect(x + w - 4, y + offset, 3, thumb, 1.5)
+				.roundRect(
+					style.direction === "rtl" ? x + 1 : x + w - 4,
+					y + offset,
+					3,
+					thumb,
+					1.5,
+				)
 				.fill(0xa88970);
 		}
 		if (
 			el.matches(
-				'.picnic-exclusion:has(:focus-visible), :focus-visible:not([tabindex="-1"], [role="switch"])',
+				':is(.picnic-exclusion, .room-win-filter):has(:focus-visible), :focus-visible:not([tabindex="-1"], [role="switch"], input[type="checkbox"])',
 			)
 		) {
 			pen(group)
@@ -159,7 +204,7 @@ export function drawDetails(
 					w - 3,
 					h - 3,
 					el.matches(
-						".picnic-exclusion, .picnic-history-button, .room-next-round",
+						".picnic-exclusion, .picnic-exclusion-count, .picnic-history-button, .room-next-round",
 					)
 						? h / 2 - 1.5
 						: 6,
@@ -181,6 +226,7 @@ export function observeDetails(root: HTMLElement, refresh: () => void) {
 	}
 	const events = [
 		"scroll",
+		"change",
 		"focusin",
 		"focusout",
 		"pointerover",

@@ -66,13 +66,13 @@ try {
 	await idle.waitFor();
 	assert.equal(await board.locator("output.picnic-loading").count(), 0);
 	assert.equal((await board.boundingBox()).height, loadingHeight);
-	const history = board.getByRole("button", { name: "당첨 제외 내역 열기" });
-	const popup = page.getByRole("dialog", { name: "당첨 제외 내역" });
+	const history = board.getByRole("button", { name: "당첨 내역 열기" });
+	const popup = page.getByRole("dialog", { name: "당첨 내역" });
 	const switchName = /중복 없이 추첨/;
 	const exclude = board.getByRole("switch", { name: switchName });
 	const initial = await exclude.isChecked();
 	await board
-		.getByText("중복 없이 추첨", { exact: true })
+		.locator("label.picnic-exclusion")
 		.click({ position: { x: 12, y: 22 } });
 	await board
 		.getByRole("switch", { name: switchName, checked: !initial })
@@ -282,8 +282,33 @@ try {
 		await history.focus();
 		await history.press("Enter");
 		await popup.waitFor();
+		assert.equal(
+			await popup.getByRole("checkbox", { name: "이전 게임 포함" }).count(),
+			0,
+		);
 		assert.ok(
-			await popup.getByRole("list", { name: "당첨 제외 내역" }).isVisible(),
+			(await popup.getByRole("button", { name: /상세 기록 열기$/ }).count()) >
+				0,
+		);
+		assert.ok(
+			await popup.evaluate((el) => {
+				const board = el.closest(".picnic-popup-layer").getBoundingClientRect();
+				const pane = el.closest(".room-primary-column").getBoundingClientRect();
+				const box = el.getBoundingClientRect();
+				const left = Math.max(0, board.left, pane.left),
+					right = Math.min(innerWidth, board.right, pane.right);
+				const top = Math.max(0, board.top, pane.top),
+					bottom = Math.min(innerHeight, board.bottom, pane.bottom);
+				return (
+					Math.abs(box.left + box.right - left - right) < 3 &&
+					Math.abs(box.top + box.bottom - top - bottom) < 3 &&
+					box.left >= left &&
+					box.right <= right &&
+					box.top >= top &&
+					box.bottom <= bottom
+				);
+			}),
+			`${width}px: center the entire history dialog in the visible part of the board`,
 		);
 		assert.ok(
 			await popup.evaluate(
@@ -305,22 +330,38 @@ try {
 				`${width}px: the complete popup must fit above chat`,
 			);
 		}
+		await page.keyboard.press("Escape");
+		await popup.waitFor({ state: "detached" });
+		await page.waitForFunction(() =>
+			document.activeElement?.matches(".picnic-history-button"),
+		);
+		const count = board.getByRole("button", {
+			name: /당첨 제외 후보 \d+개 보기/,
+		});
+		await count.press("Enter");
+		const exclusions = page.getByRole("dialog", { name: "당첨 제외 후보" });
+		await exclusions.getByRole("list", { name: "당첨 제외 내역" }).waitFor();
 		if (width === 320) {
-			await popup.getByRole("button", { name: "제외 목록 초기화" }).click();
+			await exclusions
+				.getByRole("button", { name: "제외 목록 초기화" })
+				.click();
 			const confirm = page.getByRole("alertdialog");
 			assert.ok(await confirm.evaluate((el) => !!el.closest(".picnic-frame")));
 			await confirm
 				.getByRole("button", { name: "초기화", exact: true })
 				.click();
-			await popup.getByText("아직 제외된 후보가 없어요.").waitFor();
+			await exclusions.getByText("아직 제외된 후보가 없어요.").waitFor();
 		}
 		if (width === 1440) {
-			const box = await popup.boundingBox();
+			const box = await exclusions.boundingBox();
 			await page.mouse.click(box.x + box.width + 12, box.y + 24);
 		} else await page.keyboard.press("Escape");
-		await popup.waitFor({ state: "detached" });
-		await page.waitForFunction(() =>
-			document.activeElement?.matches(".picnic-history-button"),
+		await exclusions.waitFor({ state: "detached" });
+		await page.waitForFunction(
+			(selector) => document.activeElement?.matches(selector),
+			width === 320
+				? '.picnic-exclusion [role="switch"]'
+				: ".picnic-exclusion-count",
 		);
 
 		await board.getByRole("button", { name: "대기화면으로 이동" }).click();
@@ -328,6 +369,23 @@ try {
 		assert.equal((await board.boundingBox()).height, idleHeight);
 		console.log(`${width}px passed (board height: ${idleHeight}px)`);
 	}
+	await page.getByRole("button", { name: "후보", exact: true }).click();
+	await page.getByRole("button", { name: "김치찌개 이름 수정" }).click();
+	const nameField = page.getByRole("textbox", { name: "1번 후보 이름" });
+	await nameField.fill("된장찌개");
+	await nameField.press("Enter");
+	await page.getByRole("button", { name: "마감", exact: true }).click();
+	await history.press("Enter");
+	await popup.getByText("현재 후보로 당첨된 내역이 없어요.").waitFor();
+	const previous = popup.getByRole("checkbox", { name: "이전 게임 포함" });
+	assert.equal(await previous.isChecked(), false);
+	const height = (await popup.boundingBox()).height;
+	await previous.press("Space");
+	await popup.getByText("김치찌개 → 된장찌개").waitFor();
+	assert.ok(await previous.isChecked());
+	assert.equal((await popup.boundingBox()).height, height);
+	await popup.getByText("이전 게임 포함", { exact: true }).click();
+	await popup.getByText("현재 후보로 당첨된 내역이 없어요.").waitFor();
 } finally {
 	await browser.close();
 }

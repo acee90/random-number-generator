@@ -97,7 +97,7 @@ describe("shared solo game screen", () => {
 		expect(screen.queryByRole("textbox", { name: /메시지/ })).toBeNull();
 		expect(screen.queryByRole("button", { name: "룰렛·결과" })).toBeNull();
 	});
-	it("keeps the stopped slot in place and puts the next round actions below the votes", async () => {
+	it("replaces the spin button with the round actions in the cabinet above the votes", async () => {
 		renderRoom();
 		const spin = screen.getByRole("button", { name: "슬롯 돌리기" });
 		const controls = spin.parentElement;
@@ -114,18 +114,19 @@ describe("shared solo game screen", () => {
 		const next = screen.getByRole("button", {
 			name: "대기화면으로 이동",
 		});
-		expect(screen.getByRole("button", { name: "추첨 완료" })).toBe(spin);
-		expect(spin.hasAttribute("disabled")).toBe(true);
+		expect(spin.isConnected).toBe(false);
+		expect(screen.queryByRole("button", { name: "추첨 완료" })).toBeNull();
 		expect(controls?.closest(".slot-machine")?.querySelector("canvas")).toBe(
 			canvas,
 		);
-		const sheet = up.closest(".picnic-sheet");
-		expect(sheet?.contains(next)).toBe(true);
+		expect(controls?.contains(next)).toBe(true);
 		expect(
-			sheet?.contains(screen.getByRole("button", { name: "바로 다시 뽑기" })),
+			controls?.contains(
+				screen.getByRole("button", { name: "바로 다시 뽑기" }),
+			),
 		).toBe(true);
 		expect(
-			up.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING,
+			next.compareDocumentPosition(up) & Node.DOCUMENT_POSITION_FOLLOWING,
 		).toBeTruthy();
 		next.focus();
 		fireEvent.click(next);
@@ -235,13 +236,79 @@ describe("shared solo game screen", () => {
 		expect(readSoloRoom(first.roomId)?.snapshot.history).toHaveLength(1);
 		first.unmount();
 		render(<SoloLunchRoomPage roomId={first.roomId} />);
-		fireEvent.click(screen.getByRole("button", { name: "지난 기록" }));
+		fireEvent.click(screen.getByRole("button", { name: "당첨 내역 열기" }));
 		expect(document.activeElement).toBe(
-			screen.getByRole("heading", { name: "추첨 기록" }),
+			screen.getByRole("heading", { name: "당첨 내역" }),
 		);
 		expect(
 			screen.getByRole("button", { name: "한식당 상세 기록 열기" }),
 		).toBeTruthy();
+	});
+	it("starts the board history with the current candidates and keeps completed wins after editing", async () => {
+		const first = renderRoom();
+		expect(screen.queryByRole("button", { name: "지난 기록" })).toBeNull();
+		await draw();
+		const open = () =>
+			fireEvent.click(screen.getByRole("button", { name: "당첨 내역 열기" }));
+		const close = () =>
+			fireEvent.click(
+				within(screen.getByRole("dialog")).getByRole("button", {
+					name: "닫기",
+				}),
+			);
+		open();
+		expect(
+			screen.queryByRole("checkbox", { name: "이전 게임 포함" }),
+		).toBeNull();
+		fireEvent.click(
+			screen.getByRole("button", { name: "한식당 상세 기록 열기" }),
+		);
+		expect(
+			screen.getByText("상세 기록을 열었을 때의 투표 현황입니다."),
+		).toBeTruthy();
+		fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+		await act(async () => vi.advanceTimersByTime(0));
+		close();
+		fireEvent.click(screen.getByRole("button", { name: "대기화면으로 이동" }));
+		await act(async () =>
+			fireEvent.click(screen.getByRole("button", { name: "후보" })),
+		);
+		await addCandidate("새 후보");
+		await act(async () =>
+			fireEvent.click(screen.getByRole("button", { name: "마감" })),
+		);
+		first.unmount();
+		render(<SoloLunchRoomPage roomId={first.roomId} />);
+		open();
+		expect(screen.getByText("현재 후보로 당첨된 내역이 없어요.")).toBeTruthy();
+		const includePrevious = () =>
+			screen.getByRole("checkbox", {
+				name: "이전 게임 포함",
+			}) as HTMLInputElement;
+		expect(includePrevious().checked).toBe(false);
+		fireEvent.click(includePrevious());
+		const events = within(
+			screen.getByRole("region", { name: "당첨 목록" }),
+		).getAllByRole("listitem");
+		expect(events[0].textContent).toContain("후보 변경");
+		expect(events[0].textContent).toContain("새 후보 추가");
+		expect(events[1].textContent).toContain("한식당");
+		fireEvent.click(
+			screen.getByRole("button", { name: "한식당 상세 기록 열기" }),
+		);
+		fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+		await act(async () => vi.advanceTimersByTime(0));
+		expect(includePrevious().checked).toBe(true);
+		expect(document.activeElement).toBe(
+			screen.getByRole("button", { name: "한식당 상세 기록 열기" }),
+		);
+		fireEvent.click(includePrevious());
+		expect(screen.queryByText("새 후보 추가")).toBeNull();
+		expect(screen.getByText("현재 후보로 당첨된 내역이 없어요.")).toBeTruthy();
+		fireEvent.click(includePrevious());
+		close();
+		open();
+		expect(includePrevious().checked).toBe(false);
 	});
 	it("preserves old winner-only history without inventing candidate snapshots", () => {
 		localStorage.setItem(
@@ -257,11 +324,10 @@ describe("shared solo game screen", () => {
 			]),
 		);
 		renderRoom();
-		fireEvent.click(screen.getByRole("button", { name: "지난 기록" }));
+		fireEvent.click(screen.getByRole("button", { name: "당첨 내역 열기" }));
+		fireEvent.click(screen.getByRole("checkbox", { name: "이전 게임 포함" }));
 		expect(
-			within(screen.getByRole("dialog")).getByRole("heading", {
-				name: "중식당",
-			}),
+			within(screen.getByRole("listitem")).getByText("중식당"),
 		).toBeTruthy();
 		expect(localStorage.getItem(lunchHistoryKey)).toContain("legacy");
 	});
@@ -272,10 +338,12 @@ describe("shared solo game screen", () => {
 		localStorage.setItem(soloHistoryKey, JSON.stringify([previous]));
 		first.unmount();
 		const next = renderRoom();
-		fireEvent.click(screen.getByRole("button", { name: "지난 기록" }));
+		fireEvent.click(screen.getByRole("button", { name: "당첨 내역 열기" }));
+		fireEvent.click(screen.getByRole("checkbox", { name: "이전 게임 포함" }));
 		expect(
-			screen.getByRole("heading", { name: "이전 혼자 추첨 기록" }),
-		).toBeTruthy();
+			screen.queryByRole("heading", { name: "이전 혼자 추첨 기록" }),
+		).toBeNull();
+		expect(screen.getAllByRole("listitem")).toHaveLength(1);
 		fireEvent.click(
 			screen.getByRole("button", { name: "한식당 상세 기록 열기" }),
 		);
@@ -294,7 +362,7 @@ describe("shared solo game screen", () => {
 	});
 	it("returns keyboard focus to the history trigger after Escape", async () => {
 		renderRoom();
-		const trigger = screen.getByRole("button", { name: "지난 기록" });
+		const trigger = screen.getByRole("button", { name: "당첨 내역 열기" });
 		fireEvent.click(trigger);
 		fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
 		await act(async () => vi.advanceTimersByTime(400));

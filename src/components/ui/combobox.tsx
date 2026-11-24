@@ -44,13 +44,7 @@ export function Combobox<T extends string>({
 				ref={triggerRef}
 				aria-busy={pending || undefined}
 				aria-label={`${label} · ${options[value]}`}
-				render={
-					<Button
-						variant="outline"
-						size="touch"
-						className="ui-combobox-trigger"
-					/>
-				}
+				render={<Button variant="outline" />}
 			>
 				{options[value]}
 				{pending ? (

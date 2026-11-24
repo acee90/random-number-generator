@@ -3,7 +3,7 @@ import "pixi.js/filters";
 import { createBoardRenderer } from "../game-art/renderer";
 import { createTextPrinter } from "../game-art/text";
 import { type BallotScene, createBallots } from "../picnic/ballots";
-import { drawDetails } from "../picnic/details";
+import { drawDetails, observeDetails } from "../picnic/details";
 import { drawCabinet, relativeBox } from "./cabinet";
 import { drawControls } from "./controls";
 
@@ -76,6 +76,22 @@ export async function createSlotPainter(canvas: HTMLCanvasElement) {
 		sheetRoot,
 		() => renderer.render({ container: stage }),
 	);
+	const board = canvas.closest(".slot-stage");
+	const overlay = stage.addChild(new Container());
+	const overlayRoots =
+		board?.querySelectorAll<HTMLElement>(
+			":scope > .picnic-options, :scope > .picnic-popup-layer",
+		) ?? [];
+	function drawOverlay() {
+		clear(overlay);
+		for (const root of overlayRoots) drawDetails(overlay, root, canvas, 2);
+	}
+	const disconnectOverlay = Array.from(overlayRoots, (root) =>
+		observeDetails(root, () => {
+			drawOverlay();
+			renderer.render({ container: stage });
+		}),
+	);
 	let blurPx = 0;
 	const blur = Object.assign(new Filter({ resources: {} }), {
 		getCanvasFilterString: () => `blur(${blurPx}px)`,
@@ -99,9 +115,22 @@ export async function createSlotPainter(canvas: HTMLCanvasElement) {
 			clear(glass);
 			clear(reel);
 			releaseGradients?.();
-			releaseGradients = drawCabinet(back, glass, cabinet, origin, box);
+			const cabinetOrigin = cabinet.getBoundingClientRect();
+			back.position.set(
+				cabinetOrigin.left - origin.left,
+				cabinetOrigin.top - origin.top,
+			);
+			glass.position.copyFrom(back.position);
+			releaseGradients = drawCabinet(
+				back,
+				glass,
+				cabinet,
+				cabinetOrigin,
+				relativeBox(drum, cabinetOrigin),
+			);
 			const plaque = cabinet.querySelector(".slot-plaque-label");
-			if (plaque) printLabel(back, plaque, origin, 1);
+			if (plaque) printLabel(back, plaque, cabinetOrigin, 1);
+			drawOverlay();
 			viewport.position.set(box.x, box.y);
 			mask.clear().roundRect(box.x, box.y, width, height, 6).fill(0xffffff);
 			const rowHeight = height / 3;
@@ -197,6 +226,7 @@ export async function createSlotPainter(canvas: HTMLCanvasElement) {
 			renderer.render({ container: stage });
 		},
 		destroy() {
+			for (const disconnect of disconnectOverlay) disconnect();
 			ballots.destroy();
 			stage.destroy(owned);
 			blur.destroy();

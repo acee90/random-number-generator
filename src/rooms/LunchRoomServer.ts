@@ -1146,6 +1146,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			this.room.processedStarts.includes(requestId) ||
 			snapshot.draw?.id === requestId ||
 			snapshot.history.some((draw) => draw.id === requestId) ||
+			snapshot.olderWins?.some((win) => win.id === requestId) ||
 			snapshot.exclusionRecords?.some((record) => record.drawId === requestId)
 		) {
 			this.sendSnapshot(connection);

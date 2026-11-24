@@ -22,6 +22,11 @@ import {
 	recordRoomDrawMetadata,
 	setRoomExcludeDrawn,
 } from "./roomDrawMetadata";
+import {
+	captureRoomCandidates,
+	describeCandidateChange,
+	summarizeRoomWin,
+} from "./roomWinHistory";
 
 export type LifecycleCommand = Extract<
 	ClientMessage,
@@ -50,6 +55,7 @@ export function createRoomSnapshot(
 		createdAt,
 		expiresAt: createdAt + lunchRoomLimits.ttlMs,
 		listVersion: 1,
+		candidateSetVersion: 1,
 		revision: 1,
 		intakeId: null,
 		excludeDrawn: false,
@@ -202,6 +208,14 @@ export function applyRoomCommand(
 	hostParticipantId: string,
 ) {
 	const priorListVersion = snapshot.listVersion;
+	const priorSetVersion = snapshot.candidateSetVersion ?? priorListVersion;
+	const priorSet =
+		(message.type === "room-edit" && message.candidates) ||
+		message.type === "game-filter" ||
+		message.type === "recommend" ||
+		message.type === "remove-candidate"
+			? captureRoomCandidates(snapshot)
+			: undefined;
 	switch (message.type) {
 		case "intake":
 			snapshot.status =
@@ -289,6 +303,29 @@ export function applyRoomCommand(
 			snapshot.exclusionRecords = [];
 			break;
 	}
+	if (priorSet !== undefined) {
+		const summary = describeCandidateChange(
+			priorSet,
+			captureRoomCandidates(snapshot),
+		);
+		snapshot.candidateSetVersion = summary
+			? priorSetVersion + 1
+			: priorSetVersion;
+		if (
+			summary &&
+			(snapshot.drawCount ||
+				snapshot.history.length ||
+				snapshot.olderWins?.length ||
+				snapshot.draw)
+		) {
+			snapshot.candidateChanges ??= [];
+			snapshot.candidateChanges.push({
+				candidateSetVersion: snapshot.candidateSetVersion,
+				timestamp: Date.now(),
+				summary,
+			});
+		}
+	}
 	if (message.type !== "room-edit" || message.candidates)
 		snapshot.revision = (snapshot.revision ?? priorListVersion) + 1;
 }
@@ -302,6 +339,7 @@ export function prepareRoomDraw(
 	return {
 		candidates,
 		listVersion: snapshot.listVersion,
+		candidateSetVersion: snapshot.candidateSetVersion ?? snapshot.listVersion,
 		viewMode: readDrawView(snapshot.viewMode),
 		participants: structuredClone(participants),
 		requestedAt: Date.now(),
@@ -354,6 +392,7 @@ export function startRoomSpin(
 		votes: [],
 	};
 	recordRoomDrawMetadata(snapshot, draw, prepared.excludeDrawn);
+	snapshot.candidateSetVersion = prepared.candidateSetVersion;
 	snapshot.draw = draw;
 	snapshot.status = "drawing";
 	snapshot.revision = (snapshot.revision ?? snapshot.listVersion) + 1;
@@ -374,10 +413,13 @@ export function getRoomArchiveDraws({
 function archiveCurrentDraw(snapshot: RoomSnapshot) {
 	const draw = snapshot.draw;
 	if (draw && !snapshot.history.some((entry) => entry.id === draw.id)) {
-		snapshot.history = [structuredClone(draw), ...snapshot.history].slice(
-			0,
-			lunchRoomLimits.maxHistory,
-		);
+		snapshot.history = [structuredClone(draw), ...snapshot.history];
+		const evicted = snapshot.history.splice(lunchRoomLimits.maxHistory);
+		if (evicted.length)
+			snapshot.olderWins = [
+				...evicted.map(summarizeRoomWin),
+				...(snapshot.olderWins ?? []),
+			];
 	}
 	clearDisabledRoomExclusions(snapshot);
 	snapshot.draw = null;

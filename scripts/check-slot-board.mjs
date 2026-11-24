@@ -122,12 +122,44 @@ try {
 		await button(host, "이전 후보").press("Space");
 		await frame(host);
 		assert.equal((await host.evaluate(readLetters)).hash, idle.hash);
+		await button(host, "당첨 내역 열기").press("Enter");
+		const history = host.getByRole("dialog", { name: "당첨 내역" });
+		await history.getByText("아직 당첨 내역이 없어요.").waitFor();
+		assert.equal(
+			await history.getByRole("checkbox", { name: "이전 게임 포함" }).count(),
+			0,
+		);
+		await host.waitForFunction(() => {
+			const panel = document.querySelector(".picnic-popup");
+			const canvas = document.querySelector(".slot-art[data-painted]");
+			if (
+				!panel ||
+				!canvas ||
+				getComputedStyle(panel.parentElement).opacity !== "0"
+			)
+				return false;
+			const popup = panel.getBoundingClientRect(),
+				bounds = canvas.getBoundingClientRect();
+			const scale = canvas.width / bounds.width;
+			const pixel = canvas
+				.getContext("2d")
+				.getImageData(
+					Math.floor((popup.left + 8 - bounds.left) * scale),
+					Math.floor((popup.top + 24 - bounds.top) * scale),
+					1,
+					1,
+				).data;
+			return pixel[0] > 240 && pixel[1] > 220 && pixel[3] === 255;
+		});
+		await host.keyboard.press("Escape");
+		await history.waitFor({ state: "detached" });
 	}
 	const reduced = await guest.evaluate(readLetters);
 	const idle = await host.evaluate(readLetters);
 	const spin = button(host, "슬롯 돌리기");
 	const canvas = await painted(host).elementHandle();
-	const spinTarget = await spin.elementHandle();
+	const controls = host.locator(".slot-controls");
+	const controlsBox = await controls.boundingBox();
 	const drumBox = await host.locator(".slot-drum").boundingBox();
 	await spin.press("Enter");
 	const spinning = host.locator('.slot-machine[data-phase="spinning"]');
@@ -168,12 +200,16 @@ try {
 			(el) => el === document.querySelector(".slot-art[data-painted]"),
 		),
 	);
-	assert.ok(
-		await spinTarget.evaluate(
-			(el) => el === document.querySelector(".slot-action") && el.disabled,
-		),
-	);
 	assert.deepEqual(await host.locator(".slot-drum").boundingBox(), drumBox);
+	assert.deepEqual(await controls.boundingBox(), controlsBox);
+	const nextRound = button(controls, "대기화면으로 이동");
+	assert.ok(await nextRound.isEnabled());
+	assert.ok(await button(controls, "바로 다시 뽑기").isEnabled());
+	assert.equal(await button(host, "추첨 완료").count(), 0);
+	assert.equal(
+		await host.locator(".slot-reveal .room-result-actions").count(),
+		0,
+	);
 	assert.equal(
 		await host
 			.locator(".slot-reveal")
@@ -181,10 +217,11 @@ try {
 		"0",
 	);
 	assert.equal(await host.locator(".picnic-ticket").count(), 0);
-	assert.ok(await button(host, "다음 후보").isDisabled());
 	const guestResult = guest.locator('.slot-machine[data-phase="done"] h3');
 	await guestResult.waitFor();
 	assert.equal(await guestResult.textContent(), winner);
+	assert.equal(await button(guest, "대기화면으로 이동").count(), 0);
+	assert.equal(await button(guest, "바로 다시 뽑기").count(), 0);
 	assert.equal(
 		await result.evaluate((el) => document.activeElement === el),
 		true,
@@ -214,14 +251,14 @@ try {
 	);
 	await host.emulateMedia({ forcedColors: "none" });
 	await painted(host).waitFor();
-	await button(host, "대기화면으로 이동").press("Enter");
+	await nextRound.press("Enter");
 	await spin.waitFor();
 	assert.equal(
 		await spin.evaluate((el) => document.activeElement === el),
 		true,
 	);
 	console.log(
-		"Passed: same canvas, fixed reel and controls, painted voting below the winner, 320/597/1280px, keyboard, reduced motion, rejoin, high contrast and next round.",
+		"Passed: same canvas, fixed reel, round actions in the cabinet above voting, 320/597/1280px, keyboard, reduced motion, rejoin, high contrast and next round.",
 	);
 } finally {
 	await browser.close();

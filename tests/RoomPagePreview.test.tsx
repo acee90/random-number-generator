@@ -251,7 +251,7 @@ describe("Storybook room page with the local transport adapter", () => {
 		expect(
 			screen.getByRole("button", { name: "슬롯 돌리기" }).matches(":disabled"),
 		).toBe(false);
-		fireEvent.click(screen.getByRole("button", { name: "지난 기록" }));
+		fireEvent.click(screen.getByRole("button", { name: "당첨 내역 열기" }));
 		expect(
 			screen.getAllByRole("button", { name: /상세 기록 열기$/ }),
 		).toHaveLength(2);
@@ -284,7 +284,7 @@ describe("Storybook room page with the local transport adapter", () => {
 		expect(screen.getByText("8명 참여")).toBeTruthy();
 		fireEvent.click(next);
 		expectWaitingCandidateCount(12);
-		fireEvent.click(screen.getByRole("button", { name: "지난 기록" }));
+		fireEvent.click(screen.getByRole("button", { name: "당첨 내역 열기" }));
 		const entries = screen.getAllByRole("button", { name: /상세 기록 열기$/ });
 		fireEvent.click(entries[0]);
 		const archived = screen.getByRole("dialog");
@@ -369,9 +369,7 @@ describe("Storybook room page with the local transport adapter", () => {
 				.getByRole("switch", { name: "중복 없이 추첨 · 뽑힌 후보 제외" })
 				.matches(":disabled"),
 		).toBe(false);
-		expect(
-			screen.getByRole("heading", { name: "추첨", exact: true }),
-		).toBeTruthy();
+		expect(screen.queryByRole("heading", { name: "추첨" })).toBeNull();
 		await act(async () => {
 			fireEvent.click(screen.getByRole("button", { name: "후보" }));
 		});
@@ -561,9 +559,7 @@ describe("Storybook room page with the local transport adapter", () => {
 		await act(async () =>
 			fireEvent.click(screen.getByRole("button", { name: "마감" })),
 		);
-		expect(
-			screen.getByRole("heading", { name: "추첨", exact: true }),
-		).toBeTruthy();
+		expect(screen.queryByRole("heading", { name: "추첨" })).toBeNull();
 		expectWaitingCandidateCount(0);
 		expect(switchForDrawn().getAttribute("aria-checked")).toBe("true");
 		await act(async () => fireEvent.click(switchForDrawn()));

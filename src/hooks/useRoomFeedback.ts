@@ -14,6 +14,7 @@ export type FeedbackOptions = {
 	connected: boolean;
 	pending: boolean;
 	readOnly?: boolean;
+	readOnlyNotice?: string;
 	optimisticVote?: OptimisticVote;
 	onVote: (drawId: string, choice: VoteChoice) => boolean;
 };
@@ -23,6 +24,7 @@ export function useRoomFeedback({
 	connected,
 	pending,
 	readOnly = false,
+	readOnlyNotice,
 	optimisticVote: suppliedVote,
 	onVote,
 }: FeedbackOptions) {
@@ -78,7 +80,7 @@ export function useRoomFeedback({
 			: "";
 	const canVote = !readOnly && connected && eligible && !pending && !ownVote;
 	const statusMessage = readOnly
-		? "확정된 투표 기록입니다."
+		? (readOnlyNotice ?? "확정된 투표 기록입니다.")
 		: !connected
 			? "다시 연결되면 투표할 수 있습니다."
 			: pendingVote
@@ -94,9 +96,12 @@ export function useRoomFeedback({
 									? "추첨 시작 후 입장해 이번 결과에는 투표할 수 없습니다. 다음 추첨부터 참여해 주세요."
 									: "");
 	const showVisibleStatus =
-		!readOnly &&
-		(!connected ||
-			(!pending && !ownVote && (Boolean(submitError) || !selfId || !eligible)));
+		Boolean(readOnly && readOnlyNotice) ||
+		(!readOnly &&
+			(!connected ||
+				(!pending &&
+					!ownVote &&
+					(Boolean(submitError) || !selfId || !eligible))));
 
 	useEffect(() => {
 		if (

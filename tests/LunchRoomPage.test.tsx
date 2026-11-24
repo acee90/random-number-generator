@@ -104,12 +104,14 @@ function candidateRows() {
 }
 
 function openExclusions() {
-	fireEvent.click(screen.getByRole("button", { name: "당첨 제외 내역 열기" }));
-	return screen.getByRole("dialog", { name: "당첨 제외 내역" });
+	fireEvent.click(
+		screen.getByRole("button", { name: /당첨 제외 후보 \d+개 보기/ }),
+	);
+	return screen.getByRole("dialog", { name: "당첨 제외 후보" });
 }
 function closeExclusions() {
 	fireEvent.click(
-		within(screen.getByRole("dialog", { name: "당첨 제외 내역" })).getByRole(
+		within(screen.getByRole("dialog", { name: "당첨 제외 후보" })).getByRole(
 			"button",
 			{ name: "닫기" },
 		),
@@ -594,7 +596,7 @@ describe("current result feedback and frozen history", () => {
 		};
 		room.snapshot = snapshot({ history: [archived] });
 		const view = render(<LunchRoomPage roomId={roomId} />);
-		fireEvent.click(screen.getByRole("button", { name: "지난 기록" }));
+		fireEvent.click(screen.getByRole("button", { name: "당첨 내역 열기" }));
 		fireEvent.click(
 			screen.getByRole("button", {
 				name: `${sampleLunchPlaces[1].name} 상세 기록 열기`,
@@ -1497,8 +1499,8 @@ describe("synchronized lunch room UI", () => {
 			status: "drawing",
 		});
 		render(<LunchRoomPage roomId={roomId} />);
-		fireEvent.click(screen.getByRole("button", { name: "지난 기록" }));
-		const history = screen.getByRole("region", { name: "추첨 기록" });
+		fireEvent.click(screen.getByRole("button", { name: "당첨 내역 열기" }));
+		const history = screen.getByRole("dialog", { name: "당첨 내역" });
 		expect(
 			within(history).getAllByRole("button", { name: / 상세 기록 열기$/ }),
 		).toHaveLength(1);
@@ -1512,9 +1514,15 @@ describe("synchronized lunch room UI", () => {
 				name: `${sampleLunchPlaces[0].name} 상세 기록 열기`,
 			}),
 		).toBeNull();
-		expect(
-			within(history).getByText(/2곳 중 추첨 · 출처: quantum/),
-		).toBeTruthy();
+		const entry = within(history).getByRole("button", {
+			name: /상세 기록 열기$/,
+		});
+		expect(entry.querySelector("time")?.dateTime).toBe(
+			new Date(completed.timestamp).toISOString(),
+		);
+		expect(history.textContent).not.toMatch(
+			/출처|곳 중 추첨|대기 노이즈|좋아요|싫어요/,
+		);
 		expect(
 			within(history).queryByRole("button", { name: /기록 복사/ }),
 		).toBeNull();
@@ -2272,7 +2280,7 @@ describe("synchronized lunch room UI", () => {
 		).toBeTruthy();
 		const exclusionPanel = openExclusions();
 		expect(
-			within(exclusionPanel).getByRole("heading", { name: "당첨 제외 내역" }),
+			within(exclusionPanel).getByRole("heading", { name: "당첨 제외 후보" }),
 		).toBeTruthy();
 		closeExclusions();
 		const toggle = screen.getByRole("switch", {
@@ -2395,8 +2403,8 @@ describe("synchronized lunch room UI", () => {
 			snapshot: { ...before, status: "waiting", intakeId: null, revision: 3 },
 		});
 		expect(
-			screen.getByRole("heading", { name: "다음 추첨 대기" }),
-		).toBeTruthy();
+			screen.queryByRole("heading", { name: "다음 추첨 대기" }),
+		).toBeNull();
 		expect(
 			document
 				.querySelector(".lunch-wheel")
@@ -3648,15 +3656,21 @@ describe("synchronized lunch room UI", () => {
 		expect(
 			board.getByRole("region", { name: "실시간 투표 현황" }),
 		).toBeTruthy();
-		expect(board.queryByRole("heading", { name: "당첨 제외 내역" })).toBeNull();
+		expect(board.queryByRole("heading", { name: "당첨 내역" })).toBeNull();
 		expect(board.getByRole("switch")).toBeTruthy();
 		expect(
 			board.queryByRole("heading", { name: "실시간 투표 현황" }),
 		).toBeNull();
 		expect(board.queryByText(/투표가 마감돼요/)).toBeNull();
-		expect(within(openExclusions()).queryByRole("switch")).toBeNull();
+		expect(board.queryByRole("button", { name: /당첨 제외 후보/ })).toBeNull();
+		fireEvent.click(board.getByRole("button", { name: "당첨 내역 열기" }));
+		const history = within(screen.getByRole("dialog", { name: "당첨 내역" }));
+		expect(history.queryByRole("tablist")).toBeNull();
+		expect(
+			history.queryByRole("checkbox", { name: "이전 게임 포함" }),
+		).toBeNull();
 		expect(room.updateRoomOptions).not.toHaveBeenCalled();
-		closeExclusions();
+		fireEvent.click(history.getByRole("button", { name: "닫기" }));
 		const next = board.getByRole("button", { name: "대기화면으로 이동" });
 		expect(next.closest(".picnic-sheet")).toBeNull();
 		expect(
@@ -4107,8 +4121,8 @@ describe("synchronized lunch room UI", () => {
 				screen.getByRole("region", { name: sampleLunchPlaces[1].name }),
 			).queryByText("상세 기록"),
 		).toBeNull();
-		fireEvent.click(screen.getByRole("button", { name: "지난 기록" }));
-		const history = screen.getByRole("region", { name: "추첨 기록" });
+		fireEvent.click(screen.getByRole("button", { name: "당첨 내역 열기" }));
+		const history = screen.getByRole("dialog", { name: "당첨 내역" });
 		fireEvent.click(
 			within(history).getByRole("button", {
 				name: `${sampleLunchPlaces[1].name} 상세 기록 열기`,
@@ -4176,7 +4190,7 @@ describe("synchronized lunch room UI", () => {
 		await act(async () => vi.advanceTimersByTime(0));
 		expect(screen.queryByRole("dialog", { name: / 상세 기록$/ })).toBeNull();
 		expect(document.activeElement).toBe(
-			screen.getByRole("heading", { name: "추첨 기록" }),
+			screen.getByRole("heading", { name: "당첨 내역" }),
 		);
 	});
 
@@ -4188,8 +4202,8 @@ describe("synchronized lunch room UI", () => {
 			],
 		});
 		render(<LunchRoomPage roomId={roomId} />);
-		fireEvent.click(screen.getByRole("button", { name: "지난 기록" }));
-		const history = screen.getByRole("region", { name: "추첨 기록" });
+		fireEvent.click(screen.getByRole("button", { name: "당첨 내역 열기" }));
+		const history = screen.getByRole("dialog", { name: "당첨 내역" });
 		fireEvent.click(
 			within(history).getByRole("button", {
 				name: `${sampleLunchPlaces[1].name} 상세 기록 열기`,
@@ -4389,7 +4403,7 @@ describe("synchronized lunch room UI", () => {
 		const chat = screen.getByRole("textbox", { name: "메시지" });
 		fireEvent.click(screen.getByRole("button", { name: "채팅 접기" }));
 		expect(screen.queryByRole("textbox", { name: "메시지" })).toBeNull();
-		fireEvent.click(screen.getByRole("button", { name: "지난 기록" }));
+		fireEvent.click(screen.getByRole("button", { name: "당첨 내역 열기" }));
 		const trigger = screen.getByRole("button", {
 			name: `${sampleLunchPlaces[1].name} 상세 기록 열기`,
 		});
@@ -4429,7 +4443,7 @@ describe("synchronized lunch room UI", () => {
 		await act(async () => vi.advanceTimersByTime(0));
 		expect(screen.queryByRole("dialog", { name: / 상세 기록$/ })).toBeNull();
 		expect(document.activeElement).toBe(
-			screen.getByRole("button", { name: "지난 기록" }),
+			screen.getByRole("button", { name: "당첨 내역 열기" }),
 		);
 	});
 
@@ -4445,7 +4459,7 @@ describe("synchronized lunch room UI", () => {
 		writeText.mockRejectedValueOnce(new Error("clipboard blocked"));
 		room.snapshot = snapshot({ history: [draw(baseTime - 8000)] });
 		render(<LunchRoomPage roomId={roomId} />);
-		fireEvent.click(screen.getByRole("button", { name: "지난 기록" }));
+		fireEvent.click(screen.getByRole("button", { name: "당첨 내역 열기" }));
 		const trigger = screen.getByRole("button", {
 			name: `${sampleLunchPlaces[1].name} 상세 기록 열기`,
 		});
@@ -4500,7 +4514,7 @@ describe("synchronized lunch room UI", () => {
 		};
 		room.snapshot = snapshot({ history: [completed] });
 		const view = render(<LunchRoomPage roomId={roomId} />);
-		fireEvent.click(screen.getByRole("button", { name: "지난 기록" }));
+		fireEvent.click(screen.getByRole("button", { name: "당첨 내역 열기" }));
 		fireEvent.click(
 			screen.getByRole("button", {
 				name: `${sampleLunchPlaces[1].name} 상세 기록 열기`,
