@@ -1,4 +1,5 @@
-import { type Container, Text, type TextStyleFontWeight } from "pixi.js";
+import type { Container } from "pixi.js";
+import { createTextPrinter } from "../game-art/text";
 import { layer, pen } from "./stationery";
 
 // The native lists own wrapping, tab order and scrolling. Paint their visible
@@ -9,60 +10,8 @@ export function drawDetails(
 	canvas: HTMLCanvasElement,
 ) {
 	const origin = canvas.getBoundingClientRect();
-	const range = document.createRange();
+	const print = createTextPrinter(origin);
 	const hover = window.matchMedia("(hover: hover)").matches;
-	function print(group: Container, node: Node, style: CSSStyleDeclaration) {
-		const value = node.textContent ?? "";
-		if (!value.trim()) return;
-		range.selectNodeContents(node);
-		const rects = range.getClientRects();
-		if (!rects.length) return;
-		function run(text: string, box: DOMRect) {
-			if (!text.trim() || !box.width) return;
-			const label = new Text({
-				text,
-				style: {
-					fontFamily: style.fontFamily,
-					fontSize: Number.parseFloat(style.fontSize),
-					fontWeight: style.fontWeight as TextStyleFontWeight,
-					fill: style.color,
-					padding: 1,
-				},
-				resolution: Math.min(window.devicePixelRatio || 1, 2),
-			});
-			label.anchor.set(0, 0.5);
-			label.position.set(
-				box.left - origin.left,
-				box.top - origin.top + box.height / 2,
-			);
-			label.width = box.width;
-			group.addChild(label);
-		}
-		if (rects.length === 1) {
-			run(value, rects[0]);
-			return;
-		}
-		// Use the browser's line breaks, including Korean and surrogate pairs.
-		let start = 0,
-			offset = 0,
-			lastY = rects[0].top;
-		for (const char of value) {
-			range.setStart(node, offset);
-			range.setEnd(node, offset + char.length);
-			const top = range.getBoundingClientRect().top;
-			if (Math.abs(top - lastY) > 1) {
-				range.setStart(node, start);
-				range.setEnd(node, offset);
-				run(value.slice(start, offset), range.getBoundingClientRect());
-				start = offset;
-			}
-			lastY = top;
-			offset += char.length;
-		}
-		range.setStart(node, start);
-		range.setEnd(node, offset);
-		run(value.slice(start), range.getBoundingClientRect());
-	}
 	function visit(el: Element, group: Container, clip?: DOMRect) {
 		if (el.matches(".sr-only, [hidden], legend, [data-hit]")) return;
 		const box = el.getBoundingClientRect();
