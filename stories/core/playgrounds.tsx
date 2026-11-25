@@ -2,12 +2,14 @@ import { Play, RotateCcw, ThumbsDown, ThumbsUp } from "lucide-react";
 import { type ComponentProps, useEffect, useId, useRef, useState } from "react";
 import RoomGameStage from "@/components/features/RoomGameStage";
 import { useRoomTimeline } from "@/hooks/useRoomTimeline";
+import { randomWheelLandingFraction, sampleLunchPlaces } from "@/lib/lunch";
 import {
-	getWheelRotation,
-	randomWheelLandingFraction,
-	sampleLunchPlaces,
-} from "@/lib/lunch";
-import type { RoomDraw } from "@/lib/lunchRoom";
+	getRoomDrawDuration,
+	getRoomDrawRotation,
+	type RoomDraw,
+} from "@/lib/lunchRoom";
+import { startSpinDrive } from "@/lib/spinDrive";
+import { previewSpinHeld } from "./draw-views/sample";
 import {
 	appendPreviewVote,
 	createPreviewDraw,
@@ -139,8 +141,6 @@ export function WheelPlayground({
 		return { ...value, startedAt, timestamp: startedAt };
 	});
 	const [fetching, setFetching] = useState(initialPhase === "fetching");
-	const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-	useEffect(() => () => clearTimeout(timer.current), []);
 	const finished = useRoomTimeline(draw, 0, rotorRef, motionOff);
 	const candidates =
 		draw?.candidates ?? sampleLunchPlaces.slice(0, candidateCount);
@@ -152,36 +152,42 @@ export function WheelPlayground({
 				: "spinning"
 			: "idle";
 	function reset() {
-		clearTimeout(timer.current);
 		setFetching(false);
 		setDraw(null);
 	}
-	function start() {
-		setDraw(null);
-		setFetching(true);
-		timer.current = setTimeout(() => {
-			const value = createPreviewDraw({
-				id: `preview-spin-${++sequence.current}`,
-				count: candidateCount,
-			});
-			const winnerIndex = sequence.current % value.candidates.length;
-			const landingFraction = randomWheelLandingFraction();
-			const startedAt = Date.now();
-			setDraw({
-				...value,
-				startedAt,
-				timestamp: startedAt,
+	function start(driven = false) {
+		const value = createPreviewDraw({
+			id: `preview-spin-${++sequence.current}`,
+			count: candidateCount,
+		});
+		const winnerIndex = sequence.current % value.candidates.length;
+		const landingFraction = randomWheelLandingFraction();
+		const startedAt = Date.now();
+		setDraw({
+			...value,
+			startedAt,
+			timestamp: startedAt,
+			winnerIndex,
+			durationMs: getRoomDrawDuration(),
+			toRotation: getRoomDrawRotation(
 				winnerIndex,
-				toRotation: getWheelRotation(
-					0,
-					winnerIndex,
-					value.candidates.length,
-					landingFraction,
-				),
+				value.candidates.length,
 				landingFraction,
-			});
-			setFetching(false);
-		}, 350);
+			),
+			...(driven && { drive: startSpinDrive(startedAt, "wheel") }),
+			landingFraction,
+		});
+		return true;
+	}
+	function pressDrive(redraw: boolean) {
+		if (redraw || !draw) return start(true);
+		const next = previewSpinHeld(draw, true);
+		if (next === draw) return false;
+		setDraw(next);
+		return true;
+	}
+	function releaseDrive() {
+		setDraw((current) => current && previewSpinHeld(current, false));
 	}
 	return (
 		<section className="sb-playground" aria-label="룰렛 놀이터">
@@ -198,6 +204,10 @@ export function WheelPlayground({
 			<div className="room-draw-panel sb-wheel-panel">
 				<RoomGameStage
 					viewMode="wheel"
+					activeDraw={draw}
+					canDrive={canDraw}
+					onDrivePress={pressDrive}
+					onDriveRelease={releaseDrive}
 					draw={finished ? draw : null}
 					showVoting={false}
 					isHost={canDraw}
@@ -205,7 +215,7 @@ export function WheelPlayground({
 					pending={false}
 					reducedMotion={motionOff}
 					onNext={reset}
-					onRedraw={start}
+					onRedraw={() => start()}
 					canNext
 					onVote={() => false}
 					wheel={{
@@ -214,8 +224,8 @@ export function WheelPlayground({
 						rotation: finished ? (draw?.toRotation ?? 0) : 0,
 						phase,
 						onComplete: () => {},
-						onDraw: start,
-						buttonId: id + "-spin",
+						onDraw: () => start(),
+						buttonId: `${id}-spin`,
 						covered: false,
 						buttonRef,
 						rotorRef,
@@ -234,8 +244,8 @@ export function WheelPlayground({
 				</output>
 			</div>
 			<p className="sb-caption">
-				실제 방에 접속하지 않는 예제입니다. 회전 시간은 서비스와 같은
-				7.2초입니다.
+				실제 방에 접속하지 않는 예제입니다. 버튼을 누르고 있으면 빨라지고,
+				놓으면 천천히 멈춥니다.
 			</p>
 		</section>
 	);

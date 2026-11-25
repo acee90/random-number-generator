@@ -1,8 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+	drawFromPreparedEntropy,
+	drawFromSoloEntropy,
+} from "../src/services/roomEntropy";
+import {
 	consumeFromPool,
 	consumeUniqueFromPool,
 	fetchEntropy,
+	fetchExternalEntropy,
 } from "../src/services/seedPool";
 import { env } from "./cloudflare.mock";
 
@@ -174,5 +179,71 @@ describe("request-owned entropy", () => {
 		const warnings = JSON.stringify(vi.mocked(console.warn).mock.calls);
 		expect(warnings).not.toContain("test-anu-key");
 		expect(warnings).not.toContain("test-random-key");
+	});
+});
+
+describe("room draw entropy", () => {
+	it("uses fresh Web Crypto on a miss without calling a provider or KV", async () => {
+		const fetch = vi.fn();
+		const local = vi.fn((values: Uint16Array) => values.fill(4));
+		vi.stubGlobal("fetch", fetch);
+		vi.stubGlobal("crypto", { getRandomValues: local });
+		expect(await drawFromPreparedEntropy(2)).toEqual({
+			numbers: [1],
+			source: "csprng",
+		});
+		expect(await drawFromSoloEntropy(2)).toEqual({
+			numbers: [1],
+			source: "csprng",
+		});
+		expect(local).toHaveBeenCalledTimes(2);
+		expect(fetch).not.toHaveBeenCalled();
+		expect(env.SEED_POOL.get).not.toHaveBeenCalled();
+	});
+
+	it("rejects an out-of-range word instead of reducing it modulo the bound", async () => {
+		const local = vi.fn((values: Uint16Array) => values.fill(4));
+		vi.stubGlobal("crypto", { getRandomValues: local });
+		expect(
+			await drawFromPreparedEntropy(2, {
+				seeds: [65535, 2],
+				source: "quantum",
+			}),
+		).toEqual({ numbers: [2], source: "quantum" });
+		expect(local).not.toHaveBeenCalled();
+		expect(
+			await drawFromPreparedEntropy(2, { seeds: [65535], source: "quantum" }),
+		).toEqual({ numbers: [1], source: "csprng" });
+		expect(local).toHaveBeenCalledTimes(1);
+	});
+
+	it("mixes solo preparation with fresh local words and records the accepted source", async () => {
+		const local = vi.fn((values: Uint16Array) => values.fill(4));
+		vi.stubGlobal("crypto", { getRandomValues: local });
+		const prepared = { seeds: [2], source: "atmospheric" as const };
+		expect(await drawFromSoloEntropy(2, prepared)).toEqual({
+			numbers: [0],
+			source: "mixed",
+		});
+		expect(prepared.seeds).toEqual([2]);
+		expect(local).toHaveBeenCalledTimes(1);
+		expect(
+			await drawFromSoloEntropy(2, { seeds: [65531], source: "atmospheric" }),
+		).toEqual({ numbers: [1], source: "csprng" });
+		expect(local).toHaveBeenCalledTimes(3);
+	});
+
+	it("leaves room caches empty after a provider outage", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => new Response(null, { status: 503 })),
+		);
+		const local = vi.fn();
+		vi.stubGlobal("crypto", {
+			randomUUID: () => "test-request",
+			getRandomValues: local,
+		});
+		expect(await fetchExternalEntropy(32)).toBeNull();
+		expect(local).not.toHaveBeenCalled();
 	});
 });

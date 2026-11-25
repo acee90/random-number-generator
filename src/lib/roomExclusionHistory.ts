@@ -5,6 +5,7 @@ import {
 	type RoomExclusionRecord,
 	type RoomSnapshot,
 } from "./lunchRoom";
+import { getSpinDeadline } from "./spinDrive";
 
 export type RoomExclusionHistoryEntry = {
 	candidate: RoomCandidate;
@@ -21,7 +22,7 @@ function validTime(value: number) {
 
 function recordForDraw(draw: RoomDraw): RoomExclusionRecord | undefined {
 	const winner = draw.candidates[draw.winnerIndex];
-	const drawnAt = draw.startedAt + draw.durationMs;
+	const drawnAt = getSpinDeadline(draw);
 	if (!winner || !validTime(drawnAt)) return undefined;
 	return {
 		candidateId: winner.id,
@@ -70,10 +71,7 @@ export function getRoomExclusionHistory(
 			? [snapshot.draw]
 			: []),
 		...snapshot.history,
-	].sort(
-		(left, right) =>
-			right.startedAt + right.durationMs - left.startedAt - left.durationMs,
-	);
+	].sort((left, right) => getSpinDeadline(right) - getSpinDeadline(left));
 	for (const draw of retained) {
 		const record = recordForDraw(draw);
 		if (record && !records.has(record.candidateId)) addRecord(record);

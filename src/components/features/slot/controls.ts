@@ -10,7 +10,6 @@ export function drawControls(
 ) {
 	const print = createTextPrinter(origin, 2);
 	const faces: (() => void)[] = [];
-	let spinner: Graphics | undefined;
 	for (const el of root.querySelectorAll<HTMLElement>("button, .slot-wait")) {
 		const style = getComputedStyle(el);
 		const control = group.addChild(new Container());
@@ -75,7 +74,6 @@ export function drawControls(
 				Number.parseFloat(iconStyle.height) / 24,
 			);
 			icon.position.set(box.x + box.width / 2, box.y + box.height / 2);
-			if (svg.classList.contains("lucide-loader-circle")) spinner = icon;
 		}
 		const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
 		while (walker.nextNode()) {
@@ -85,7 +83,6 @@ export function drawControls(
 		}
 	}
 	return {
-		spinner,
 		restyle: () => {
 			for (const face of faces) face();
 		},

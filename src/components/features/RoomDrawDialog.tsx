@@ -13,6 +13,7 @@ import RoomDrawFeedback from "@/components/features/RoomDrawFeedback";
 import { Button } from "@/components/ui/button";
 import { drawViewLabels, readDrawView } from "@/lib/drawView";
 import type { RoomDraw } from "@/lib/lunchRoom";
+import { getSpinDeadline } from "@/lib/spinDrive";
 import { getSourceDisplayName } from "@/services/randomService";
 
 function probabilityLabel(draw: RoomDraw, index: number) {
@@ -22,6 +23,7 @@ function probabilityLabel(draw: RoomDraw, index: number) {
 
 export function roomDrawCopyText(draw: RoomDraw, votingWasOpen = false) {
 	const winner = draw.candidates[draw.winnerIndex];
+	const revealAt = getSpinDeadline(draw);
 	return [
 		`음식점: ${winner.name}`,
 		`분류: ${winner.category}`,
@@ -30,7 +32,7 @@ export function roomDrawCopyText(draw: RoomDraw, votingWasOpen = false) {
 		`추첨 요청: ${draw.requestedAt === undefined ? "이전 기록에는 요청 시각이 없습니다" : new Date(draw.requestedAt).toISOString()}`,
 		`난수 결과 생성: ${new Date(draw.timestamp).toISOString()}`,
 		`${drawViewLabels[readDrawView(draw.viewMode)]} 시작: ${new Date(draw.startedAt).toISOString()}`,
-		`공개 예정 시각: ${new Date(draw.startedAt + draw.durationMs).toISOString()}`,
+		`공개 예정 시각: ${Number.isFinite(revealAt) ? new Date(revealAt).toISOString() : "회전 중"}`,
 		`난수 출처: ${getSourceDisplayName(draw.source)}`,
 		...(draw.votes === undefined
 			? []
@@ -70,7 +72,7 @@ export function RoomDrawRecordBody({ draw }: { draw: RoomDraw }) {
 			label: `${drawViewLabels[readDrawView(draw.viewMode)]} 시작`,
 			value: draw.startedAt,
 		},
-		{ label: "공개 예정 시각", value: draw.startedAt + draw.durationMs },
+		{ label: "공개 예정 시각", value: getSpinDeadline(draw) },
 	];
 	return (
 		<div className="room-record-details">
@@ -93,6 +95,8 @@ export function RoomDrawRecordBody({ draw }: { draw: RoomDraw }) {
 						<dd>
 							{value === undefined ? (
 								"이전 기록에는 요청 시각이 없습니다"
+							) : !Number.isFinite(value) ? (
+								"회전 중"
 							) : (
 								<time dateTime={new Date(value).toISOString()}>
 									{new Date(value).toLocaleString("ko-KR", {

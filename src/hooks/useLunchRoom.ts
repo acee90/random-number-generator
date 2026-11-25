@@ -17,11 +17,13 @@ import {
 	clampLunchRoomNickname,
 	isLunchRoomId,
 	isRoomDrawVoter,
+	isRoomSpinPower,
 	lunchRoomLimits,
 	normalizeLunchRoomNickname,
 	parseClientMessage,
 	parseServerMessage,
 	type RoomCandidate,
+	type RoomDrawStartOptions,
 	type RoomGameFilter,
 	type RoomSnapshot,
 } from "@/lib/lunchRoom";
@@ -33,6 +35,7 @@ import {
 	saveLunchRoomName,
 } from "@/lib/lunchRoomClient";
 import { beginRoomTiming } from "@/lib/roomTimings";
+import { getSpinDeadline } from "@/lib/spinDrive";
 
 export type RoomConnection =
 	| "waiting"
@@ -664,8 +667,7 @@ export function useLunchRoom(
 					return;
 				if (
 					message.voteCount !== votes.length + 1 ||
-					vote.reactionMs !==
-						vote.timestamp - (draw.startedAt + draw.durationMs) ||
+					vote.reactionMs !== vote.timestamp - getSpinDeadline(draw) ||
 					!isRoomDrawVoter(draw, vote.participantId)
 				) {
 					// The join response restores the authoritative vote list.
@@ -1291,13 +1293,12 @@ export function useLunchRoom(
 	}
 	function startDraw({
 		confirmReset,
+		driveId,
+		driveStartIndex,
 		expectedRevision,
 		previousDrawId,
-	}: {
-		confirmReset?: boolean;
-		expectedRevision?: number;
-		previousDrawId?: string;
-	} = {}) {
+		spinPower,
+	}: RoomDrawStartOptions = {}) {
 		const current = snapshotRef.current;
 		if (
 			!selfRef.current?.isHost ||
@@ -1308,16 +1309,19 @@ export function useLunchRoom(
 				voteRequestRef.current?.drawId === previousDrawId)
 		)
 			return false;
-		const requestId = actionId();
+		const requestId = driveId ?? actionId();
 		if (
 			!send({
 				type: "start",
 				id: requestId,
+				...(driveId === undefined ? {} : { driveId }),
+				...(driveStartIndex === undefined ? {} : { driveStartIndex }),
 				...(previousDrawId === undefined ? {} : { previousDrawId }),
 				...(expectedRevision !== undefined || current.revision !== undefined
 					? { expectedRevision: expectedRevision ?? current.revision }
 					: {}),
 				...(confirmReset === undefined ? {} : { confirmReset }),
+				...(isRoomSpinPower(spinPower) && spinPower > 0 && { spinPower }),
 			})
 		)
 			return false;
@@ -1325,6 +1329,25 @@ export function useLunchRoom(
 		setStartPending(true);
 		markPending();
 		return true;
+	}
+	function setDriveHeld(drawId: string, held: boolean, sequence: number) {
+		const socket = socketRef.current;
+		if (
+			!socket ||
+			socket.readyState !== 1 ||
+			!joinedRef.current ||
+			!selfRef.current?.isHost ||
+			terminalRef.current
+		)
+			return;
+		const message: ClientMessage = { type: "drive", drawId, held, sequence };
+		const raw = JSON.stringify(message);
+		if (!parseClientMessage(raw)) return;
+		try {
+			socket.send(raw);
+		} catch {
+			// The server lets the draw coast when the owner socket disconnects.
+		}
 	}
 	function updateCandidates(ids: string[]) {
 		const current = snapshotRef.current;
@@ -1336,8 +1359,7 @@ export function useLunchRoom(
 			candidatesRequestRef.current !== null ||
 			mutationRequestRef.current ||
 			current.status === "fetching" ||
-			(current.draw &&
-				serverNow() < current.draw.startedAt + current.draw.durationMs)
+			(current.draw && serverNow() < getSpinDeadline(current.draw))
 		)
 			return false;
 		if (!send({ type: "candidates", ids })) return false;
@@ -1357,7 +1379,7 @@ export function useLunchRoom(
 			(current.status !== "waiting" &&
 				current.status !== "drawing" &&
 				current.status !== "result") ||
-			serverNow() < draw.startedAt + draw.durationMs ||
+			serverNow() < getSpinDeadline(draw) ||
 			startRequestRef.current ||
 			nextRequestRef.current ||
 			candidatesRequestRef.current !== null ||
@@ -1393,7 +1415,7 @@ export function useLunchRoom(
 			(current.status !== "waiting" &&
 				current.status !== "drawing" &&
 				current.status !== "result") ||
-			serverNow() < draw.startedAt + draw.durationMs ||
+			serverNow() < getSpinDeadline(draw) ||
 			current.history.some((entry) => entry.id === drawId) ||
 			draw.votes?.some((entry) => entry.participantId === self.id) ||
 			voteRequestRef.current
@@ -1464,6 +1486,7 @@ export function useLunchRoom(
 		rename,
 		sendChat,
 		startDraw,
+		setDriveHeld,
 		nextRound,
 		updateCandidates,
 		enterEditing,

@@ -103,6 +103,13 @@ export async function createSlotPainter(canvas: HTMLCanvasElement) {
 		height = 0;
 	let lastRow = NaN,
 		lastSpeed = NaN;
+	function drawLabel(group: Container, row: Element) {
+		const box = row.getBoundingClientRect();
+		const number = row.querySelector(".slot-number");
+		if (number) printLabel(group, number, box);
+		const name = row.querySelector(".slot-name");
+		if (name) printLabel(group, name, box, 2);
+	}
 
 	return {
 		layout(cabinet: HTMLElement, drum: HTMLElement, strip: HTMLElement) {
@@ -134,20 +141,15 @@ export async function createSlotPainter(canvas: HTMLCanvasElement) {
 			viewport.position.set(box.x, box.y);
 			mask.clear().roundRect(box.x, box.y, width, height, 6).fill(0xffffff);
 			const rowHeight = height / 3;
-			// Build the bounded strip once. Spinning only translates Pixi containers.
 			lastRow = NaN;
 			for (const [i, el] of Array.from(strip.children).entries()) {
 				const group = reel.addChild(new Container());
 				group.y = i * rowHeight;
-				const rowBox = el.getBoundingClientRect();
 				group
 					.addChild(new Graphics())
 					.rect(0, rowHeight - 1, width, 1)
 					.fill({ color: 0xffe3a3, alpha: 0.26 });
-				const number = el.querySelector(".slot-number");
-				if (number) printLabel(group, number, rowBox);
-				const name = el.querySelector<HTMLElement>(".slot-name");
-				if (name) printLabel(group, name, rowBox, 2);
+				drawLabel(group.addChild(new Container()), el);
 			}
 			focus
 				.clear()
@@ -159,6 +161,13 @@ export async function createSlotPainter(canvas: HTMLCanvasElement) {
 					width: 2,
 				});
 			return true;
+		},
+		labels(strip: HTMLElement, changedRows: readonly number[]) {
+			for (const index of changedRows) {
+				const label = (reel.children[index] as Container).getChildAt(1);
+				clear(label);
+				drawLabel(label, strip.children[index]);
+			}
 		},
 		controls(root: HTMLElement) {
 			clear(controls);
@@ -198,31 +207,27 @@ export async function createSlotPainter(canvas: HTMLCanvasElement) {
 				resized,
 			);
 		},
-		get hasSpinner() {
-			return Boolean(buttons?.spinner);
-		},
 		paint(
 			row: number,
 			speed: number,
 			reveal: number,
 			focused: boolean,
-			spinnerAngle: number,
+			rowBlurPx: number,
 		) {
 			if (!width || !height) return;
+			blurPx = rowBlurPx * renderer.resolution;
+			blur.enabled = blurPx > 0.05;
 			if (row !== lastRow || speed !== lastSpeed) {
 				reel.y = (-row * height) / 3;
 				const first = Math.floor(row);
 				for (const [i, group] of reel.children.entries())
 					group.visible = i >= first && i <= first + 3;
-				blurPx = 1.6 * speed ** 2 * renderer.resolution;
-				blur.enabled = blurPx > 0.05;
 				drawMarks(marks, width, height, row, speed);
 				lastRow = row;
 				lastSpeed = speed;
 			}
 			sheet.alpha = reveal;
 			focus.visible = focused;
-			if (buttons?.spinner) buttons.spinner.rotation = spinnerAngle;
 			renderer.render({ container: stage });
 		},
 		destroy() {

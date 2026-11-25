@@ -1,0 +1,77 @@
+.slot-tuning-controls {
+	container-type: inline-size;
+	min-inline-size: 0;
+	padding: 16px;
+	border: 1px solid var(--line);
+	border-radius: var(--panel-radius);
+	background: var(--card);
+	color: var(--foreground);
+}
+
+.slot-tuning-controls-header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.slot-tuning-controls-header h2 {
+	margin: 0;
+	font-size: 1.125rem;
+	font-weight: 700;
+}
+
+.slot-tuning-controls fieldset {
+	min-inline-size: 0;
+	margin: 16px 0 0;
+	padding: 12px 0 0;
+	border: 0;
+	border-block-start: 1px solid var(--line);
+}
+
+.slot-tuning-controls legend {
+	padding: 0 8px 0 0;
+	font-size: 0.875rem;
+	font-weight: 700;
+}
+
+.slot-tuning-knobs {
+	display: grid;
+	gap: 12px 20px;
+}
+
+@container (min-width: 440px) {
+	.slot-tuning-knobs {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+.slot-tuning-knob-label {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	gap: 4px 8px;
+	font-size: 0.875rem;
+	font-weight: 600;
+}
+
+.slot-tuning-knob-label span:last-child {
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+
+.slot-tuning-slider {
+	min-block-size: 44px;
+}
+
+.slot-tuning-slider [data-slot="slider-thumb"] {
+	border-color: var(--input);
+}
+
+.slot-tuning-knob-help {
+	margin: 0;
+	color: var(--muted);
+	font-size: 0.8125rem;
+	line-height: 1.4;
+}

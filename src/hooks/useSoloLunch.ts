@@ -10,16 +10,34 @@ import {
 	applyRoomCommand,
 	beginRoomDraw,
 	castRoomVote,
+	finishRoomDraw,
 	type LifecycleCommand,
 	prepareRoomDraw,
+	queueRoomDriveInput,
+	type RoomDriveIntent,
 	startRoomSpin,
+	updateRoomDrive,
 	validateRoomCommand,
 } from "@/lib/roomGame";
 import { forgetSoloRoom, saveSoloRoom } from "@/lib/soloRoom";
-import { generateRandomNumbers } from "@/services/randomService";
+import { getSpinDeadline } from "@/lib/spinDrive";
+import {
+	drawFromSoloEntropy,
+	type PreparedRoomEntropy,
+	reserveRoomEntropy,
+	roomEntropyTtlMs,
+	roomEntropyWordsPerDraw,
+} from "@/services/roomEntropy";
+import { prepareSoloRoomEntropy } from "@/services/roomEntropyApi";
 import type { useLunchRoom } from "./useLunchRoom";
 
 type Room = ReturnType<typeof useLunchRoom>;
+interface SoloEntropyPool {
+	prepared?: PreparedRoomEntropy;
+	refreshing: boolean;
+	retryAt: number;
+}
+
 const unavailable = () => false;
 const noop = () => {};
 
@@ -34,6 +52,11 @@ export function useSoloLunch(
 	);
 	const [storageFailed, setStorageFailed] = useState(initialStorageFailed);
 	const attempt = useRef(0);
+	const pendingDrive = useRef<(RoomDriveIntent & { id: string }) | null>(null);
+	const initialDrive = useRef(
+		initial.draw?.drive?.held ? initial.draw.id : null,
+	);
+	const entropyPool = useRef<SoloEntropyPool | null>(null);
 	const self = snapshot.participants[0];
 	const commit = useCallback((next: RoomSnapshot) => {
 		current.current = next;
@@ -41,8 +64,10 @@ export function useSoloLunch(
 		setSnapshot(next);
 	}, []);
 	useEffect(() => {
+		entropyPool.current = { refreshing: false, retryAt: 0 };
 		const timeout = setTimeout(
 			() => {
+				entropyPool.current = null;
 				forgetSoloRoom(initial.roomId);
 				const closed: RoomSnapshot = {
 					...current.current,
@@ -58,33 +83,87 @@ export function useSoloLunch(
 		);
 		return () => {
 			attempt.current++;
+			entropyPool.current = null;
 			clearTimeout(timeout);
 		};
 	}, [initial.roomId, initial.expiresAt]);
+	useEffect(() => {
+		const pool = entropyPool.current;
+		const now = Date.now();
+		if (
+			!pool ||
+			pool.refreshing ||
+			pool.retryAt > now ||
+			snapshot.expiresAt <= now ||
+			!["waiting", "drawing", "result"].includes(snapshot.status)
+		)
+			return;
+		if (
+			pool.prepared &&
+			pool.prepared.expiresAt > now &&
+			pool.prepared.seeds.length > roomEntropyWordsPerDraw
+		)
+			return;
+		pool.refreshing = true;
+		void (async () => {
+			try {
+				const batch = await prepareSoloRoomEntropy();
+				const receivedAt = Date.now();
+				if (
+					batch &&
+					entropyPool.current === pool &&
+					current.current.status !== "closed" &&
+					receivedAt < current.current.expiresAt
+				) {
+					pool.prepared = {
+						...batch,
+						seeds: [...batch.seeds],
+						expiresAt: receivedAt + roomEntropyTtlMs,
+					};
+					return;
+				}
+			} catch {
+				// The current draw already has local entropy available.
+			} finally {
+				pool.refreshing = false;
+			}
+			pool.retryAt = Date.now() + roomEntropyTtlMs;
+		})();
+	}, [snapshot.expiresAt, snapshot.status]);
 	// Use the stored deadline on both first entry and refresh during a spin.
 	useEffect(() => {
+		const drawId = initialDrive.current;
+		if (!drawId) return;
+		initialDrive.current = null;
+		const state = current.current;
+		const drive = state.draw?.drive;
+		const next = { ...state };
+		if (
+			drive?.held &&
+			updateRoomDrive(
+				next,
+				drawId,
+				{ held: false, sequence: drive.sequence + 1 },
+				Date.now(),
+			)
+		)
+			commit(next);
+	}, [commit]);
+	useEffect(() => {
 		if (snapshot.status !== "drawing" || !snapshot.draw) return;
-		const { id, startedAt, durationMs } = snapshot.draw;
+		const { id } = snapshot.draw;
+		const deadline = getSpinDeadline(snapshot.draw);
+		if (!Number.isFinite(deadline)) return;
+		let timer: ReturnType<typeof setTimeout>;
 		function finish() {
 			const state = current.current;
-			if (
-				state.status === "drawing" &&
-				state.draw?.id === id &&
-				Date.now() < state.expiresAt
-			) {
-				commit({
-					...state,
-					status: "result",
-					revision: (state.revision ?? state.listVersion) + 1,
-				});
-			}
+			const now = Date.now();
+			if (state.draw?.id !== id || now >= state.expiresAt) return;
+			const next = { ...state };
+			if (finishRoomDraw(next, now)) commit(next);
+			else if (now < deadline) timer = setTimeout(finish, deadline - now);
 		}
-		const remaining = startedAt + durationMs - Date.now();
-		if (remaining <= 0) {
-			finish();
-			return;
-		}
-		const timer = setTimeout(finish, remaining);
+		finish();
 		return () => clearTimeout(timer);
 	}, [snapshot.status, snapshot.draw, commit]);
 
@@ -124,7 +203,7 @@ export function useSoloLunch(
 			!state.draw ||
 			state.draw.id !== drawId ||
 			state.status !== "result" ||
-			Date.now() < state.draw.startedAt + state.draw.durationMs ||
+			Date.now() < getSpinDeadline(state.draw) ||
 			Date.now() >= state.expiresAt
 		)
 			return false;
@@ -143,8 +222,11 @@ export function useSoloLunch(
 		return true;
 	};
 	const startDraw: Room["startDraw"] = ({
+		driveId,
+		driveStartIndex,
 		expectedRevision,
 		previousDrawId,
+		spinPower,
 	} = {}) => {
 		const state = current.current;
 		if (
@@ -153,7 +235,32 @@ export function useSoloLunch(
 			!canStartRoomDraw(state, previousDrawId)
 		)
 			return false;
-		const prepared = prepareRoomDraw(state, state.participants);
+		let drive: (RoomDriveIntent & { id: string }) | null = null;
+		if (driveId !== undefined) {
+			const message = parseClientMessage(
+				JSON.stringify({
+					type: "start",
+					id: driveId,
+					driveId,
+					driveStartIndex,
+				}),
+			);
+			if (
+				message?.type !== "start" ||
+				state.draw?.id === driveId ||
+				state.history.some((draw) => draw.id === driveId) ||
+				state.olderWins?.some((win) => win.id === driveId) ||
+				state.exclusionRecords?.some((entry) => entry.drawId === driveId)
+			)
+				return false;
+			drive = {
+				id: driveId,
+				held: true,
+				sequence: 0,
+				startIndex: message.driveStartIndex,
+			};
+		}
+		const prepared = prepareRoomDraw(state, state.participants, spinPower);
 		const { candidates } = prepared;
 		if (!candidates.length) {
 			setError(
@@ -164,21 +271,36 @@ export function useSoloLunch(
 		const request = ++attempt.current;
 		const active = () =>
 			attempt.current === request && Date.now() < state.expiresAt;
+		const reserved = reserveRoomEntropy(
+			entropyPool.current?.prepared,
+			prepared.requestedAt,
+		);
 		setError("");
+		pendingDrive.current = drive;
 		const fetching = { ...state };
 		beginRoomDraw(fetching);
 		commit(fetching);
 		void (async () => {
 			try {
-				const response = await generateRandomNumbers({
-					data: { min: 0, max: candidates.length - 1, count: 1, unique: false },
-				});
+				const response = await drawFromSoloEntropy(
+					candidates.length - 1,
+					reserved,
+				);
 				if (!active()) return;
 				const next = structuredClone(current.current);
-				startRoomSpin(next, prepared, response, crypto.randomUUID(), 0);
+				startRoomSpin(
+					next,
+					prepared,
+					response,
+					driveId ?? crypto.randomUUID(),
+					0,
+					pendingDrive.current ?? undefined,
+				);
+				pendingDrive.current = null;
 				commit(next);
 			} catch {
 				if (!active()) return;
+				pendingDrive.current = null;
 				commit({
 					...current.current,
 					status: "waiting",
@@ -188,6 +310,26 @@ export function useSoloLunch(
 			}
 		})();
 		return true;
+	};
+	const setDriveHeld: Room["setDriveHeld"] = (drawId, held, sequence) => {
+		const message = parseClientMessage(
+			JSON.stringify({
+				type: "drive",
+				drawId,
+				held,
+				sequence,
+			}),
+		);
+		const now = Date.now();
+		const state = current.current;
+		if (!message || message.type !== "drive" || now >= state.expiresAt) return;
+		const pending = pendingDrive.current;
+		if (pending?.id === drawId && state.status === "fetching") {
+			queueRoomDriveInput(pending, message, now);
+			return;
+		}
+		const next = { ...state };
+		if (updateRoomDrive(next, drawId, message, now)) commit(next);
 	};
 
 	const room = {
@@ -204,6 +346,7 @@ export function useSoloLunch(
 		clockOffset: 0,
 		serverNow: Date.now,
 		startDraw,
+		setDriveHeld,
 		nextRound,
 		vote,
 		enterEditing: (expected?: number) => intake("edit", expected),

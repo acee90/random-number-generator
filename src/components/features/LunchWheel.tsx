@@ -1,13 +1,23 @@
-import { LoaderCircle, Shuffle } from "lucide-react";
-import { memo, type RefObject } from "react";
+import { Shuffle, Zap } from "lucide-react";
+import {
+	type ComponentPropsWithoutRef,
+	memo,
+	type RefObject,
+	useCallback,
+	useRef,
+} from "react";
 import { Button } from "@/components/ui/button";
 import type { LunchPlace } from "@/lib/lunch";
+import type { SpinDrive } from "@/lib/spinDrive";
+import type { SpinAdjustment } from "./game-art/spin-motion";
 import {
 	getWheelLabels,
 	layoutWheelLabels,
 	type WheelLabel,
+	wheelControl,
 	wheelFaceRadius,
 } from "./picnic/layout";
+import { useDriveRotation } from "./picnic/useDriveRotation";
 import "./lunch-wheel.css";
 
 type Phase = "idle" | "fetching" | "spinning" | "done";
@@ -103,6 +113,12 @@ export function LunchWheel({
 	canDraw = true,
 	drawLabel,
 	drawText,
+	drive,
+	driveClockOffset = 0,
+	driveAdjustment,
+	motionOff = false,
+	holdHintId,
+	drawButtonProps,
 }: {
 	candidates: readonly LunchPlace[];
 	candidateNumbers: readonly number[];
@@ -120,8 +136,33 @@ export function LunchWheel({
 	canDraw?: boolean;
 	drawLabel?: string;
 	drawText?: string;
+	drive?: SpinDrive;
+	driveClockOffset?: number;
+	driveAdjustment?: SpinAdjustment;
+	motionOff?: boolean;
+	holdHintId?: string;
+	drawButtonProps?: ComponentPropsWithoutRef<"button">;
 }) {
 	const size = candidates.length;
+	const ownRotorRef = useRef<HTMLDivElement>(null);
+	const rotor = rotorRef ?? ownRotorRef;
+	const rotate = useCallback(
+		(position: number) =>
+			rotor.current?.style.setProperty(
+				"transform",
+				`rotate(${position * 360}deg)`,
+			),
+		[rotor],
+	);
+	useDriveRotation(drive, driveClockOffset, motionOff, rotate, driveAdjustment);
+	const { busy, caption, label } = wheelControl(
+		phase,
+		canDraw,
+		Boolean(drive),
+		drawLabel,
+		drawText,
+	);
+	const disabled = !canDraw || covered || busy;
 	const labels = getWheelLabels(candidates, candidateNumbers);
 	const background =
 		size > 360
@@ -135,16 +176,24 @@ export function LunchWheel({
 						.join(", ")})`
 				: "#edf2e3";
 	return (
-		<div className="lunch-wheel" data-candidate-count={size}>
+		<div
+			className="lunch-wheel"
+			data-candidate-count={size}
+			data-phase={phase}
+			data-drive={drive ? (drive.held ? "held" : "braking") : undefined}
+		>
 			<div className="lunch-wheel-pointer" aria-hidden="true" />
 			<div className="lunch-wheel-track" aria-hidden="true">
 				<div
 					className="lunch-wheel-rotor"
-					ref={rotorRef}
-					data-controlled={controlled || undefined}
+					ref={rotor}
+					data-controlled={Boolean(drive || controlled) || undefined}
 					aria-hidden="true"
 					data-phase={phase}
-					style={{ background, transform: `rotate(${rotation}deg)` }}
+					style={{
+						background,
+						transform: drive ? undefined : `rotate(${rotation}deg)`,
+					}}
 					onTransitionEnd={(event) => {
 						if (
 							event.target === event.currentTarget &&
@@ -165,39 +214,21 @@ export function LunchWheel({
 				className="lunch-wheel-center"
 				data-hit="draw"
 				data-draw-permission={canDraw ? "host" : "viewer"}
-				disabled={
-					!canDraw || covered || phase === "fetching" || phase === "spinning"
+				disabled={disabled}
+				aria-busy={busy || undefined}
+				onClick={() => onDraw()}
+				aria-label={label}
+				aria-describedby={
+					[errorId, holdHintId].filter(Boolean).join(" ") || undefined
 				}
-				onClick={onDraw}
-				aria-label={
-					phase === "fetching"
-						? "추첨 준비 중…"
-						: phase === "spinning"
-							? "룰렛이 돌아가고 있어요"
-							: !canDraw
-								? "방장이 추첨을 시작할 때까지 대기"
-								: phase === "done"
-									? "한 번 더 추첨하기"
-									: (drawLabel ?? "점심 메뉴 추첨하기")
-				}
-				aria-describedby={errorId}
+				{...drawButtonProps}
 			>
-				{phase === "fetching" ? (
-					<LoaderCircle size={22} aria-hidden="true" />
+				{busy ? (
+					<Zap size={22} aria-hidden="true" />
 				) : (
 					<Shuffle size={22} aria-hidden="true" />
 				)}
-				<span aria-hidden="true">
-					{phase === "fetching"
-						? "준비 중"
-						: phase === "spinning"
-							? "룰렛"
-							: !canDraw
-								? "방장 대기"
-								: phase === "done"
-									? "한 번 더"
-									: (drawText ?? "추첨하기")}
-				</span>
+				<span aria-hidden="true">{caption}</span>
 				<small aria-hidden="true">{size}곳</small>
 			</Button>
 		</div>

@@ -9,17 +9,23 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import SoloLunchRoomPage from "../src/components/features/SoloLunchRoomPage";
-import { lunchSpinDurationMs } from "../src/lib/lunch";
 import { lunchHistoryKey } from "../src/lib/lunchHistory";
 import {
 	createSoloRoom,
 	readSoloRoom,
 	soloHistoryKey,
 } from "../src/lib/soloRoom";
-import { generateRandomNumbers } from "../src/services/randomService";
+import { drawFromSoloEntropy } from "../src/services/roomEntropy";
+import { prepareSoloRoomEntropy } from "../src/services/roomEntropyApi";
 
+vi.mock("../src/services/roomEntropy", async (importOriginal) => ({
+	...(await importOriginal<typeof import("../src/services/roomEntropy")>()),
+	drawFromSoloEntropy: vi.fn(),
+}));
+vi.mock("../src/services/roomEntropyApi", () => ({
+	prepareSoloRoomEntropy: vi.fn(),
+}));
 vi.mock("../src/services/randomService", () => ({
-	generateRandomNumbers: vi.fn(),
 	getSourceDisplayName: (source: string) => source,
 }));
 const places = [
@@ -38,7 +44,8 @@ beforeEach(() => {
 			removeEventListener: vi.fn(),
 		})),
 	);
-	vi.mocked(generateRandomNumbers)
+	vi.mocked(prepareSoloRoomEntropy).mockReset().mockResolvedValue(null);
+	vi.mocked(drawFromSoloEntropy)
 		.mockReset()
 		.mockResolvedValue({ numbers: [0], source: "csprng" });
 });
@@ -52,7 +59,7 @@ async function draw() {
 	await act(async () =>
 		fireEvent.click(screen.getByRole("button", { name: "슬롯 돌리기" })),
 	);
-	await act(async () => vi.advanceTimersByTime(lunchSpinDurationMs));
+	await act(async () => vi.advanceTimersByTime(15000));
 }
 
 function renderRoom() {
@@ -133,7 +140,7 @@ describe("shared solo game screen", () => {
 		expect(screen.getByRole("button", { name: "슬롯 돌리기" })).toBe(
 			document.activeElement,
 		);
-		expect(generateRandomNumbers).toHaveBeenCalledTimes(1);
+		expect(drawFromSoloEntropy).toHaveBeenCalledTimes(1);
 	});
 	it("redraws directly from the result once and preserves the last ballot in history", async () => {
 		const { roomId } = renderRoom();
@@ -146,12 +153,12 @@ describe("shared solo game screen", () => {
 			fireEvent.click(redraw);
 			fireEvent.click(redraw);
 		});
-		expect(generateRandomNumbers).toHaveBeenCalledTimes(2);
+		expect(drawFromSoloEntropy).toHaveBeenCalledTimes(2);
 		expect(readSoloRoom(roomId)?.snapshot.history).toEqual([voted]);
 		expect(
 			screen.queryByRole("heading", { name: "다음 추첨 대기" }),
 		).toBeNull();
-		await act(async () => vi.advanceTimersByTime(lunchSpinDurationMs));
+		await act(async () => vi.advanceTimersByTime(15000));
 		expect(readSoloRoom(roomId)?.snapshot.draw?.roundNumber).toBe(2);
 		expect(screen.getByText("0명 참여")).toBeTruthy();
 	});
@@ -169,20 +176,18 @@ describe("shared solo game screen", () => {
 			fireEvent.click(screen.getByRole("button", { name: "마감" })),
 		);
 		expect(readSoloRoom(roomId)?.snapshot.history[0]).toEqual(firstRecord);
-		expect(generateRandomNumbers).toHaveBeenCalledTimes(1);
-		vi.mocked(generateRandomNumbers).mockResolvedValueOnce({
+		expect(drawFromSoloEntropy).toHaveBeenCalledTimes(1);
+		vi.mocked(drawFromSoloEntropy).mockResolvedValueOnce({
 			numbers: [2],
 			source: "csprng",
 		});
 		await draw();
-		expect(generateRandomNumbers).toHaveBeenLastCalledWith({
-			data: { min: 0, max: 2, count: 1, unique: false },
-		});
+		expect(drawFromSoloEntropy).toHaveBeenLastCalledWith(2, undefined);
 		expect(screen.getByRole("heading", { name: "분식집" })).toBeTruthy();
 	});
 	it("locks duplicate draws and candidate edits until the timeline completes", async () => {
 		let resolve!: (value: { numbers: number[]; source: "csprng" }) => void;
-		vi.mocked(generateRandomNumbers).mockReturnValueOnce(
+		vi.mocked(drawFromSoloEntropy).mockReturnValueOnce(
 			new Promise((done) => {
 				resolve = done;
 			}),
@@ -191,7 +196,7 @@ describe("shared solo game screen", () => {
 		const button = screen.getByRole("button", { name: "슬롯 돌리기" });
 		fireEvent.click(button);
 		fireEvent.click(button);
-		expect(generateRandomNumbers).toHaveBeenCalledTimes(1);
+		expect(drawFromSoloEntropy).toHaveBeenCalledTimes(1);
 		expect(
 			screen.getByRole("button", { name: "후보" }).matches(":disabled"),
 		).toBe(true);
@@ -200,11 +205,11 @@ describe("shared solo game screen", () => {
 			screen.queryByRole("button", { name: "대기화면으로 이동" }),
 		).toBeNull();
 		expect(screen.queryByRole("heading", { name: "한식당" })).toBeNull();
-		await act(async () => vi.advanceTimersByTime(lunchSpinDurationMs));
+		await act(async () => vi.advanceTimersByTime(15000));
 		expect(screen.getByRole("heading", { name: "한식당" })).toBeTruthy();
 	});
 	it("recovers from invalid random results without recording them", async () => {
-		vi.mocked(generateRandomNumbers).mockResolvedValueOnce({
+		vi.mocked(drawFromSoloEntropy).mockResolvedValueOnce({
 			numbers: [8],
 			source: "csprng",
 		});
@@ -371,7 +376,7 @@ describe("shared solo game screen", () => {
 
 	it("ignores responses received after the solo screen unmounts", async () => {
 		let resolve!: (value: { numbers: number[]; source: "csprng" }) => void;
-		vi.mocked(generateRandomNumbers).mockReturnValueOnce(
+		vi.mocked(drawFromSoloEntropy).mockReturnValueOnce(
 			new Promise((done) => {
 				resolve = done;
 			}),
@@ -380,7 +385,7 @@ describe("shared solo game screen", () => {
 		fireEvent.click(screen.getByRole("button", { name: "슬롯 돌리기" }));
 		view.unmount();
 		await act(async () => resolve({ numbers: [0], source: "csprng" }));
-		await act(async () => vi.advanceTimersByTime(lunchSpinDurationMs));
+		await act(async () => vi.advanceTimersByTime(15000));
 		expect(readSoloRoom(view.roomId)?.snapshot).toMatchObject({
 			status: "waiting",
 			draw: null,

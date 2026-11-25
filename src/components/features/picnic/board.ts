@@ -207,7 +207,12 @@ export function drawTable(stage: Container, side: number) {
 		.stroke({ color: picnic.ink, width: 2 })
 		.circle(0, 1, 47)
 		.fill(0xb74334);
+}
+
+export function drawPointer(stage: Container, side: number) {
+	const board = boardLayer(stage, side);
 	const pin = board.addChild(new Graphics());
+	pin.pivot.y = pin.y = -201;
 	pin
 		.moveTo(-15, -199)
 		.bezierCurveTo(-16, -222, 16, -222, 15, -199)
@@ -222,4 +227,5 @@ export function drawTable(stage: Container, side: number) {
 		.circle(0, -201, 5)
 		.fill(0xffdf8a)
 		.stroke({ color: picnic.ink, width: 1.5 });
+	return pin;
 }

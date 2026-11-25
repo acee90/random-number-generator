@@ -21,6 +21,7 @@ import {
 	resolveCandidateIds,
 	validateCreateRoomInput,
 } from "../src/lib/lunchRoom";
+import { prepareRoomDraw, startRoomSpin } from "../src/lib/roomGame";
 
 const now = 1_800_000_000_000;
 const roomId = "fc76a783-253a-47c7-95cd-5a7c9851d675";
@@ -97,6 +98,122 @@ function makeRoom(overrides: Partial<RoomSnapshot> = {}): RoomSnapshot {
 
 const client = (value: unknown) => parseClientMessage(JSON.stringify(value));
 const server = (value: unknown) => parseServerMessage(JSON.stringify(value));
+
+describe("saved continuous draws", () => {
+	it("round-trips custom motion in the current draw and replay history", () => {
+		const tuning = {
+			initialSpeed: 9,
+			maxSpeed: 28,
+			acceleration: 12,
+			coastSeconds: 6,
+		};
+		const draw = makeDraw({ viewMode: "slot-v1" });
+		draw.drive = {
+			at: draw.startedAt,
+			held: false,
+			position: 0,
+			speed: tuning.initialSpeed,
+			sequence: 1,
+			stopAt: draw.startedAt + 6000,
+			target: 18,
+			tuning,
+		};
+		const snapshot = makeRoom({
+			viewMode: "wheel",
+			draw,
+			history: [{ ...draw, id: "earlier-draw" }],
+		});
+		const parsed = parseRoomSnapshot(snapshot);
+		expect(parsed?.draw?.drive).toEqual(draw.drive);
+		expect(parsed?.history[0].drive).toEqual(draw.drive);
+		expect(
+			parseRoomSnapshot({
+				...snapshot,
+				draw: {
+					...draw,
+					drive: {
+						...draw.drive,
+						speed: 1.2,
+						tuning: {
+							initialSpeed: 1.2,
+							maxSpeed: 3.4,
+							acceleration: 1.3,
+							coastSeconds: 6,
+						},
+					},
+				},
+			}),
+		).toBeNull();
+	});
+});
+
+describe("draw strength protocol", () => {
+	it("accepts optional normalized strength for a start or redraw", () => {
+		const start = { type: "start", id: "start-2", expectedRevision: 2 };
+		const redraw = { ...start, previousDrawId: "start-1", spinPower: 1 };
+		expect(client(start)).toEqual(start);
+		expect(client({ ...start, spinPower: 0 })).toEqual(start);
+		expect(client({ ...start, spinPower: 0.35 })).toEqual({
+			...start,
+			spinPower: 0.35,
+		});
+		expect(client(redraw)).toEqual(redraw);
+		for (const spinPower of [-0.01, 1.01, Infinity, NaN, null, "0.5"]) {
+			expect(client({ ...start, spinPower })).toBeNull();
+		}
+	});
+
+	it.each([
+		0, 0.35, 1,
+	])("round-trips strength %d without changing the selected winner or its odds", (spinPower) => {
+		const snapshot = makeRoom();
+		const winnerIndex = 1;
+		const prepared = prepareRoomDraw(
+			snapshot,
+			snapshot.participants,
+			spinPower,
+		);
+		startRoomSpin(
+			snapshot,
+			prepared,
+			{ numbers: [winnerIndex], source: "csprng" },
+			"draw-2",
+			0,
+		);
+		const parsed = parseRoomSnapshot(snapshot);
+		const draw = parsed?.draw;
+		expect(draw?.spinPower).toBe(spinPower || undefined);
+		expect(draw?.winnerIndex).toBe(winnerIndex);
+		expect(draw?.probabilities).toEqual([1 / 3, 1 / 3, 1 / 3]);
+		expect(draw?.durationMs).toBe(4000 + 2000 * spinPower);
+		expect(draw?.toRotation).toBeCloseTo(
+			getWheelRotation(0, winnerIndex, 3, draw?.landingFraction) +
+				360 * Math.ceil(spinPower * 3),
+			8,
+		);
+	});
+
+	it("requires a charged snapshot to use the authored timing and rotation together", () => {
+		const draw = makeDraw({ spinPower: 1, durationMs: 6000, toRotation: 2820 });
+		expect(parseRoomSnapshot(makeRoom({ draw }))?.draw).toEqual(draw);
+		for (const overrides of [
+			{ durationMs: 4000 },
+			{ durationMs: 7200 },
+			{ durationMs: 6000.01 },
+			{ toRotation: 2460 },
+			{ toRotation: 2820.01 },
+			{ spinPower: 0.75 },
+			{ spinPower: -0.01 },
+			{ spinPower: 1.01 },
+			{ spinPower: NaN },
+			{ spinPower: undefined },
+		]) {
+			expect(
+				parseRoomSnapshot(makeRoom({ draw: { ...draw, ...overrides } })),
+			).toBeNull();
+		}
+	});
+});
 
 it("opens legacy or future draw presentations on the wheel and accepts only supported view changes", () => {
 	const command = {

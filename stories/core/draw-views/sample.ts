@@ -1,9 +1,15 @@
+import type { DrawView } from "@/lib/drawView";
+import type { LunchPlace } from "@/lib/lunch";
 import {
-	getWheelRotation,
-	type LunchPlace,
-	lunchSpinDurationMs,
-} from "@/lib/lunch";
-import type { RoomDraw } from "@/lib/lunchRoom";
+	getRoomDrawDuration,
+	getRoomDrawRotation,
+	type RoomDraw,
+} from "@/lib/lunchRoom";
+import {
+	changeSpinDrive,
+	getSpinLanding,
+	startSpinDrive,
+} from "@/lib/spinDrive";
 
 const menus = [
 	["숯불 돼지불백", "한식"],
@@ -66,6 +72,7 @@ export function sampleRound(
 	candidates: LunchPlace[],
 	round: number,
 	longName: boolean,
+	drive?: { mode: DrawView; startIndex: number },
 ): RoomDraw {
 	const winnerIndex = Math.min(longName ? 13 : 17, candidates.length - 1);
 	const startedAt = Date.now();
@@ -75,14 +82,38 @@ export function sampleRound(
 		candidates,
 		winnerIndex,
 		startedAt,
-		durationMs: lunchSpinDurationMs,
+		durationMs: getRoomDrawDuration(),
 		timestamp: startedAt,
 		source: "csprng",
 		listVersion: 1,
 		fromRotation: 0,
-		toRotation: getWheelRotation(0, winnerIndex, candidates.length),
+		toRotation: getRoomDrawRotation(winnerIndex, candidates.length),
+		...(drive && {
+			viewMode: drive.mode,
+			drive: startSpinDrive(startedAt, drive.mode, drive.startIndex),
+		}),
 		probabilities: candidates.map(() => 1 / candidates.length),
 		participants: [{ id: "preview-host", name: "방장", isHost: true }],
 		votes: [],
 	};
+}
+
+export function previewSpinHeld(
+	draw: RoomDraw,
+	held: boolean,
+	at = Date.now(),
+	sequence = (draw.drive?.sequence ?? 0) + 1,
+): RoomDraw {
+	if (!draw.drive) return draw;
+	const { mode, landing, period } = getSpinLanding(draw);
+	const drive = changeSpinDrive(
+		draw.drive,
+		held,
+		sequence,
+		at,
+		mode,
+		landing,
+		period,
+	);
+	return drive === draw.drive ? draw : { ...draw, drive };
 }

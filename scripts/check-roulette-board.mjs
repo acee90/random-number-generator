@@ -57,14 +57,29 @@ try {
 	await page.getByRole("option", { name: "룰렛", exact: true }).click();
 	const board = page.getByRole("region", { name: "게임 보드" });
 	const panel = page.getByRole("region", { name: "룰렛", exact: true });
-	await board.getByText("추첨판을 불러오는 중…").waitFor();
+	const fallbackDraw = board.getByRole("button", { name: "룰렛 돌리기" });
+	await fallbackDraw.waitFor();
 	const loadingHeight = (await board.boundingBox()).height;
-	assert.equal(await board.getByRole("button").count(), 0);
-	assert.equal(await board.locator(".lunch-wheel-rotor").isVisible(), false);
+	assert.equal(await fallbackDraw.count(), 1);
+	assert.ok(await fallbackDraw.isEnabled());
+	assert.ok(await board.locator(".lunch-wheel-rotor").isVisible());
+	assert.equal(await board.locator("canvas[data-painted]").count(), 0);
+	await fallbackDraw.focus();
+	const rotor = board.locator(".lunch-wheel-rotor");
+	const initialPose = await rotor.evaluate((el) => el.style.transform);
+	await page.keyboard.down("Space");
+	await page.waitForFunction(
+		(before) =>
+			document.querySelector(".lunch-wheel-rotor")?.style.transform !== before,
+		initialPose,
+	);
+	assert.ok(await fallbackDraw.isEnabled());
+	await page.keyboard.up("Space");
+	assert.ok(await fallbackDraw.isEnabled());
 	releasePaint();
+	await board.getByRole("button", { name: "대기화면으로 이동" }).click();
 	const idle = board.locator('canvas[data-painted][data-scene="idle"]');
 	await idle.waitFor();
-	assert.equal(await board.locator("output.picnic-loading").count(), 0);
 	assert.equal((await board.boundingBox()).height, loadingHeight);
 	const history = board.getByRole("button", { name: "당첨 내역 열기" });
 	const popup = page.getByRole("dialog", { name: "당첨 내역" });
@@ -144,12 +159,15 @@ try {
 			'canvas[data-painted][data-scene="spinning"]',
 		);
 		await spinning.waitFor();
-		if (!reduce)
+		if (!reduce) {
+			const pose = await rotor.evaluate((el) => el.style.transform);
 			await page.waitForFunction(
-				() =>
-					document.querySelector(".lunch-wheel-rotor")?.getAnimations()[0]
-						?.currentTime > 250,
+				(before) =>
+					document.querySelector(".lunch-wheel-rotor")?.style.transform !==
+					before,
+				pose,
 			);
+		}
 		await page.evaluate(
 			() =>
 				new Promise((resolve) =>
@@ -353,8 +371,27 @@ try {
 			await exclusions.getByText("아직 제외된 후보가 없어요.").waitFor();
 		}
 		if (width === 1440) {
-			const box = await exclusions.boundingBox();
-			await page.mouse.click(box.x + box.width + 12, box.y + 24);
+			const target = await exclusions.evaluate(async (el) => {
+				await new Promise((resolve) =>
+					requestAnimationFrame(() => requestAnimationFrame(resolve)),
+				);
+				const panel = el.getBoundingClientRect();
+				const overlay = el.parentElement
+					.querySelector(".ui-dialog-overlay")
+					.getBoundingClientRect();
+				const candidates = [
+					{ x: (panel.right + overlay.right) / 2, y: panel.top + 24 },
+					{ x: panel.left + 24, y: (panel.bottom + overlay.bottom) / 2 },
+				];
+				return candidates.find(({ x, y }) =>
+					document.elementFromPoint(x, y)?.matches(".ui-dialog-overlay"),
+				);
+			});
+			assert.ok(
+				target,
+				"the board overlay must expose a pointer dismissal target",
+			);
+			await page.mouse.click(target.x, target.y);
 		} else await page.keyboard.press("Escape");
 		await exclusions.waitFor({ state: "detached" });
 		await page.waitForFunction(

@@ -4,6 +4,7 @@ import {
 	sampleLunchPlaces,
 } from "@/lib/lunch";
 import type { RoomDraw, RoomDrawVote, RoomParticipant } from "@/lib/lunchRoom";
+import { getSpinDeadline } from "@/lib/spinDrive";
 
 export const previewSelfId = "preview-self";
 const names = [
@@ -38,9 +39,8 @@ export function previewVote(
 		vote,
 		reactionMs,
 		timestamp:
-			(draw
-				? draw.startedAt + draw.durationMs
-				: previewStart + lunchSpinDurationMs) + reactionMs,
+			(draw ? getSpinDeadline(draw) : previewStart + lunchSpinDurationMs) +
+			reactionMs,
 	};
 }
 export function previewVotes(

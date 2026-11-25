@@ -26,6 +26,12 @@ import {
 import { getWheelRotation, sampleLunchPlaces } from "../src/lib/lunch";
 import { lunchHistoryKey } from "../src/lib/lunchHistory";
 import type { RoomDraw, RoomSnapshot } from "../src/lib/lunchRoom";
+import {
+	changeSpinDrive,
+	getSpinDeadline,
+	getSpinLanding,
+	startSpinDrive,
+} from "../src/lib/spinDrive";
 
 vi.mock("../src/hooks/useLunchRoom", () => ({ useLunchRoom: vi.fn() }));
 vi.mock("../src/services/randomService", () => ({
@@ -305,6 +311,184 @@ describe("local chat delivery display", () => {
 });
 
 describe("current result feedback and frozen history", () => {
+	it("starts from the first slot row and sends release and re-press for the same pending draw", () => {
+		room.self = { id: "host-client", isHost: true };
+		room.snapshot = snapshot({ viewMode: "slot-v1" });
+		vi.mocked(room.startDraw).mockImplementation(() => {
+			room.startPending = true;
+			return true;
+		});
+		const view = render(<LunchRoomPage roomId={roomId} />);
+		expect(screen.queryByRole("button", { name: "다음 후보" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "이전 후보" })).toBeNull();
+		const pointer = {
+			pointerId: 7,
+			pointerType: "mouse",
+			isPrimary: true,
+			button: 0,
+		};
+		fireEvent.pointerDown(
+			screen.getByRole("button", { name: "슬롯 돌리기" }),
+			pointer,
+		);
+		const id = vi.mocked(room.startDraw).mock.calls[0][0]?.driveId;
+		assert(id);
+		expect(room.startDraw).toHaveBeenCalledExactlyOnceWith({
+			expectedRevision: 1,
+			driveId: id,
+		});
+		expect(screen.getByRole("button", { name: "슬롯 돌리기" })).toBeTruthy();
+		fireEvent.pointerUp(document.body, pointer);
+		expect(room.setDriveHeld).toHaveBeenNthCalledWith(1, id, false, 1);
+		fireEvent.keyDown(screen.getByRole("button", { name: "슬롯 돌리기" }), {
+			key: "Enter",
+		});
+		expect(room.setDriveHeld).toHaveBeenNthCalledWith(2, id, true, 2);
+		expect(room.startDraw).toHaveBeenCalledTimes(1);
+
+		const accepted = {
+			...draw(Date.now()),
+			id,
+			viewMode: "slot-v1" as const,
+			drive: startSpinDrive(Date.now(), "slot-v1"),
+		};
+		updateRoom(view, {
+			startPending: false,
+			snapshot: snapshot({
+				status: "drawing",
+				viewMode: "slot-v1",
+				draw: accepted,
+			}),
+		});
+		act(() => vi.advanceTimersByTime(15000));
+		expect(screen.getByRole("button", { name: "슬롯 돌리기" })).toBeTruthy();
+		fireEvent.keyUp(document.body, { key: "Enter" });
+		expect(room.setDriveHeld).toHaveBeenNthCalledWith(3, id, false, 3);
+		expect(screen.getByRole("button", { name: "슬롯 돌리기" })).toBeTruthy();
+	});
+
+	it("shows a finite reduced-motion countdown only after release and reveals at the accepted stop", () => {
+		reduced = true;
+		const startedAt = Date.now();
+		const held = startSpinDrive(startedAt, "wheel");
+		const active = { ...draw(startedAt), drive: held };
+		room.snapshot = snapshot({ status: "drawing", draw: active });
+		const view = render(<LunchRoomPage roomId={roomId} />);
+		expect(screen.queryByText(/결과 공개까지/)).toBeNull();
+		act(() => vi.advanceTimersByTime(15000));
+		expect(screen.queryByText(/결과 공개까지/)).toBeNull();
+		expect(
+			screen.queryByRole("heading", {
+				name: active.candidates[active.winnerIndex].name,
+			}),
+		).toBeNull();
+
+		const { mode, landing, period } = getSpinLanding(active);
+		const braking = {
+			...active,
+			drive: changeSpinDrive(held, false, 1, Date.now(), mode, landing, period),
+		};
+		updateRoom(view, {
+			snapshot: snapshot({ status: "drawing", draw: braking }),
+		});
+		expect(screen.getByText(/^결과 공개까지 [0-9]+초$/)).toBeTruthy();
+		act(() =>
+			vi.advanceTimersByTime(getSpinDeadline(braking) - Date.now() - 1),
+		);
+		expect(
+			screen.queryByRole("heading", {
+				name: active.candidates[active.winnerIndex].name,
+			}),
+		).toBeNull();
+		act(() => vi.advanceTimersByTime(1));
+		expect(
+			screen.queryByRole("heading", {
+				name: active.candidates[active.winnerIndex].name,
+			}),
+		).toBeNull();
+		updateRoom(view, {
+			snapshot: snapshot({ status: "result", draw: braking }),
+		});
+		expect(
+			screen.getByRole("heading", {
+				name: active.candidates[active.winnerIndex].name,
+			}),
+		).toBeTruthy();
+	});
+
+	it("keeps a guest on the board when a re-press update arrives after the former stop", () => {
+		const active = {
+			...draw(Date.now()),
+			drive: startSpinDrive(Date.now(), "wheel"),
+		};
+		const { mode, landing, period } = getSpinLanding(active);
+		const braking = {
+			...active,
+			drive: changeSpinDrive(
+				active.drive,
+				false,
+				1,
+				Date.now(),
+				mode,
+				landing,
+				period,
+			),
+		};
+		room.snapshot = snapshot({ status: "drawing", draw: braking });
+		const view = render(<LunchRoomPage roomId={roomId} />);
+		const oldStop = getSpinDeadline(braking);
+		act(() => vi.advanceTimersByTime(oldStop - Date.now() + 50));
+		expect(
+			screen.queryByRole("heading", {
+				name: active.candidates[active.winnerIndex].name,
+			}),
+		).toBeNull();
+		expect(screen.queryByRole("button", { name: "좋아요 투표" })).toBeNull();
+
+		const reaccelerated = {
+			...active,
+			drive: changeSpinDrive(
+				braking.drive,
+				true,
+				2,
+				oldStop - 500,
+				mode,
+				landing,
+				period,
+			),
+		};
+		updateRoom(view, {
+			snapshot: snapshot({ status: "drawing", draw: reaccelerated }),
+		});
+		expect(
+			screen.getByRole("button", { name: "룰렛 회전 중" }).matches(":disabled"),
+		).toBe(true);
+		const final = {
+			...active,
+			drive: changeSpinDrive(
+				reaccelerated.drive,
+				false,
+				3,
+				Date.now(),
+				mode,
+				landing,
+				period,
+			),
+		};
+		updateRoom(view, {
+			snapshot: snapshot({ status: "drawing", draw: final }),
+		});
+		act(() => vi.advanceTimersByTime(getSpinDeadline(final) - Date.now()));
+		expect(screen.queryByRole("button", { name: "좋아요 투표" })).toBeNull();
+		updateRoom(view, { snapshot: snapshot({ status: "result", draw: final }) });
+		expect(
+			screen.getByRole("heading", {
+				name: active.candidates[active.winnerIndex].name,
+			}),
+		).toBeTruthy();
+		expect(screen.getByRole("button", { name: "좋아요 투표" })).toBeTruthy();
+	});
+
 	it("switches the finished board without replacing the round and starts a redraw from that result", () => {
 		room.self = { id: "host-client", isHost: true };
 		const current: RoomDraw = { ...draw(baseTime - 8000), viewMode: "slot-v1" };
@@ -347,6 +531,7 @@ describe("current result feedback and frozen history", () => {
 		expect(room.startDraw).toHaveBeenCalledExactlyOnceWith({
 			previousDrawId: current.id,
 			expectedRevision: 6,
+			driveId: expect.any(String),
 		});
 		expect(room.nextRound).not.toHaveBeenCalled();
 	});
@@ -671,6 +856,7 @@ beforeEach(() => {
 		rename: vi.fn(() => true),
 		sendChat: vi.fn(() => true),
 		startDraw: vi.fn(() => true),
+		setDriveHeld: vi.fn(),
 		nextRound: vi.fn(() => true),
 		updateCandidates: vi.fn(() => true),
 		enterEditing: vi.fn(async () => true),
@@ -1185,16 +1371,45 @@ describe("synchronized lunch room UI", () => {
 		expect(vi.getTimerCount()).toBe(0);
 	});
 
+	it("carries the initiating host into a delayed spin with the same reveal deadline", async () => {
+		room.self = { id: "host-client", isHost: true };
+		const view = render(<LunchRoomPage roomId={roomId} />);
+		fireEvent.click(screen.getByRole("button", { name: "룰렛 돌리기" }));
+		vi.setSystemTime(baseTime + 350);
+		const delayedDraw = { ...draw(baseTime), durationMs: 4000 };
+		updateRoom(view, {
+			snapshot: snapshot({ draw: delayedDraw, status: "drawing" }),
+		});
+		expect(animate).toHaveBeenLastCalledWith(expect.any(Array), {
+			duration: 3650,
+			easing: "linear",
+			fill: "both",
+		});
+		expect(animations[0].currentTime).toBe(0);
+		await act(async () => vi.advanceTimersByTime(3649));
+		expect(
+			screen.queryByRole("heading", { name: sampleLunchPlaces[1].name }),
+		).toBeNull();
+		await act(async () => vi.advanceTimersByTime(1));
+		expect(
+			screen.getByRole("heading", { name: sampleLunchPlaces[1].name }),
+		).toBeTruthy();
+	});
+
 	it("keeps reduced-motion users static while still withholding the winner until the end", async () => {
 		reduced = true;
 		room.snapshot = snapshot({ draw: draw(), status: "drawing" });
 		render(<LunchRoomPage roomId={roomId} />);
 		expect(animate).not.toHaveBeenCalled();
+		const board = within(screen.getByRole("region", { name: "게임 보드" }));
+		expect(board.getByText("결과 공개까지 9초")).toBeTruthy();
 		await act(async () => vi.advanceTimersByTime(8699));
+		expect(board.getByText("결과 공개까지 1초")).toBeTruthy();
 		expect(
 			screen.queryByRole("region", { name: sampleLunchPlaces[1].name }),
 		).toBeNull();
 		await act(async () => vi.advanceTimersByTime(1));
+		expect(board.queryByText(/결과 공개까지/)).toBeNull();
 		expect(
 			screen.getByRole("region", { name: sampleLunchPlaces[1].name }),
 		).toBeTruthy();
@@ -2232,6 +2447,7 @@ describe("synchronized lunch room UI", () => {
 		expect(screen.queryByRole("alertdialog")).toBeNull();
 		expect(room.startDraw).toHaveBeenCalledExactlyOnceWith({
 			expectedRevision: 2,
+			driveId: expect.any(String),
 		});
 		updateRoom(view, {
 			snapshot: snapshot({

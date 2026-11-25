@@ -1063,6 +1063,26 @@ describe("room lifecycle commands", () => {
 			expectedRevision: 7,
 			confirmReset: true,
 		});
+		expect(sent("start")[0]).not.toHaveProperty("spinPower");
+	});
+	it("forwards the chosen animation strength when requesting a redraw", () => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		const draw = feedbackDraw();
+		joined(true, snapshot({ draw, revision: 9, status: "result" }));
+		act(() =>
+			expect(
+				result.current.startDraw({
+					previousDrawId: draw.id,
+					expectedRevision: 9,
+					spinPower: 0.8,
+				}),
+			).toBe(true),
+		);
+		expect(sent("start")[0]).toMatchObject({
+			previousDrawId: draw.id,
+			expectedRevision: 9,
+			spinPower: 0.8,
+		});
 	});
 	it("waits for a matching intake ACK and finalizes without starting a draw", async () => {
 		const { result } = renderHook(() => useLunchRoom(roomId));
@@ -2030,6 +2050,39 @@ describe("lunch room connection lifecycle", () => {
 		expect(sent("start")).toHaveLength(1);
 		expect(sent("chat")).toHaveLength(1);
 		expect(result.current.startPending).toBe(false);
+	});
+
+	it("sends fast drive input before the start acknowledgement and drops offline input", () => {
+		const { result } = renderHook(() => useLunchRoom(roomId));
+		joined();
+		act(() => {
+			expect(
+				result.current.startDraw({
+					driveId: "fast-drive",
+					driveStartIndex: 1,
+				}),
+			).toBe(true);
+			result.current.setDriveHeld("fast-drive", false, 1);
+			result.current.setDriveHeld("fast-drive", true, 2);
+		});
+		expect(sent("start")).toMatchObject([
+			{
+				id: "fast-drive",
+				driveId: "fast-drive",
+				driveStartIndex: 1,
+			},
+		]);
+		expect(sent("drive")).toEqual([
+			{ type: "drive", drawId: "fast-drive", held: false, sequence: 1 },
+			{ type: "drive", drawId: "fast-drive", held: true, sequence: 2 },
+		]);
+		act(() => {
+			socket().readyState = 3;
+			socket().dispatchEvent(new Event("close"));
+			result.current.setDriveHeld("fast-drive", false, 3);
+		});
+		joined();
+		expect(sent("drive")).toHaveLength(2);
 	});
 
 	it("corrects the clock from a matching ping midpoint and ignores unsolicited pongs", () => {

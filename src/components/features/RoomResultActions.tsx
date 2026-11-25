@@ -1,17 +1,23 @@
 import { Button } from "@/components/ui/button";
+import type { SpinButtonProps } from "@/hooks/useSpinInput";
+import { cn } from "@/lib/utils";
 
 export default function RoomResultActions({
 	disabled,
 	canRedraw,
+	holdHintId,
 	nextPending,
 	onNext,
 	onRedraw,
+	redrawButtonProps,
 }: {
 	disabled: boolean;
 	canRedraw: boolean;
+	holdHintId?: string;
 	nextPending: boolean;
 	onNext: () => void;
 	onRedraw: () => void;
+	redrawButtonProps?: SpinButtonProps;
 }) {
 	return (
 		<div className="room-result-actions flex flex-wrap justify-center gap-2">
@@ -28,9 +34,14 @@ export default function RoomResultActions({
 			</Button>
 			<Button
 				size="touch"
-				className="room-next-round"
+				className={cn(
+					"room-next-round room-redraw",
+					redrawButtonProps && "touch-none select-none",
+				)}
 				disabled={disabled || !canRedraw}
+				aria-describedby={holdHintId}
 				onClick={onRedraw}
+				{...redrawButtonProps}
 			>
 				바로 다시 뽑기
 			</Button>

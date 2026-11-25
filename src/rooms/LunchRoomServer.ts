@@ -34,14 +34,27 @@ import {
 	beginRoomDraw,
 	castRoomVote,
 	createRoomSnapshot,
+	finishRoomDraw,
 	getRoomArchiveDraws,
 	type LifecycleCommand,
 	prepareRoomDraw,
+	queueRoomDriveInput,
+	type RoomDriveIntent,
 	startRoomSpin,
+	updateRoomDrive,
 	validateRoomCommand,
 } from "@/lib/roomGame";
+import { getSpinDeadline } from "@/lib/spinDrive";
 import type { EntropyBatch } from "@/services/randomCore";
-import { drawFromPreparedEntropy, fetchEntropy } from "@/services/seedPool";
+import {
+	drawFromPreparedEntropy,
+	type PreparedRoomEntropy,
+	reserveRoomEntropy,
+	roomEntropyBatchSize,
+	roomEntropyTtlMs,
+	roomEntropyWordsPerDraw,
+} from "@/services/roomEntropy";
+import { fetchExternalEntropy } from "@/services/seedPool";
 
 export type RoomEnv = Cloudflare.Env;
 
@@ -63,10 +76,11 @@ interface StoredRoom {
 	hostName?: string;
 	processedStarts: string[];
 	pendingStartId: string | null;
+	driveControl?: RoomDriveIntent & { drawId: string; socketId: string };
 	presentParticipantIds: string[];
 	guestTokenIds: Record<string, string>;
 	processedCommands?: { key: string; fingerprint: string }[];
-	drawEntropy?: EntropyBatch & { expiresAt: number };
+	drawEntropy?: PreparedRoomEntropy;
 }
 
 interface SocketState {
@@ -96,9 +110,6 @@ interface EntryInfoResult {
 }
 
 const roomKey = "lunch-room:v1";
-const drawEntropyTtlMs = 5 * 60 * 1000;
-const drawEntropyBatchSize = 32;
-const drawEntropyWordsPerRound = 4;
 const joinTimeoutMs = 10_000;
 const chatIntervalMs = 750;
 const maxPendingConnections = 30;
@@ -232,6 +243,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 				this.room.snapshot.revision =
 					(this.room.snapshot.revision ?? this.room.snapshot.listVersion) + 1;
 				this.room.pendingStartId = null;
+				delete this.room.driveControl;
 				this.appendSystemEvent(
 					"draw-failed",
 					"추첨 준비가 중단됐습니다. 다시 시작해 주세요.",
@@ -242,6 +254,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 					"추첨 준비가 중단됐습니다. 다시 시작해 주세요.",
 				);
 			}
+			await this.coastOrphanedDrive();
 			await this.finishOverdueDraw();
 			await this.closePendingConnections();
 			await this.save();
@@ -547,7 +560,9 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			await this.load();
 			if (connection.state?.closing) return;
 			if (await this.rejectUnavailable(connection)) return;
-			await this.finishOverdueDraw();
+			await this.finishOverdueDraw(
+				message?.type === "drive" ? receivedAt : undefined,
+			);
 			if (!message) {
 				const invalidNickname = hasInvalidLunchRoomJoinNickname(raw);
 				this.sendError(
@@ -615,6 +630,9 @@ export class LunchRoomServer extends Server<RoomEnv> {
 					break;
 				case "vote":
 					await this.vote(connection, message);
+					break;
+				case "drive":
+					await this.changeDrive(connection, message, receivedAt);
 					break;
 				case "start":
 				case "next":
@@ -1105,7 +1123,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			!draw ||
 			draw.id !== message.drawId ||
 			this.room.snapshot.status !== "result" ||
-			Date.now() < draw.startedAt + draw.durationMs
+			Date.now() < getSpinDeadline(draw)
 		) {
 			this.sendError(
 				connection,
@@ -1141,13 +1159,15 @@ export class LunchRoomServer extends Server<RoomEnv> {
 	) {
 		if (!this.room) return;
 		const requestId = message.id;
+		const drawId = message.driveId ?? requestId;
 		const snapshot = this.room.snapshot;
 		if (
 			this.room.processedStarts.includes(requestId) ||
-			snapshot.draw?.id === requestId ||
-			snapshot.history.some((draw) => draw.id === requestId) ||
-			snapshot.olderWins?.some((win) => win.id === requestId) ||
-			snapshot.exclusionRecords?.some((record) => record.drawId === requestId)
+			this.room.processedStarts.includes(drawId) ||
+			snapshot.draw?.id === drawId ||
+			snapshot.history.some((draw) => draw.id === drawId) ||
+			snapshot.olderWins?.some((win) => win.id === drawId) ||
+			snapshot.exclusionRecords?.some((record) => record.drawId === drawId)
 		) {
 			this.sendSnapshot(connection);
 			this.send(connection, { type: "ack", requestId });
@@ -1177,7 +1197,11 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			this.sendSnapshot(connection);
 			return;
 		}
-		const drawInput = prepareRoomDraw(snapshot, this.participants());
+		const drawInput = prepareRoomDraw(
+			snapshot,
+			this.participants(),
+			message.spinPower,
+		);
 		const { candidates, requestedAt } = drawInput;
 		if (candidates.length === 0) {
 			this.sendError(
@@ -1190,20 +1214,27 @@ export class LunchRoomServer extends Server<RoomEnv> {
 		}
 		const before = structuredClone(this.room);
 		const prepared = this.room.drawEntropy;
-		let reserved: EntropyBatch | undefined;
-		if (prepared && prepared.expiresAt > requestedAt && prepared.seeds.length) {
-			reserved = {
-				seeds: prepared.seeds.splice(0, drawEntropyWordsPerRound),
-				source: prepared.source,
-			};
-		}
+		const reserved = reserveRoomEntropy(prepared, requestedAt);
 		// Consume these words in the same durable write as the start request.
 		if (prepared && (!reserved || !prepared.seeds.length))
 			delete this.room.drawEntropy;
-		this.room.processedStarts = [...this.room.processedStarts, requestId].slice(
-			-maxProcessedStarts,
-		);
+		this.room.processedStarts = [
+			...this.room.processedStarts,
+			requestId,
+			...(drawId === requestId ? [] : [drawId]),
+		].slice(-maxProcessedStarts);
 		this.room.pendingStartId = requestId;
+		delete this.room.driveControl;
+		const socketId = connection.state?.socketId;
+		if (message.driveId && socketId) {
+			this.room.driveControl = {
+				drawId,
+				socketId,
+				held: true,
+				sequence: 0,
+				startIndex: message.driveStartIndex,
+			};
+		}
 		beginRoomDraw(snapshot);
 		this.recordActivity(connection);
 		this.appendSystemEvent(
@@ -1248,7 +1279,23 @@ export class LunchRoomServer extends Server<RoomEnv> {
 				)
 					return;
 				const before = structuredClone(this.room);
-				startRoomSpin(this.room.snapshot, drawInput, result, requestId, 1500);
+				const drive = this.room.driveControl;
+				if (drive?.held && this.orphanedDrive()) {
+					queueRoomDriveInput(
+						drive,
+						{ held: false, sequence: drive.sequence + 1 },
+						Date.now(),
+					);
+				}
+				startRoomSpin(
+					this.room.snapshot,
+					drawInput,
+					result,
+					drive?.drawId ?? requestId,
+					0,
+					drive,
+				);
+				if (drive) delete drive.inputs;
 				this.room.pendingStartId = null;
 				try {
 					// Result and exclusion ledger are a single durable commit; publish only on success.
@@ -1269,6 +1316,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 				)
 					return;
 				this.room.pendingStartId = null;
+				delete this.room.driveControl;
 				this.room.snapshot.status = "waiting";
 				this.room.snapshot.revision =
 					(this.room.snapshot.revision ?? drawInput.listVersion) + 1;
@@ -1291,6 +1339,95 @@ export class LunchRoomServer extends Server<RoomEnv> {
 				this.publish();
 			});
 		}
+	}
+
+	private orphanedDrive() {
+		const socketId = this.room?.driveControl?.socketId;
+		return (
+			!socketId ||
+			![...this.getConnections<SocketState>()].some(
+				(connection) =>
+					connection.state?.socketId === socketId &&
+					!connection.state.closing &&
+					connection.state.participant?.isHost,
+			)
+		);
+	}
+
+	private async changeDrive(
+		connection: Connection<SocketState>,
+		message: Extract<ClientMessage, { type: "drive" }>,
+		receivedAt: number,
+	) {
+		const room = this.room;
+		const owner = room?.driveControl;
+		const state = connection.state;
+		if (
+			!room ||
+			!owner ||
+			!state?.participant?.isHost ||
+			state.participant.id !== room.hostParticipantId ||
+			state.socketId !== owner.socketId ||
+			message.drawId !== owner.drawId ||
+			message.sequence <= owner.sequence
+		)
+			return;
+		const snapshot = room.snapshot;
+		const before = structuredClone(room);
+		if (snapshot.status === "fetching") {
+			queueRoomDriveInput(owner, message, receivedAt);
+		} else {
+			if (!updateRoomDrive(snapshot, message.drawId, message, receivedAt))
+				return;
+			owner.held = message.held;
+			owner.sequence = message.sequence;
+		}
+		try {
+			await this.save({ refreshPresence: false });
+		} catch {
+			this.room = before;
+			// If a transition could not persist, dropping the control socket
+			// makes the current committed drive coast through onClose.
+			this.reject(
+				connection,
+				"SAVE_FAILED",
+				"추첨 조작을 저장하지 못했습니다. 다시 연결해 주세요.",
+				1011,
+			);
+			await this.coastOrphanedDrive();
+			await this.scheduleAlarm();
+			return;
+		}
+		if (snapshot.status === "drawing") {
+			await this.scheduleAlarm();
+			this.publish();
+		}
+	}
+
+	private async coastOrphanedDrive() {
+		const room = this.room;
+		if (!room || !this.orphanedDrive()) return;
+		const snapshot = room.snapshot;
+		const draw = snapshot.draw;
+		if (snapshot.status !== "drawing" || !draw?.drive?.held) return;
+		const before = structuredClone(room);
+		if (
+			!updateRoomDrive(
+				snapshot,
+				draw.id,
+				{ held: false, sequence: draw.drive.sequence + 1 },
+				Date.now(),
+			)
+		)
+			return;
+		delete room.driveControl;
+		try {
+			await this.save();
+		} catch {
+			this.room = before;
+			return;
+		}
+		this.publish();
 	}
 
 	private appendSystemEvent(event: RoomSystemEvent, text: string) {
@@ -1658,19 +1795,18 @@ export class LunchRoomServer extends Server<RoomEnv> {
 		return true;
 	}
 
-	private async finishOverdueDraw() {
+	private async finishOverdueDraw(now = Date.now()) {
 		const draw = this.room?.snapshot.draw;
 		if (
 			!this.room ||
 			this.room.snapshot.status !== "drawing" ||
 			!draw ||
-			Date.now() < draw.startedAt + draw.durationMs
+			now < getSpinDeadline(draw)
 		)
 			return;
 		const before = structuredClone(this.room);
-		this.room.snapshot.status = "result";
-		this.room.snapshot.revision =
-			(this.room.snapshot.revision ?? this.room.snapshot.listVersion) + 1;
+		finishRoomDraw(this.room.snapshot, now);
+		delete this.room.driveControl;
 		this.appendSystemEvent(
 			"draw-finished",
 			`추첨 결과: ${draw.candidates[draw.winnerIndex].name}`,
@@ -1704,8 +1840,9 @@ export class LunchRoomServer extends Server<RoomEnv> {
 		const room = this.room;
 		if (
 			!room ||
-			room.snapshot.status !== "waiting" ||
-			room.snapshot.draw ||
+			!["waiting", "fetching", "drawing", "result"].includes(
+				room.snapshot.status,
+			) ||
 			!room.snapshot.candidates.some(({ included }) => included !== false) ||
 			!room.snapshot.members?.some(
 				(member) =>
@@ -1717,7 +1854,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 		if (
 			prepared &&
 			prepared.expiresAt > now &&
-			prepared.seeds.length > drawEntropyWordsPerRound
+			prepared.seeds.length > roomEntropyWordsPerDraw
 		)
 			return prepared.expiresAt;
 		if (this.drawEntropyRefreshing) return;
@@ -1727,8 +1864,8 @@ export class LunchRoomServer extends Server<RoomEnv> {
 	}
 
 	private async refreshDrawEntropy() {
-		const batch = await fetchEntropy(drawEntropyBatchSize).catch(
-			() => undefined,
+		const batch = await fetchExternalEntropy(roomEntropyBatchSize).catch(
+			() => null,
 		);
 		await this.exclusive(async () => {
 			this.drawEntropyRefreshing = false;
@@ -1739,7 +1876,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 				Date.now() >= room.snapshot.expiresAt
 			)
 				return;
-			this.drawEntropyRetryAt = Date.now() + drawEntropyTtlMs;
+			this.drawEntropyRetryAt = Date.now() + roomEntropyTtlMs;
 			if (batch) {
 				const previous = room.drawEntropy;
 				room.drawEntropy = {
@@ -1764,8 +1901,11 @@ export class LunchRoomServer extends Server<RoomEnv> {
 		let next = this.room.snapshot.expiresAt;
 		if (refreshAt !== undefined) next = Math.min(next, refreshAt);
 		const draw = this.room.snapshot.draw;
-		if (this.room.snapshot.status === "drawing" && draw)
-			next = Math.min(next, draw.startedAt + draw.durationMs);
+		if (this.room.snapshot.status === "drawing" && draw) {
+			next = Math.min(next, getSpinDeadline(draw));
+			if (draw.drive?.held && this.orphanedDrive())
+				next = Math.min(next, Date.now() + 1000);
+		}
 		for (const member of this.room.snapshot.members ?? []) {
 			const awayAt = member.lastActiveAt + lunchRoomLimits.awayAfterMs;
 			if (member.status === "online" && awayAt > Date.now())
@@ -1807,6 +1947,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 				return;
 			}
 			if (await this.expireIfNeeded()) return;
+			await this.coastOrphanedDrive();
 			await this.finishOverdueDraw();
 			await this.closePendingConnections();
 			if (this.refreshMembers()) {
@@ -1824,6 +1965,7 @@ export class LunchRoomServer extends Server<RoomEnv> {
 			if (connection.state)
 				connection.setState({ ...connection.state, closing: true });
 			if (await this.expireIfNeeded()) return;
+			await this.coastOrphanedDrive();
 			const participant = previous?.participant;
 			if (
 				this.room &&

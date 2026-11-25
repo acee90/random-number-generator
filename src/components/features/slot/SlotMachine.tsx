@@ -1,18 +1,25 @@
+import { Check, Shuffle, Zap } from "lucide-react";
 import {
-	Check,
-	ChevronLeft,
-	ChevronRight,
-	LoaderCircle,
-	Shuffle,
-} from "lucide-react";
-import { type ReactElement, type RefObject, useMemo, useState } from "react";
+	type ComponentPropsWithoutRef,
+	type ReactElement,
+	type RefObject,
+	useMemo,
+} from "react";
 import { Button } from "@/components/ui/button";
 import type { LunchPlace } from "@/lib/lunch";
 import type { RoomDraw } from "@/lib/lunchRoom";
+import {
+	getSpinDeadline,
+	getSpinSlotIndex,
+	type SpinDrive,
+} from "@/lib/spinDrive";
+import type { SpinAdjustment } from "../game-art/spin-motion";
 import type { BallotScene } from "../picnic/ballots";
 import { slotStrip } from "./motion";
-import { useSlotReel } from "./useSlotReel";
+import { type SlotMotionOptions, useSlotReel } from "./useSlotReel";
 import "./slot-machine.css";
+
+const preview = 0;
 
 type Props = {
 	candidates: readonly LunchPlace[];
@@ -23,12 +30,19 @@ type Props = {
 	reduced: boolean;
 	host: boolean;
 	disabled: boolean;
-	onDraw: () => void;
+	drive?: SpinDrive;
+	driveClockOffset?: number;
+	driveAdjustment?: SpinAdjustment;
+	motionOptions?: SlotMotionOptions;
+	holdHintId?: string;
+	drawButtonProps?: ComponentPropsWithoutRef<"button">;
+	canReplay?: boolean;
+	countdown?: ReactElement;
 	resultActions: ReactElement | null;
 	result: BallotScene["result"];
 	voteMotionRound?: string;
 	showVoting: boolean;
-	children: ReactElement;
+	children?: ReactElement;
 	buttonRef: RefObject<HTMLButtonElement | null>;
 	buttonId: string;
 	titleRef?: RefObject<HTMLHeadingElement | null>;
@@ -44,7 +58,14 @@ export default function SlotMachine({
 	reduced,
 	host,
 	disabled,
-	onDraw,
+	drive = draw?.drive,
+	driveClockOffset = clockOffset,
+	driveAdjustment,
+	motionOptions,
+	holdHintId,
+	drawButtonProps,
+	canReplay = false,
+	countdown,
 	resultActions,
 	result,
 	voteMotionRound,
@@ -56,22 +77,36 @@ export default function SlotMachine({
 	titleId,
 }: Props) {
 	const count = candidates.length;
-	const showPreviewArrows = count > 1 && !resultActions;
-	const [preview, setPreview] = useState(0);
 	const done = phase === "done";
-	const busy = phase === "fetching" || phase === "spinning";
+	const busy = !drive && (phase === "fetching" || phase === "spinning");
 	const winner = draw?.winnerIndex;
+	const moving = Boolean(drive && !done);
+	// Keep the first travelling window painted while waiting for the press.
+	const windowReady = moving || (!draw && !done && count > 1);
+	const completed = done && !canReplay;
+	const blocked = disabled || busy || completed || !count;
 	const rows = useMemo(
-		() => slotStrip(count, preview, winner),
-		[count, preview, winner],
+		() =>
+			drive
+				? slotStrip(count, done ? (winner ?? preview) : preview)
+				: slotStrip(count, preview, winner),
+		[count, winner, drive, done],
 	);
 	const landingRow = rows.length - 3;
 	const { canvasRef, cabinetRef } = useSlotReel({
 		phase,
-		rowCount: rows.length,
+		rowCount: windowReady ? 4 : rows.length,
 		startedAt: draw?.startedAt,
-		duration: draw?.durationMs,
+		duration: draw ? getSpinDeadline(draw) - draw.startedAt : undefined,
+		power: draw?.spinPower ?? 0,
 		clockOffset,
+		drive,
+		driveClockOffset,
+		driveAdjustment,
+		motionOptions,
+		candidates,
+		numbers,
+		preview,
 		reduced,
 		result,
 		voteMotionRound,
@@ -79,16 +114,15 @@ export default function SlotMachine({
 
 	const label = done
 		? "추첨 완료"
-		: phase === "spinning"
-			? "추첨 중"
-			: phase === "fetching"
-				? "추첨 준비 중"
-				: "후보 미리보기";
+		: phase === "fetching"
+			? "슬롯 준비 중"
+			: "추첨 중";
 	const action = count === 1 ? "마지막 후보 확정" : "슬롯 돌리기";
 	return (
 		<div
 			className="slot-machine"
 			data-phase={phase}
+			data-drive={moving ? (drive?.held ? "held" : "braking") : undefined}
 			data-voting={showVoting || undefined}
 		>
 			<canvas className="slot-art" ref={canvasRef} inert />
@@ -101,57 +135,69 @@ export default function SlotMachine({
 				<div className="slot-bezel">
 					<div className="slot-drum">
 						<div className="slot-strip">
-							{rows.map((index, slot) => {
-								const place = index === null ? undefined : candidates[index];
-								const landing = winner !== undefined && slot === landingRow + 1;
-								return (
-									<div
-										className="slot-row"
-										// biome-ignore lint/suspicious/noArrayIndexKey: Fixed positions on the drum outlive their labels.
-										key={slot}
-										aria-hidden={done && landing ? undefined : true}
-									>
-										{index !== null && place && (
-											<>
+							{windowReady
+								? [0, 1, 2, 3].map((slot) => {
+										const index = getSpinSlotIndex(preview + slot - 1, count);
+										return (
+											<div
+												className="slot-row"
+												key={`live-${slot}`}
+												aria-hidden="true"
+											>
 												<span className="slot-number">
-													<span className="sr-only">후보 </span>
 													{String(numbers[index] ?? index + 1).padStart(2, "0")}
-													<span className="sr-only">번</span>
 												</span>
-												{landing ? (
-													<h3
-														className="slot-name"
-														tabIndex={-1}
-														ref={done ? titleRef : undefined}
-														id={titleId}
-														title={done ? place.name : undefined}
-													>
-														{place.name}
-													</h3>
-												) : (
-													<span className="slot-name">{place.name}</span>
+												<span className="slot-name">
+													{candidates[index]?.name}
+												</span>
+											</div>
+										);
+									})
+								: rows.map((index, slot) => {
+										const place =
+											index === null ? undefined : candidates[index];
+										const landing =
+											winner !== undefined && slot === landingRow + 1;
+										return (
+											<div
+												className="slot-row"
+												// biome-ignore lint/suspicious/noArrayIndexKey: Fixed positions on the drum outlive their labels.
+												key={slot}
+												aria-hidden={done && landing ? undefined : true}
+											>
+												{index !== null && place && (
+													<>
+														<span className="slot-number">
+															<span className="sr-only">후보 </span>
+															{String(numbers[index] ?? index + 1).padStart(
+																2,
+																"0",
+															)}
+															<span className="sr-only">번</span>
+														</span>
+														{landing ? (
+															<h3
+																className="slot-name"
+																tabIndex={-1}
+																ref={done ? titleRef : undefined}
+																id={titleId}
+																title={done ? place.name : undefined}
+															>
+																{place.name}
+															</h3>
+														) : (
+															<span className="slot-name">{place.name}</span>
+														)}
+													</>
 												)}
-											</>
-										)}
-									</div>
-								);
-							})}
+											</div>
+										);
+									})}
 						</div>
 						<div className="slot-payline" aria-hidden="true" />
 					</div>
 				</div>
 				<div className="slot-controls">
-					{showPreviewArrows && (
-						<Button
-							size="icon"
-							variant="ghost"
-							aria-label="이전 후보"
-							disabled={phase !== "idle"}
-							onClick={() => setPreview((preview + count - 1) % count)}
-						>
-							<ChevronLeft aria-hidden="true" />
-						</Button>
-					)}
 					{resultActions ? (
 						resultActions
 					) : host ? (
@@ -160,45 +206,30 @@ export default function SlotMachine({
 							ref={buttonRef}
 							className="slot-action"
 							size="lg"
-							disabled={disabled || busy || done || !count}
-							aria-busy={busy}
-							onClick={onDraw}
+							disabled={blocked}
+							aria-busy={busy || undefined}
+							aria-describedby={holdHintId}
+							{...drawButtonProps}
 						>
 							{busy ? (
-								<LoaderCircle
-									className="motion-safe:animate-spin"
-									aria-hidden="true"
-								/>
-							) : done ? (
+								<Zap aria-hidden="true" />
+							) : completed ? (
 								<Check aria-hidden="true" />
 							) : (
 								<Shuffle aria-hidden="true" />
 							)}
-							{busy || done ? label : action}
+							<span className="slot-action-label">
+								{busy || completed ? label : action}
+							</span>
 						</Button>
 					) : (
 						<span className="slot-wait">
-							{busy || done ? label : "방장의 추첨을 기다리는 중"}
+							{phase === "idle" ? "방장의 추첨을 기다리는 중" : label}
 						</span>
 					)}
-					{showPreviewArrows && (
-						<Button
-							size="icon"
-							variant="ghost"
-							aria-label="다음 후보"
-							disabled={phase !== "idle"}
-							onClick={() => setPreview((preview + 1) % count)}
-						>
-							<ChevronRight aria-hidden="true" />
-						</Button>
-					)}
 				</div>
-				{phase === "idle" && count > 0 && (
-					<output className="sr-only" aria-live="polite">
-						후보 미리보기 · {candidates[preview % count].name}
-					</output>
-				)}
 			</div>
+			{countdown && <div className="slot-countdown">{countdown}</div>}
 			<div className="slot-reveal">{children}</div>
 		</div>
 	);

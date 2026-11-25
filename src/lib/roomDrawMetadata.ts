@@ -5,6 +5,7 @@ import {
 	type RoomExclusionRecord,
 	type RoomSnapshot,
 } from "./lunchRoom";
+import { getSpinDeadline } from "./spinDrive";
 
 /** History is newest first; keep the current draw last without counting it twice. */
 function retainedDraws(snapshot: RoomSnapshot): RoomDraw[] {
@@ -54,7 +55,11 @@ export function hydrateRoomDrawMetadata(snapshot: RoomSnapshot): void {
 		const draw = [...draws]
 			.reverse()
 			.find((entry) => entry.candidates[entry.winnerIndex]?.id === candidateId);
-		if (draw) records.set(candidateId, exclusionRecordFor(draw));
+		if (
+			draw &&
+			!(draw.drive && snapshot.status === "drawing" && draw === snapshot.draw)
+		)
+			records.set(candidateId, exclusionRecordFor(draw));
 	}
 	snapshot.exclusionRecords = [...records.values()];
 	if (!snapshot.draw) clearDisabledRoomExclusions(snapshot);
@@ -64,7 +69,7 @@ export function exclusionRecordFor(draw: RoomDraw): RoomExclusionRecord {
 	return {
 		candidateId: draw.candidates[draw.winnerIndex].id,
 		drawId: draw.id,
-		drawnAt: draw.startedAt + draw.durationMs,
+		drawnAt: getSpinDeadline(draw),
 		...(draw.roundNumber === undefined
 			? {}
 			: { roundNumber: draw.roundNumber }),
@@ -88,18 +93,27 @@ export function recordRoomDrawMetadata(
 	draw.roundNumber = nextNumber;
 	if (snapshot.drawCountIsExact === false) draw.roundNumberIsExact = false;
 	snapshot.drawCount = nextNumber;
-	const record = exclusionRecordFor(draw);
+	const candidateId = draw.candidates[draw.winnerIndex].id;
 	snapshot.excludedIds = excludeDrawn
-		? [...new Set([...(snapshot.excludedIds ?? []), record.candidateId])]
+		? [...new Set([...(snapshot.excludedIds ?? []), candidateId])]
 		: [];
 	snapshot.exclusionRecords = excludeDrawn
 		? [
 				...(snapshot.exclusionRecords ?? []).filter(
-					(entry) => entry.candidateId !== record.candidateId,
+					(entry) => entry.candidateId !== candidateId,
 				),
-				record,
+				...(draw.drive ? [] : [exclusionRecordFor(draw)]),
 			]
 		: [];
+}
+
+export function recordFinishedDriveExclusion(
+	snapshot: RoomSnapshot,
+	draw: RoomDraw,
+) {
+	if (!draw.drive || !draw.excludeDrawn) return;
+	const record = exclusionRecordFor(draw);
+	snapshot.exclusionRecords = [...(snapshot.exclusionRecords ?? []), record];
 }
 
 /** Apply the live option without rewriting the immutable draw's original rules. */
