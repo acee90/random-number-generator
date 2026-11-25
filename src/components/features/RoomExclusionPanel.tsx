@@ -31,6 +31,7 @@ import {
 	getRoomExclusionHistory,
 	roomExclusionRoundLabel,
 } from "@/lib/roomExclusionHistory";
+import { getRoomHistoryTimeline } from "@/lib/roomWinHistory";
 import RoomWinHistory, { type RoomHistoryNavigation } from "./RoomWinHistory";
 import "./room-exclusion-panel.css";
 
@@ -146,6 +147,17 @@ export default function RoomExclusionPanel({
 	const excludeDrawn = snapshot?.excludeDrawn ?? false;
 	const revision = snapshot?.revision ?? snapshot?.listVersion ?? 1;
 	const rows = useMemo(() => getRoomExclusionHistory(snapshot), [snapshot]);
+	const drawCount = useMemo(
+		() =>
+			getRoomHistoryTimeline(
+				snapshot,
+				history?.serverNow() ?? Date.now(),
+				showResult,
+				history?.previousDraws,
+				history?.legacyHistory,
+			).filter((entry) => entry.kind !== "change").length,
+		[snapshot, history, showResult],
+	);
 	const hasRows = rows.length > 0;
 	const [overflowing, setOverflowing] = useState(false);
 	const inProgress = busy || phase === "fetching" || phase === "drawing";
@@ -300,10 +312,14 @@ export default function RoomExclusionPanel({
 						ref={historyTrigger}
 						onClick={() => setPanel("current")}
 						aria-label="당첨 내역 열기"
+						aria-description={`${drawCount}건 쌓임`}
 						title="당첨 내역"
 					>
 						<History size={16} aria-hidden />
 						<span>당첨 내역</span>
+						<span className="picnic-history-count" aria-hidden="true">
+							{drawCount}
+						</span>
 					</Button>
 				</DialogTrigger>
 				{toggleError && (

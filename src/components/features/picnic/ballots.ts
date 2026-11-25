@@ -1,5 +1,6 @@
 import type { Container } from "pixi.js";
 import type { StageScene, VoteChoice } from "./layout";
+import { assemblyPose } from "./resultAssembly";
 import { layer } from "./stationery";
 import { drawBallot } from "./ticket";
 
@@ -47,13 +48,12 @@ export function createBallots(
 				const t = choice === "up" ? up : down;
 				const mount = mounts[choice];
 				const center = cards[choice].position;
-				const lift = (1 - t) ** 3;
-				const impact = Math.sin(t * Math.PI * 2) * (1 - t);
+				const { lift, impact, alpha } = assemblyPose(t);
 				mount.pivot.copyFrom(center);
 				mount.position.set(center.x, center.y - 12 * lift);
 				mount.scale.set(1 + 0.24 * lift - 0.12 * impact);
 				mount.rotation = (choice === "up" ? -0.06 : 0.06) * lift;
-				mount.alpha = Math.min(1, t * 4);
+				mount.alpha = alpha;
 			}
 		},
 		paint(scene: BallotScene, resized = false) {

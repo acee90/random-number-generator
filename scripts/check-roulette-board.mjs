@@ -138,7 +138,7 @@ try {
 		await spinning.waitFor();
 		if (!reduce) {
 			// After the result overlay clears, the rim stays still while the disc turns.
-			await page.waitForTimeout(220);
+			await page.waitForTimeout(700);
 			const before = await spinning.evaluate(wheelPixels);
 			await page.waitForTimeout(90);
 			const after = await spinning.evaluate(wheelPixels);
@@ -201,7 +201,7 @@ try {
 		await page.waitForTimeout(680);
 		if (process.env.ROULETTE_CAPTURE_DIR) {
 			await board.screenshot({
-				path: process.env.ROULETTE_CAPTURE_DIR + "/result-" + width + ".png",
+				path: `${process.env.ROULETTE_CAPTURE_DIR}/result-${width}.png`,
 			});
 		}
 		const like = board.getByRole("button", { name: "좋아요 투표" });
@@ -246,9 +246,38 @@ try {
 			await board.getByRole("list", { name: "당첨 제외 내역" }).count(),
 			0,
 		);
+		const canvas = board.locator("canvas.picnic-art");
+		const backdropPixel = () =>
+			canvas.evaluate((el) => {
+				const ctx = el.getContext("2d");
+				return [
+					...ctx.getImageData(
+						Math.floor(el.width * 0.5),
+						Math.floor(el.height * 0.02),
+						1,
+						1,
+					).data,
+				];
+			});
+		const beforeBackdrop = await backdropPixel();
 		await history.focus();
 		await history.press("Enter");
 		await popup.waitFor();
+		await page.evaluate(
+			() =>
+				new Promise((resolve) =>
+					requestAnimationFrame(() => requestAnimationFrame(resolve)),
+				),
+		);
+		assert.deepEqual(
+			await backdropPixel(),
+			beforeBackdrop,
+			`${width}px: dialog backdrop must not darken the Pixi board`,
+		);
+		if (process.env.ROULETTE_CAPTURE_DIR)
+			await board.screenshot({
+				path: `${process.env.ROULETTE_CAPTURE_DIR}/history-${width}.png`,
+			});
 		assert.equal(
 			await popup.getByRole("checkbox", { name: "이전 게임 포함" }).count(),
 			0,

@@ -181,7 +181,7 @@ export default function LunchSessionPage({
 	const presentationScope = closed || awaitingEntry ? null : roomId;
 	const sound = useDrawSound(
 		presentationScope,
-		connected && view === "wheel",
+		connected && (view === "wheel" || viewMode === "slot-v1"),
 		driveId,
 		showResult
 			? "result"
@@ -189,6 +189,7 @@ export default function LunchSessionPage({
 					(!displayedDraw || room.serverNow() < getSpinDeadline(displayedDraw))
 				? "spinning"
 				: null,
+		viewMode,
 	);
 	useEffect(() => {
 		const root = roomViewportRef.current;
