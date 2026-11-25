@@ -160,6 +160,8 @@ try {
 	const spin = button(host, "슬롯 돌리기");
 	const canvas = await painted(host).elementHandle();
 	const controls = host.locator(".slot-controls");
+	const spinNode = await spin.elementHandle();
+	const spinBox = await spin.boundingBox();
 	const controlsBox = await controls.boundingBox();
 	const drumBox = await host.locator(".slot-drum").boundingBox();
 	await spin.focus();
@@ -212,9 +214,14 @@ try {
 	);
 	assert.deepEqual(await host.locator(".slot-drum").boundingBox(), drumBox);
 	assert.deepEqual(await controls.boundingBox(), controlsBox);
-	const nextRound = button(controls, "대기화면으로 이동");
-	assert.ok(await nextRound.isEnabled());
-	assert.ok(await button(controls, "바로 다시 뽑기").isEnabled());
+	assert.equal(await controls.getByRole("button").count(), 1);
+	assert.ok(await spin.isEnabled());
+	assert.ok(
+		await spinNode.evaluate(
+			(el) => el === document.querySelector(".slot-action"),
+		),
+	);
+	assert.deepEqual(await spin.boundingBox(), spinBox);
 	assert.equal(await button(host, "추첨 완료").count(), 0);
 	assert.equal(
 		await host.locator(".slot-reveal .room-result-actions").count(),
@@ -261,14 +268,24 @@ try {
 	);
 	await host.emulateMedia({ forcedColors: "none" });
 	await painted(host).waitFor();
-	await nextRound.press("Enter");
-	await spin.waitFor();
+	for (const width of [320, 597, 1280]) {
+		await host.setViewportSize({ width, height: 1600 });
+		await frame(host);
+		assert.equal(await controls.getByRole("button").count(), 1);
+		if (process.env.SLOT_CAPTURE_DIR)
+			await host.locator(".slot-machine").screenshot({
+				path: process.env.SLOT_CAPTURE_DIR + "/result-" + width + ".png",
+			});
+	}
+	await spin.press("Enter");
+	await spinning.waitFor();
+	await guest.locator('.slot-machine[data-phase="spinning"]').waitFor();
 	assert.equal(
 		await spin.evaluate((el) => document.activeElement === el),
 		true,
 	);
 	console.log(
-		"Passed: same canvas, fixed reel, round actions in the cabinet above voting, 320/597/1280px, keyboard, reduced motion, rejoin, high contrast and next round.",
+		"Passed: same canvas, fixed reel, persistent spin button in the cabinet above voting, 320/597/1280px, keyboard, reduced motion, rejoin, high contrast and next round.",
 	);
 } finally {
 	await browser.close();

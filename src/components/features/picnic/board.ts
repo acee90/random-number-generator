@@ -206,7 +206,9 @@ export function drawTable(stage: Container, side: number) {
 		.fill(0xffe9b6)
 		.stroke({ color: picnic.ink, width: 2 })
 		.circle(0, 1, 47)
-		.fill(0xb74334);
+		.fill(0xb74334)
+		.star(0, 1, 8, 25, 9, Math.PI / 8)
+		.fill(0xffe9b6);
 }
 
 export function drawPointer(stage: Container, side: number) {

@@ -527,7 +527,7 @@ describe("current result feedback and frozen history", () => {
 			),
 		).toBeTruthy();
 		expect(room.startDraw).not.toHaveBeenCalled();
-		fireEvent.click(screen.getByRole("button", { name: "바로 다시 뽑기" }));
+		fireEvent.click(screen.getByRole("button", { name: "룰렛 돌리기" }));
 		expect(room.startDraw).toHaveBeenCalledExactlyOnceWith({
 			previousDrawId: current.id,
 			expectedRevision: 6,
@@ -545,7 +545,7 @@ describe("current result feedback and frozen history", () => {
 		room.snapshot = snapshot({ draw: current, status: "result" });
 		const view = render(<LunchRoomPage roomId={roomId} />);
 		const next = screen.getByRole("button", {
-			name: "대기화면으로 이동",
+			name: viewMode === "wheel" ? "룰렛 돌리기" : "슬롯 돌리기",
 		});
 		expect(next.matches(":disabled")).toBe(false);
 		expect(
@@ -593,7 +593,8 @@ describe("current result feedback and frozen history", () => {
 				.getAttribute("aria-pressed"),
 		).toBe("true");
 		fireEvent.click(next);
-		expect(room.nextRound).toHaveBeenCalledExactlyOnceWith(current.id);
+		expect(room.startDraw).toHaveBeenCalledOnce();
+		expect(room.nextRound).not.toHaveBeenCalled();
 		expect(room.vote).toHaveBeenCalledOnce();
 	});
 
@@ -740,30 +741,20 @@ describe("current result feedback and frozen history", () => {
 			),
 		).toBeTruthy();
 	});
-	it("lets the host close voting for everyone, then focuses the next draw without auto-starting", () => {
+	it("enters the next slot draw from its result without a waiting transition", () => {
 		room.self = { id: "host-client", isHost: true };
-		const current = draw(baseTime - 8000);
-		room.snapshot = snapshot({ draw: current });
-		const view = render(<LunchRoomPage roomId={roomId} />);
-		expect(screen.queryByRole("button", { name: "룰렛 다시 보기" })).toBeNull();
-		fireEvent.click(screen.getByRole("button", { name: "대기화면으로 이동" }));
-		expect(room.nextRound).toHaveBeenCalledExactlyOnceWith(current.id);
-		expect(room.startDraw).not.toHaveBeenCalled();
-		updateRoom(view, { nextPending: true });
-		expect(
-			screen
-				.getByRole("button", { name: "대기 화면으로 이동 중…" })
-				.matches(":disabled"),
-		).toBe(true);
-		updateRoom(view, {
-			nextPending: false,
-			snapshot: snapshot({ draw: null, history: [current] }),
+		const current: RoomDraw = { ...draw(baseTime - 8000), viewMode: "slot-v1" };
+		room.snapshot = snapshot({
+			status: "result",
+			draw: current,
+			viewMode: "slot-v1",
 		});
-		expect(
-			screen.queryByRole("region", { name: "실시간 투표 현황" }),
-		).toBeNull();
-		expect(document.activeElement?.id).toContain("-start");
-		expect(room.startDraw).not.toHaveBeenCalled();
+		render(<LunchRoomPage roomId={roomId} />);
+		fireEvent.click(screen.getByRole("button", { name: "슬롯 돌리기" }));
+		expect(room.startDraw).toHaveBeenCalledWith(
+			expect.objectContaining({ previousDrawId: current.id }),
+		);
+		expect(room.nextRound).not.toHaveBeenCalled();
 	});
 
 	it("shows fixed ballots in history with no vote action and freezes the opened copy", () => {
@@ -3887,13 +3878,13 @@ describe("synchronized lunch room UI", () => {
 		).toBeNull();
 		expect(room.updateRoomOptions).not.toHaveBeenCalled();
 		fireEvent.click(history.getByRole("button", { name: "닫기" }));
-		const next = board.getByRole("button", { name: "대기화면으로 이동" });
+		const next = board.getByRole("button", { name: "룰렛 돌리기" });
 		expect(next.closest(".picnic-sheet")).toBeNull();
-		expect(
-			screen.getAllByRole("button", { name: "대기화면으로 이동" }),
-		).toHaveLength(1);
+		expect(screen.getAllByRole("button", { name: "룰렛 돌리기" })).toHaveLength(
+			1,
+		);
 		fireEvent.click(next);
-		expect(room.nextRound).toHaveBeenCalledOnce();
+		expect(room.startDraw).toHaveBeenCalledOnce();
 	});
 
 	it("takes the host from the result to candidate editing and moves keyboard focus into the editor", () => {
@@ -3907,9 +3898,10 @@ describe("synchronized lunch room UI", () => {
 		updateRoom(view, { nextPending: true });
 		expect(edit).toHaveProperty("disabled", true);
 		expect(edit.getAttribute("aria-busy")).toBe("true");
-		expect(
-			screen.getByRole("button", { name: "대기화면으로 이동" }),
-		).toHaveProperty("disabled", true);
+		expect(screen.getByRole("button", { name: "룰렛 돌리기" })).toHaveProperty(
+			"disabled",
+			true,
+		);
 		updateRoom(view, {
 			nextPending: false,
 			snapshot: snapshot({ status: "editing", history: [current] }),

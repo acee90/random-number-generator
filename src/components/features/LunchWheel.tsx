@@ -119,6 +119,7 @@ export function LunchWheel({
 	motionOff = false,
 	holdHintId,
 	drawButtonProps,
+	externalControl = false,
 }: {
 	candidates: readonly LunchPlace[];
 	candidateNumbers: readonly number[];
@@ -142,6 +143,7 @@ export function LunchWheel({
 	motionOff?: boolean;
 	holdHintId?: string;
 	drawButtonProps?: ComponentPropsWithoutRef<"button">;
+	externalControl?: boolean;
 }) {
 	const size = candidates.length;
 	const ownRotorRef = useRef<HTMLDivElement>(null);
@@ -205,32 +207,34 @@ export function LunchWheel({
 					<WheelFace labels={labels} side={wheelSide} />
 				</div>
 			</div>
-			<Button
-				variant="plain"
-				size="auto"
-				type="button"
-				id={buttonId}
-				ref={buttonRef}
-				className="lunch-wheel-center"
-				data-hit="draw"
-				data-draw-permission={canDraw ? "host" : "viewer"}
-				disabled={disabled}
-				aria-busy={busy || undefined}
-				onClick={() => onDraw()}
-				aria-label={label}
-				aria-describedby={
-					[errorId, holdHintId].filter(Boolean).join(" ") || undefined
-				}
-				{...drawButtonProps}
-			>
-				{busy ? (
-					<Zap size={22} aria-hidden="true" />
-				) : (
-					<Shuffle size={22} aria-hidden="true" />
-				)}
-				<span aria-hidden="true">{caption}</span>
-				<small aria-hidden="true">{size}곳</small>
-			</Button>
+			{!externalControl && (
+				<Button
+					variant="plain"
+					size="auto"
+					type="button"
+					id={buttonId}
+					ref={buttonRef}
+					className="lunch-wheel-center"
+					data-hit="draw"
+					data-draw-permission={canDraw ? "host" : "viewer"}
+					disabled={disabled}
+					aria-busy={busy || undefined}
+					onClick={() => onDraw()}
+					aria-label={label}
+					aria-describedby={
+						[errorId, holdHintId].filter(Boolean).join(" ") || undefined
+					}
+					{...drawButtonProps}
+				>
+					{busy ? (
+						<Zap size={22} aria-hidden="true" />
+					) : (
+						<Shuffle size={22} aria-hidden="true" />
+					)}
+					<span aria-hidden="true">{caption}</span>
+					<small aria-hidden="true">{size}곳</small>
+				</Button>
+			)}
 		</div>
 	);
 }

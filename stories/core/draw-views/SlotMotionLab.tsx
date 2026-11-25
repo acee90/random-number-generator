@@ -187,7 +187,6 @@ export function SlotMotionLab() {
 							holdHintId="slot-lab-hint"
 							result={null}
 							showVoting={false}
-							resultActions={null}
 						/>
 					</div>
 					<SlotSpeedTrace

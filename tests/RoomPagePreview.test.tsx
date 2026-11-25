@@ -230,7 +230,7 @@ describe("Storybook room page with the local transport adapter", () => {
 		expect(fetchRequest).not.toHaveBeenCalled();
 	});
 
-	it("runs a host draw through the real reveal, then archives it and returns to the draw button", () => {
+	it("runs a host draw through the real reveal, then archives it by spinning again", () => {
 		renderPage(true, "idle");
 		fireEvent.keyDown(screen.getByRole("button", { name: "슬롯 돌리기" }), {
 			key: " ",
@@ -246,7 +246,7 @@ describe("Storybook room page with the local transport adapter", () => {
 		).toBe(false);
 		act(() => vi.advanceTimersByTime(12000));
 		expect(screen.getByText("0명 참여")).toBeTruthy();
-		fireEvent.click(screen.getByRole("button", { name: "대기화면으로 이동" }));
+		fireEvent.click(screen.getByRole("button", { name: "슬롯 돌리기" }));
 		expect(
 			screen.queryByRole("region", { name: "실시간 투표 현황" }),
 		).toBeNull();
@@ -260,10 +260,10 @@ describe("Storybook room page with the local transport adapter", () => {
 		expect(fetchRequest).not.toHaveBeenCalled();
 	});
 
-	it("acknowledges the host ballot before returning to waiting and freezes it in the archived round", () => {
+	it("acknowledges the host ballot before starting the next spin and freezes it in the archived round", () => {
 		renderPage(true, "result");
 		const next = screen.getByRole("button", {
-			name: "대기화면으로 이동",
+			name: "슬롯 돌리기",
 		});
 		expect(next.matches(":disabled")).toBe(false);
 		fireEvent.click(screen.getByRole("button", { name: "좋아요 투표" }));
@@ -300,7 +300,7 @@ describe("Storybook room page with the local transport adapter", () => {
 		).toBeNull();
 		expect(
 			within(archived).queryByRole("button", {
-				name: "대기화면으로 이동",
+				name: "슬롯 돌리기",
 			}),
 		).toBeNull();
 		expect(fetchRequest).not.toHaveBeenCalled();
@@ -483,9 +483,7 @@ describe("Storybook room page with the local transport adapter", () => {
 		expect(
 			screen.getByRole("region", { name: "실시간 투표 현황" }),
 		).toBeTruthy();
-		expect(
-			screen.getByRole("button", { name: "대기화면으로 이동" }),
-		).toBeTruthy();
+		expect(screen.getByRole("button", { name: "슬롯 돌리기" })).toBeTruthy();
 		expect(
 			screen.getByRole("button", {
 				name: "후보",
@@ -522,9 +520,7 @@ describe("Storybook room page with the local transport adapter", () => {
 		expect(
 			screen.getByRole("region", { name: "실시간 투표 현황" }),
 		).toBeTruthy();
-		expect(
-			screen.getByRole("button", { name: "대기화면으로 이동" }),
-		).toBeTruthy();
+		expect(screen.getByRole("button", { name: "슬롯 돌리기" })).toBeTruthy();
 		expect(
 			screen.getByRole("button", {
 				name: "후보",
@@ -539,16 +535,8 @@ describe("Storybook room page with the local transport adapter", () => {
 			screen.getByRole("switch", { name: "중복 없이 추첨 · 뽑힌 후보 제외" });
 		await act(async () => fireEvent.click(switchForDrawn()));
 		expect(
-			screen
-				.getByRole("button", { name: "바로 다시 뽑기" })
-				.matches(":disabled"),
+			screen.getByRole("button", { name: "슬롯 돌리기" }).matches(":disabled"),
 		).toBe(true);
-		await act(async () =>
-			fireEvent.click(
-				screen.getByRole("button", { name: "대기화면으로 이동" }),
-			),
-		);
-		expectWaitingCandidateCount(0);
 		await act(async () =>
 			fireEvent.click(screen.getByRole("button", { name: "후보" })),
 		);

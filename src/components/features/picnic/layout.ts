@@ -114,6 +114,8 @@ export function wheelControl(
 export type StageScene = {
 	/** The ticket or wheel occupies the top of the same canvas as the lists. */
 	mainHeight?: number;
+	continuous?: boolean;
+	landing?: number;
 	voteMotionRound?: string;
 	sound?: { enabled: boolean; supported: boolean };
 	wheel: {
@@ -140,14 +142,17 @@ export type StageScene = {
 };
 
 // Logical CSS pixels, shared by the drawing and its keyboard/pointer targets.
-export function stageLayout(width: number, height: number) {
+export function stageLayout(width: number, height: number, continuous = false) {
 	const small = width < 360;
 	const pad = small ? 8 : 14;
 	const top = small ? 8 : 11;
 	const wheelSide = Math.max(1, Math.min(width, height - 61, 480));
-	const heroWidth = Math.min(width - (small ? 24 : 48), 568);
-	const heroHeight = Math.min(164, heroWidth * 0.46);
-	const ticketTop = small ? 70 : 78;
+	const heroWidth = Math.min(
+		width - (small ? 24 : 48),
+		continuous ? wheelSide * 0.81 : 568,
+	);
+	const heroHeight = Math.min(continuous ? 116 : 164, heroWidth * 0.46);
+	const ticketTop = continuous ? 132 : small ? 70 : 78;
 	return {
 		width,
 		height,
