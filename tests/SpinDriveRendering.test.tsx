@@ -457,7 +457,6 @@ it("runs only four physical slot rows from the first candidate and lands on the 
 		reduced: false,
 		host: true,
 		disabled: false,
-		resultActions: null,
 		result: null,
 		showVoting: false,
 		children: <div />,

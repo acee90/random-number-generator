@@ -26,10 +26,7 @@ export function drawDetails(
 			y = box.top - origin.top;
 		const { width: w, height: h } = box;
 		const style = getComputedStyle(el);
-		if (el.matches(".ui-dialog-overlay")) {
-			pen(group).rect(x, y, w, h).fill({ color: 0x392a28, alpha: 0.38 });
-			return;
-		}
+		if (el.matches(".ui-dialog-overlay")) return;
 		if (el.matches(".picnic-sheet, .picnic-popup")) {
 			const g = pen(group);
 			if (el.matches(".picnic-popup"))

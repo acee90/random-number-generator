@@ -5,6 +5,7 @@ export function useDrawSound(
 	audible: boolean,
 	drawId: string | undefined,
 	phase: "spinning" | "result" | null,
+	gameMode: "wheel" | "slot-v1" = "wheel",
 ) {
 	const [enabled, setEnabled] = useState(false);
 	const [supported, setSupported] = useState(false);
@@ -58,11 +59,18 @@ export function useDrawSound(
 		const note = context.createOscillator();
 		const gain = context.createGain();
 		const start = context.currentTime;
-		note.frequency.setValueAtTime(523.25, start);
-		note.frequency.setValueAtTime(659.25, start + 0.09);
+		if (gameMode === "slot-v1") {
+			note.type = "square";
+			note.frequency.setValueAtTime(980, start);
+			note.frequency.exponentialRampToValueAtTime(370, start + 0.045);
+		} else {
+			note.frequency.setValueAtTime(523.25, start);
+			note.frequency.setValueAtTime(659.25, start + 0.09);
+		}
 		gain.gain.setValueAtTime(0, start);
 		gain.gain.linearRampToValueAtTime(0.12, start + 0.02);
-		gain.gain.exponentialRampToValueAtTime(0.001, start + 0.24);
+		const duration = gameMode === "slot-v1" ? 0.055 : 0.24;
+		gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
 		note.connect(gain).connect(context.destination);
 
 		function disconnect() {
@@ -81,8 +89,8 @@ export function useDrawSound(
 		};
 		stopRef.current = silence;
 		note.start(start);
-		note.stop(start + 0.24);
-	}, [audible, drawId, enabled, phase, stop]);
+		note.stop(start + duration);
+	}, [audible, drawId, enabled, gameMode, phase, stop]);
 
 	function toggle() {
 		setError("");

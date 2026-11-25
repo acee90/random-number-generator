@@ -36,6 +36,7 @@ type SlotState = Pick<BallotScene, "result" | "voteMotionRound"> & {
 
 export function useSlotReel(next: SlotState) {
 	const state = useRef(next);
+	const sheetExitStartedAt = useRef<number | null>(null);
 	const invalidate = useRef<
 		((part: "layout" | "round" | "sheet") => void) | null
 	>(null);
@@ -47,6 +48,9 @@ export function useSlotReel(next: SlotState) {
 	useLayoutEffect(() => {
 		const prev = state.current;
 		state.current = next;
+		if (prev.phase === "done" && next.phase !== "done")
+			sheetExitStartedAt.current = performance.now();
+		else if (next.phase === "done") sheetExitStartedAt.current = null;
 		if (prev.rowCount !== next.rowCount) invalidate.current?.("layout");
 		else if (
 			prev.phase !== next.phase ||
@@ -212,16 +216,23 @@ export function useSlotReel(next: SlotState) {
 					changedRows.push(slot);
 				}
 			}
+			let reveal =
+				done && !still && duration !== undefined
+					? Math.min(1, Math.max(0, (elapsed - duration) / 640))
+					: 1;
+			if (!done && sheetExitStartedAt.current !== null) {
+				reveal = still
+					? 0
+					: 1 -
+						Math.min(1, (performance.now() - sheetExitStartedAt.current) / 640);
+				if (reveal === 0) sheetExitStartedAt.current = null;
+			}
 			const row = done
-				? landing
+				? landing + Math.sin(reveal * Math.PI * 3) * 0.12 * (1 - reveal)
 				: live
 					? position - baseRow
 					: slotStripOffset(legacySample.travel, power);
 			const printedRows = live ? 4 : rowCount;
-			const reveal =
-				done && !still && duration !== undefined
-					? Math.min(1, Math.max(0, (elapsed - duration) / 260))
-					: 1;
 			const art = painter.current;
 			try {
 				if (!layoutDirty && canPaint && changedRows.length)
@@ -276,7 +287,7 @@ export function useSlotReel(next: SlotState) {
 			if (
 				(active && (drive.held || driveTime < (drive.stopAt ?? Infinity))) ||
 				(legacySpin && elapsed < duration) ||
-				(canPaint && reveal < 1) ||
+				(canPaint && (reveal < 1 || sheetExitStartedAt.current !== null)) ||
 				(canPaint && transitioning)
 			)
 				schedule();

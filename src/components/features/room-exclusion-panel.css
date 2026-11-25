@@ -43,6 +43,11 @@
 	color: var(--paper-muted);
 	font-variant-numeric: tabular-nums;
 }
+.picnic-options .picnic-history-count {
+	min-inline-size: 1.25em;
+	font-variant-numeric: tabular-nums;
+	text-align: center;
+}
 .picnic-exclusion-count::before {
 	content: "";
 	position: absolute;
@@ -144,7 +149,7 @@
 	.picnic-options .picnic-history-button {
 		inline-size: 44px;
 	}
-	.picnic-history-button span {
+	.picnic-history-button > span:not(.picnic-history-count) {
 		display: none;
 	}
 	.picnic-exclusion-group[data-has-exclusions] + .picnic-history-button svg {

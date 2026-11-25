@@ -4,6 +4,7 @@ import { createBoardRenderer } from "../game-art/renderer";
 import { createTextPrinter } from "../game-art/text";
 import { type BallotScene, createBallots } from "../picnic/ballots";
 import { drawDetails, observeDetails } from "../picnic/details";
+import { assemblyPose, assemblyProgress } from "../picnic/resultAssembly";
 import { drawCabinet, relativeBox } from "./cabinet";
 import { drawControls } from "./controls";
 
@@ -65,6 +66,7 @@ export async function createSlotPainter(canvas: HTMLCanvasElement) {
 	viewport.mask = mask;
 	const glass = stage.addChild(new Container());
 	const focus = stage.addChild(new Graphics());
+	const detent = stage.addChild(new Graphics());
 	const controls = stage.addChild(new Container());
 	const sheet = stage.addChild(new Container());
 	const paper = sheet.addChild(new Container());
@@ -103,6 +105,10 @@ export async function createSlotPainter(canvas: HTMLCanvasElement) {
 		height = 0;
 	let lastRow = NaN,
 		lastSpeed = NaN;
+	let paperCenter = { x: 0, y: 0 };
+	let revealProgress = 1;
+	let lastBallotScene: Pick<BallotScene, "result" | "voteMotionRound"> | null =
+		null;
 	function drawLabel(group: Container, row: Element) {
 		const box = row.getBoundingClientRect();
 		const number = row.querySelector(".slot-number");
@@ -181,30 +187,50 @@ export async function createSlotPainter(canvas: HTMLCanvasElement) {
 			voteMotionRound,
 		}: Pick<BallotScene, "result" | "voteMotionRound">) {
 			// A long ballot can extend the canvas down without rebuilding the reel.
-			const bounds = canvas.getBoundingClientRect();
+			const canvasBounds = canvas.getBoundingClientRect();
 			const resized =
-				renderer.screen.width !== bounds.width ||
-				renderer.screen.height !== bounds.height ||
+				renderer.screen.width !== canvasBounds.width ||
+				renderer.screen.height !== canvasBounds.height ||
 				renderer.resolution !== 2;
-			if (resized) renderer.resize(bounds.width, bounds.height, 2);
-			clear(paper);
-			if (sheetRoot && result)
-				drawDetails(paper, sheetRoot, canvas, renderer.resolution);
+			if (resized) renderer.resize(canvasBounds.width, canvasBounds.height, 2);
+			if (result) {
+				clear(paper);
+				if (sheetRoot)
+					drawDetails(paper, sheetRoot, canvas, renderer.resolution);
+				const rect = sheetRoot
+					?.querySelector<HTMLElement>(".picnic-sheet")
+					?.getBoundingClientRect();
+				paperCenter = rect
+					? {
+							x: rect.left - canvasBounds.left + rect.width / 2,
+							y: rect.top - canvasBounds.top + rect.height / 2,
+						}
+					: { x: 0, y: 0 };
+				lastBallotScene = { result, voteMotionRound };
+			} else if (revealProgress === 0) {
+				clear(paper);
+				lastBallotScene = null;
+			}
 			const hit = (selector: string) =>
 				sheetRoot?.querySelector<HTMLElement>(selector)?.dataset.hit as
 					| "up"
 					| "down"
 					| undefined;
-			ballots.paint(
-				{
-					result,
-					voteMotionRound,
-					hover: window.matchMedia("(hover: hover)").matches
-						? (hit("[data-hit]:hover") ?? null)
-						: null,
-					pressed: hit("[data-hit]:has(:active)") ?? null,
-				},
-				resized,
+			if (result || revealProgress === 0 || resized)
+				ballots.paint(
+					{
+						result: lastBallotScene?.result ?? null,
+						voteMotionRound: lastBallotScene?.voteMotionRound,
+						hover: window.matchMedia("(hover: hover)").matches
+							? (hit("[data-hit]:hover") ?? null)
+							: null,
+						pressed: hit("[data-hit]:has(:active)") ?? null,
+					},
+					resized,
+				);
+			ballots.setArrival(
+				assemblyProgress(revealProgress, 310, 545),
+				assemblyProgress(revealProgress, 395, 640),
 			);
 		},
 		paint(
@@ -215,6 +241,20 @@ export async function createSlotPainter(canvas: HTMLCanvasElement) {
 			rowBlurPx: number,
 		) {
 			if (!width || !height) return;
+			revealProgress = reveal;
+			if (reveal === 0 && lastBallotScene) {
+				clear(paper);
+				ballots.paint(
+					{
+						result: null,
+						voteMotionRound: undefined,
+						hover: null,
+						pressed: null,
+					},
+					true,
+				);
+				lastBallotScene = null;
+			}
 			blurPx = rowBlurPx * renderer.resolution;
 			blur.enabled = blurPx > 0.05;
 			if (row !== lastRow || speed !== lastSpeed) {
@@ -226,7 +266,39 @@ export async function createSlotPainter(canvas: HTMLCanvasElement) {
 				lastRow = row;
 				lastSpeed = speed;
 			}
-			sheet.alpha = reveal;
+			const ticketProgress = assemblyProgress(reveal, 0, 320);
+			const { lift, impact, alpha } = assemblyPose(ticketProgress);
+			const sheetProgress = assemblyProgress(reveal, 150, 410);
+			paper.pivot.set(paperCenter.x, paperCenter.y);
+			paper.position.set(
+				paperCenter.x - 64 * lift,
+				paperCenter.y - 42 * lift + 9 * impact + 38 * (1 - sheetProgress) ** 3,
+			);
+			paper.rotation = -0.16 * lift + 0.045 * impact;
+			paper.alpha = alpha;
+			ballots.setArrival(
+				assemblyProgress(reveal, 310, 545),
+				assemblyProgress(reveal, 395, 640),
+			);
+			sheet.alpha = 1;
+			detent.clear();
+			if (reveal < 0.28) {
+				const pulse = Math.sin((reveal / 0.28) * Math.PI);
+				if (pulse > 0.01)
+					detent
+						.roundRect(
+							viewport.x + 3,
+							viewport.y + height / 3 + 3,
+							width - 6,
+							height / 3 - 6,
+							5,
+						)
+						.stroke({
+							color: 0xffe18b,
+							width: 2 + pulse * 2,
+							alpha: pulse * 0.9,
+						});
+			}
 			focus.visible = focused;
 			renderer.render({ container: stage });
 		},
