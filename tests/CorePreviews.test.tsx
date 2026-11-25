@@ -188,10 +188,12 @@ describe("draw view previews", () => {
 		act(() => vi.advanceTimersByTime(20000));
 		expect(screen.getByRole("heading", { name: "가지 덮밥" })).toBeTruthy();
 
-		const redraw = screen.getByRole("button", { name: "바로 다시 뽑기" });
+		const redraw = screen.getByRole("button", {
+			name: action,
+		});
 		act(() => redraw.focus());
 		fireEvent.keyDown(redraw, { key: "Enter" });
-		expect(redraw.isConnected).toBe(false);
+		expect(redraw).toBe(spin);
 		expect(document.activeElement).toBe(
 			screen.getByRole("button", { name: action }),
 		);

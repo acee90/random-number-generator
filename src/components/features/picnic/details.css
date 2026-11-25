@@ -36,7 +36,8 @@
 	);
 }
 /* Reserve the ticket, vote sheet and optional host action during the draw. */
-.picnic-frame[data-voting] .picnic-main:not([data-result]) {
+.picnic-frame[data-voting]:not([data-continuous])
+.picnic-main:not([data-result]) {
 	aspect-ratio: auto;
 	min-height: 0;
 	max-height: none;
@@ -238,4 +239,35 @@
 		text-align: start;
 		font-size: 11px;
 	}
+}
+
+.picnic-frame[data-continuous] .picnic-main {
+	aspect-ratio: auto;
+	height: auto;
+	min-height: clamp(480px, 82cqi, 500px);
+	max-height: none;
+}
+.picnic-frame[data-continuous] .picnic-details {
+	width: min(calc(100% - 24px), 400px);
+	padding-top: calc(var(--ticket-top) + var(--ticket-h) + 8px);
+	pointer-events: none;
+}
+.picnic-frame[data-continuous] .picnic-sheet {
+	pointer-events: auto;
+}
+.picnic-frame[data-continuous][data-voting] .picnic-main {
+	min-height: calc(
+		var(--picnic-ticket-area) +
+		var(--picnic-vote-sheet-height) +
+		var(--picnic-bottom-padding)
+	);
+}
+.picnic-spin-footer {
+	position: relative;
+	display: flex;
+	justify-content: center;
+	padding: 0 12px 12px;
+}
+.picnic-spin-footer button {
+	min-width: 160px;
 }

@@ -8,6 +8,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { Button } from "@/components/ui/button";
 import type { useDrawSound } from "@/hooks/useDrawPresentation";
 import { type FeedbackOptions, useRoomFeedback } from "@/hooks/useRoomFeedback";
 import { useSpinInput } from "@/hooks/useSpinInput";
@@ -180,6 +181,11 @@ export default function RoomGameStage({
 	const primaryButtonProps = primarySpinInput
 		? buttonProps
 		: { onClick: () => wheel?.onDraw() };
+	const spinButtonProps = draw
+		? redrawSpinInput
+			? buttonProps
+			: { onClick: onRedraw }
+		: primaryButtonProps;
 	const holdHintId = `${id}-hold`;
 	const motionHint = (primarySpinInput || redrawSpinInput) && (
 		<p id={holdHintId} className="sr-only">
@@ -244,8 +250,11 @@ export default function RoomGameStage({
 			: null;
 	const headingId = titleId ?? `${id}-winner`;
 	const showNext = isHost && !voting.readOnly;
+	const spinDisabled = result
+		? !showNext || !canRedraw || resultDisabled
+		: !hostCanStart && !hostCanDrive;
 	const resultActions =
-		result && showNext ? (
+		!wheel && result && showNext ? (
 			<RoomResultActions
 				canRedraw={canRedraw}
 				holdHintId={redrawSpinInput ? holdHintId : undefined}
@@ -287,7 +296,7 @@ export default function RoomGameStage({
 			) : (
 				fullSlotName
 			)}
-			{!slot && resultActions}
+			{resultActions}
 		</div>
 	);
 	const options = exclusion && <RoomExclusionPanel {...exclusion} />;
@@ -312,14 +321,16 @@ export default function RoomGameStage({
 							phase={phase}
 							reduced={Boolean(reducedMotion)}
 							host={isHost}
-							disabled={!hostCanStart && !hostCanDrive}
+							disabled={spinDisabled}
 							drive={activeDrive}
 							driveClockOffset={clockOffset}
 							driveAdjustment={driveAdjustment}
-							holdHintId={primarySpinInput ? holdHintId : undefined}
-							drawButtonProps={primaryButtonProps}
+							holdHintId={
+								primarySpinInput || redrawSpinInput ? holdHintId : undefined
+							}
+							drawButtonProps={spinButtonProps}
 							countdown={countdown}
-							resultActions={resultActions}
+							canReplay={Boolean(result && showNext)}
 							result={result}
 							voteMotionRound={voteMotionRound}
 							showVoting={showVoting}
@@ -335,23 +346,28 @@ export default function RoomGameStage({
 			</div>
 		);
 	}
-	const { busy, caption } = wheelControl(
+	const { busy, caption, label } = wheelControl(
 		phase,
 		Boolean(wheel && wheel.canDraw !== false),
 		Boolean(activeDrive),
 		wheel?.drawLabel,
 		wheel?.drawText,
 	);
+	const candidates = draw?.candidates ?? wheel?.candidates ?? [];
+	const numbers = draw
+		? candidates.map(
+				(place, index) => roomCandidateNumbers.get(place.id) ?? index + 1,
+			)
+		: (wheel?.candidateNumbers ?? []);
 	const scene: StageScene = {
 		mainHeight: size.mainHeight,
+		continuous: Boolean(wheel),
+		landing: draw?.toRotation,
 		voteMotionRound,
 		sound: sound && { enabled: sound.enabled, supported: sound.supported },
 		wheel: {
-			labels:
-				wheel && !result
-					? getWheelLabels(wheel.candidates, wheel.candidateNumbers)
-					: [],
-			count: wheel?.candidates.length ?? 0,
+			labels: getWheelLabels(candidates, numbers),
+			count: candidates.length,
 			phase,
 			caption,
 			busy,
@@ -361,7 +377,7 @@ export default function RoomGameStage({
 		hover,
 		pressed,
 	};
-	const layout = stageLayout(size.width, size.mainHeight);
+	const layout = stageLayout(size.width, size.mainHeight, Boolean(wheel));
 	const box = {
 		"--pad": `${layout.pad}px`,
 		"--top": `${layout.top}px`,
@@ -381,6 +397,7 @@ export default function RoomGameStage({
 			<section
 				aria-label="게임 보드"
 				className="picnic-frame"
+				data-continuous={Boolean(wheel) || undefined}
 				data-voting={showVoting || undefined}
 				data-next={showNext || undefined}
 				ref={frame}
@@ -423,10 +440,13 @@ export default function RoomGameStage({
 				>
 					{soundControl}
 					{countdown && <div className="picnic-countdown">{countdown}</div>}
-					{!result && wheel && (
+					{wheel && (
 						<div className="picnic-wheel">
 							<LunchWheel
 								{...wheel}
+								externalControl
+								candidates={candidates}
+								candidateNumbers={numbers}
 								wheelSide={layout.wheelSide}
 								covered={!hostCanStart && !hostCanDrive}
 								phase={phase}
@@ -451,8 +471,40 @@ export default function RoomGameStage({
 							</div>
 						</section>
 					)}
+					{wheel && details}
 				</div>
-				{details}
+				{!wheel && details}
+				{wheel && !voting.readOnly && (
+					<div className="picnic-spin-footer">
+						<Button
+							size="touch"
+							ref={wheel.buttonRef}
+							id={wheel.buttonId}
+							className="touch-none select-none"
+							disabled={spinDisabled}
+							aria-describedby={
+								[
+									wheel.errorId,
+									(redrawSpinInput || primarySpinInput) && holdHintId,
+								]
+									.filter(Boolean)
+									.join(" ") || undefined
+							}
+							aria-label={!result ? label : undefined}
+							aria-busy={busy || undefined}
+							{...spinButtonProps}
+						>
+							{!isHost
+								? "방장 대기"
+								: busy
+									? caption
+									: (!result && wheel.candidates.length === 1) ||
+											(result && !canDriveRedraw && canRedraw)
+										? "마지막 후보 확정"
+										: "룰렛 돌리기"}
+						</Button>
+					</div>
+				)}
 			</section>
 		</div>
 	);

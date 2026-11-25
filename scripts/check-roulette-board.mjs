@@ -77,9 +77,9 @@ try {
 	await page.keyboard.up("Space");
 	assert.ok(await fallbackDraw.isEnabled());
 	releasePaint();
-	await board.getByRole("button", { name: "대기화면으로 이동" }).click();
-	const idle = board.locator('canvas[data-painted][data-scene="idle"]');
-	await idle.waitFor();
+	await board.getByRole("heading", { name: "좋아요 0" }).waitFor();
+
+	await board.locator("canvas[data-painted]").waitFor();
 	assert.equal((await board.boundingBox()).height, loadingHeight);
 	const history = board.getByRole("button", { name: "당첨 내역 열기" });
 	const popup = page.getByRole("dialog", { name: "당첨 내역" });
@@ -124,42 +124,26 @@ try {
 					requestAnimationFrame(() => requestAnimationFrame(resolve)),
 				),
 		);
-		const center = await wheel.evaluate((el) => {
-			const box = el.getBoundingClientRect();
-			const canvas = el
-				.closest(".picnic-frame")
-				.querySelector("canvas")
-				.getBoundingClientRect();
-			const x = canvas.left + canvas.width / 2,
-				y = box.top + box.height / 2;
-			const hit = document
-				.elementFromPoint(x, y)
-				?.closest('button[data-hit="draw"]');
-			const button = hit?.getBoundingClientRect();
-			return {
-				x,
-				y,
-				aligned: Boolean(
-					button &&
-						Math.abs(x - button.x - button.width / 2) < 1 &&
-						Math.abs(y - button.y - button.height / 2) < 1,
-				),
-			};
-		});
-		assert.ok(
-			center.aligned,
-			`${width}px: the painted hub must receive the click`,
+		const spin = board.locator(".picnic-spin-footer button");
+		await spin.scrollIntoViewIfNeeded();
+		const footerOffset = await spin.evaluate(
+			(el) => el.offsetTop + el.parentElement.offsetTop,
 		);
 		const idleHeight = (await board.boundingBox()).height;
 		const panelHeight = (await panel.boundingBox()).height;
-		const before = await idle.evaluate(wheelPixels);
-		if (width < 700) await page.touchscreen.tap(center.x, center.y);
-		else await page.mouse.click(center.x, center.y);
+		await spin.click();
 		const spinning = board.locator(
 			'canvas[data-painted][data-scene="spinning"]',
 		);
 		await spinning.waitFor();
 		if (!reduce) {
+			// After the result overlay clears, the rim stays still while the disc turns.
+			await page.waitForTimeout(220);
+			const before = await spinning.evaluate(wheelPixels);
+			await page.waitForTimeout(90);
+			const after = await spinning.evaluate(wheelPixels);
+			assert.equal(before.rim, after.rim);
+			assert.notEqual(before.disc, after.disc);
 			const pose = await rotor.evaluate((el) => el.style.transform);
 			await page.waitForFunction(
 				(before) =>
@@ -174,23 +158,7 @@ try {
 					requestAnimationFrame(() => requestAnimationFrame(resolve)),
 				),
 		);
-		const during = await spinning.evaluate(wheelPixels);
-		assert.equal(
-			(await board.boundingBox()).height,
-			idleHeight,
-			`${width}px: spinning must keep the waiting layout height`,
-		);
-		assert.equal(
-			during.rim,
-			before.rim,
-			`${width}px: the rim and background must stay fixed`,
-		);
-		if (!reduce)
-			assert.notEqual(
-				during.disc,
-				before.disc,
-				`${width}px: the inner disc must turn`,
-			);
+		assert.equal((await board.boundingBox()).height, idleHeight);
 		const result = board.locator('canvas[data-painted][data-scene="result"]');
 		await result.waitFor();
 		assert.equal(
@@ -204,38 +172,44 @@ try {
 			0,
 		);
 		assert.equal(await board.getByText(/투표가 마감돼요/).count(), 0);
-		const next = board.getByRole("button", { name: "대기화면으로 이동" });
-		const redraw = board.getByRole("button", { name: "바로 다시 뽑기" });
-		const [nextBox, redrawBox, sheetBox] = await Promise.all([
-			next.boundingBox(),
-			redraw.boundingBox(),
-			board.locator(".picnic-sheet").boundingBox(),
-		]);
-		assert.ok(
-			nextBox.y >= sheetBox.y + sheetBox.height + 8 &&
-				nextBox.height >= 44 &&
-				redrawBox.height >= 44 &&
-				nextBox.y === redrawBox.y &&
-				nextBox.x + nextBox.width < redrawBox.x,
-			`${width}px: both round actions must fit side by side below voting`,
+		assert.equal(
+			await spin.evaluate((el) => el.offsetTop + el.parentElement.offsetTop),
+			footerOffset,
 		);
-		assert.ok(
-			Math.abs(
-				(nextBox.x + redrawBox.x + redrawBox.width) / 2 -
-					(sheetBox.x + sheetBox.width / 2),
-			) <= 1,
-			`${width}px: the two actions must be centered together`,
-		);
-		assert.equal(await board.getByText("아직 없어요").count(), 0);
-		for (const list of await board.getByRole("list").all()) {
-			assert.equal(await list.getByRole("listitem").count(), 0);
-			assert.equal(await list.locator('li[aria-hidden="true"]').count(), 3);
+		const lists = board.locator(".picnic-sheet .room-feedback-list ul");
+		const listHeights = () =>
+			lists.evaluateAll((nodes) => nodes.map((list) => list.clientHeight));
+		const emptyHeights = await listHeights();
+		assert.equal(emptyHeights.length, 2);
+		for (const list of await lists.all()) {
+			assert.ok(
+				await list.evaluate((el) => {
+					const slots = [...el.children];
+					const row = parseFloat(
+						getComputedStyle(el).getPropertyValue("--voter-row-height"),
+					);
+					return (
+						slots.length === 3 &&
+						el.clientHeight >= row * 3 &&
+						slots.every((li) => li.getBoundingClientRect().height >= row) &&
+						el.scrollHeight === el.clientHeight
+					);
+				}),
+				`${width}px: reserve three visible voter rows in each column`,
+			);
+		}
+		await page.waitForTimeout(680);
+		if (process.env.ROULETTE_CAPTURE_DIR) {
+			await board.screenshot({
+				path: process.env.ROULETTE_CAPTURE_DIR + "/result-" + width + ".png",
+			});
 		}
 		const like = board.getByRole("button", { name: "좋아요 투표" });
 		await like.click();
 		await board
 			.getByRole("heading", { name: "좋아요 1", exact: true })
 			.waitFor();
+		assert.deepEqual(await listHeights(), emptyHeights);
 		const motion = await result.evaluate(async (canvas) => {
 			const number = canvas.parentElement
 				.querySelector('[data-hit="up"] strong')
@@ -268,31 +242,6 @@ try {
 				.getByRole("list", { name: "좋아요 투표한 참가자" })
 				.isVisible(),
 		);
-		for (const choice of ["up", "down"]) {
-			const group = board.locator(`[data-choice="${choice}"]`);
-			const button = await group.getByRole("button").boundingBox();
-			const voters = group.getByRole("list");
-			const list = await voters.boundingBox();
-			const rows = await voters.locator("li").all();
-			assert.equal(rows.length, 3);
-			assert.equal(
-				await voters.getByRole("listitem").count(),
-				choice === "up" ? 1 : 0,
-			);
-			const first = await rows[0].boundingBox(),
-				last = await rows[2].boundingBox();
-			assert.ok(
-				first.height >= 36 &&
-					Math.abs(first.height - last.height) <= 1 &&
-					last.y + last.height <= list.y + list.height + 1,
-				`${width}px: all three voter slots must be fully visible`,
-			);
-			assert.ok(button.height >= 70 && Math.abs(button.x - list.x) <= 1);
-			assert.ok(
-				list.y >= button.y + button.height &&
-					list.y - button.y - button.height <= 12,
-			);
-		}
 		assert.equal(
 			await board.getByRole("list", { name: "당첨 제외 내역" }).count(),
 			0,
@@ -401,8 +350,6 @@ try {
 				: ".picnic-exclusion-count",
 		);
 
-		await board.getByRole("button", { name: "대기화면으로 이동" }).click();
-		await idle.waitFor();
 		assert.equal((await board.boundingBox()).height, idleHeight);
 		console.log(`${width}px passed (board height: ${idleHeight}px)`);
 	}
@@ -426,7 +373,6 @@ try {
 } finally {
 	await browser.close();
 }
-
 function wheelPixels(canvas) {
 	const wheel = canvas.parentElement
 		.querySelector(".picnic-wheel")

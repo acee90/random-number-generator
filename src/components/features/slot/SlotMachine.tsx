@@ -38,7 +38,6 @@ type Props = {
 	drawButtonProps?: ComponentPropsWithoutRef<"button">;
 	canReplay?: boolean;
 	countdown?: ReactElement;
-	resultActions: ReactElement | null;
 	result: BallotScene["result"];
 	voteMotionRound?: string;
 	showVoting: boolean;
@@ -66,7 +65,6 @@ export default function SlotMachine({
 	drawButtonProps,
 	canReplay = false,
 	countdown,
-	resultActions,
 	result,
 	voteMotionRound,
 	showVoting,
@@ -117,7 +115,7 @@ export default function SlotMachine({
 		: phase === "fetching"
 			? "슬롯 준비 중"
 			: "추첨 중";
-	const action = count === 1 ? "마지막 후보 확정" : "슬롯 돌리기";
+	const action = !done && count === 1 ? "마지막 후보 확정" : "슬롯 돌리기";
 	return (
 		<div
 			className="slot-machine"
@@ -198,9 +196,7 @@ export default function SlotMachine({
 					</div>
 				</div>
 				<div className="slot-controls">
-					{resultActions ? (
-						resultActions
-					) : host ? (
+					{host ? (
 						<Button
 							id={buttonId}
 							ref={buttonRef}

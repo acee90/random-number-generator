@@ -253,14 +253,6 @@
 .slot-controls button:disabled {
 	cursor: default;
 }
-.slot-controls .room-result-actions {
-	--foreground: var(--slot-type);
-	--accent: var(--paper-green);
-	--card: var(--slot-shell-dark);
-	--input: var(--slot-brass);
-	word-break: keep-all;
-	overflow-wrap: anywhere;
-}
 .slot-controls .slot-action {
 	min-inline-size: min(8rem, 100%);
 	max-inline-size: 100%;

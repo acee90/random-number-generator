@@ -104,7 +104,7 @@ describe("shared solo game screen", () => {
 		expect(screen.queryByRole("textbox", { name: /메시지/ })).toBeNull();
 		expect(screen.queryByRole("button", { name: "룰렛·결과" })).toBeNull();
 	});
-	it("replaces the spin button with the round actions in the cabinet above the votes", async () => {
+	it("keeps one spin button in the cabinet above the votes", async () => {
 		renderRoom();
 		const spin = screen.getByRole("button", { name: "슬롯 돌리기" });
 		const controls = spin.parentElement;
@@ -118,28 +118,14 @@ describe("shared solo game screen", () => {
 		const up = screen.getByRole("button", { name: /좋아요/ });
 		fireEvent.click(up);
 		expect(up.getAttribute("aria-pressed")).toBe("true");
-		const next = screen.getByRole("button", {
-			name: "대기화면으로 이동",
-		});
-		expect(spin.isConnected).toBe(false);
-		expect(screen.queryByRole("button", { name: "추첨 완료" })).toBeNull();
+		expect(screen.getByRole("button", { name: "슬롯 돌리기" })).toBe(spin);
+		expect(controls?.querySelectorAll("button")).toHaveLength(1);
 		expect(controls?.closest(".slot-machine")?.querySelector("canvas")).toBe(
 			canvas,
 		);
-		expect(controls?.contains(next)).toBe(true);
 		expect(
-			controls?.contains(
-				screen.getByRole("button", { name: "바로 다시 뽑기" }),
-			),
-		).toBe(true);
-		expect(
-			next.compareDocumentPosition(up) & Node.DOCUMENT_POSITION_FOLLOWING,
+			spin.compareDocumentPosition(up) & Node.DOCUMENT_POSITION_FOLLOWING,
 		).toBeTruthy();
-		next.focus();
-		fireEvent.click(next);
-		expect(screen.getByRole("button", { name: "슬롯 돌리기" })).toBe(
-			document.activeElement,
-		);
 		expect(drawFromSoloEntropy).toHaveBeenCalledTimes(1);
 	});
 	it("redraws directly from the result once and preserves the last ballot in history", async () => {
@@ -148,7 +134,7 @@ describe("shared solo game screen", () => {
 		fireEvent.click(screen.getByRole("button", { name: "좋아요 투표" }));
 		const voted = readSoloRoom(roomId)?.snapshot.draw;
 		expect(voted?.votes).toMatchObject([{ vote: "up" }]);
-		const redraw = screen.getByRole("button", { name: "바로 다시 뽑기" });
+		const redraw = screen.getByRole("button", { name: "슬롯 돌리기" });
 		await act(async () => {
 			fireEvent.click(redraw);
 			fireEvent.click(redraw);
@@ -237,7 +223,7 @@ describe("shared solo game screen", () => {
 	it("persists full draw records and restores them after remounting", async () => {
 		const first = renderRoom();
 		await draw();
-		fireEvent.click(screen.getByRole("button", { name: "대기화면으로 이동" }));
+		await draw();
 		expect(readSoloRoom(first.roomId)?.snapshot.history).toHaveLength(1);
 		first.unmount();
 		render(<SoloLunchRoomPage roomId={first.roomId} />);
@@ -246,8 +232,8 @@ describe("shared solo game screen", () => {
 			screen.getByRole("heading", { name: "당첨 내역" }),
 		);
 		expect(
-			screen.getByRole("button", { name: "한식당 상세 기록 열기" }),
-		).toBeTruthy();
+			screen.getAllByRole("button", { name: "한식당 상세 기록 열기" }),
+		).toHaveLength(2);
 	});
 	it("starts the board history with the current candidates and keeps completed wins after editing", async () => {
 		const first = renderRoom();
@@ -274,7 +260,6 @@ describe("shared solo game screen", () => {
 		fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
 		await act(async () => vi.advanceTimersByTime(0));
 		close();
-		fireEvent.click(screen.getByRole("button", { name: "대기화면으로 이동" }));
 		await act(async () =>
 			fireEvent.click(screen.getByRole("button", { name: "후보" })),
 		);

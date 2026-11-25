@@ -16,7 +16,8 @@ export function createBallots(
 	render: () => void,
 ) {
 	const choices = ["up", "down"] as const;
-	const cards = { up: layer(group), down: layer(group) };
+	const mounts = { up: layer(group), down: layer(group) };
+	const cards = { up: layer(mounts.up), down: layer(mounts.down) };
 	const keys = new Map<VoteChoice, string>();
 	const ink: Partial<Record<VoteChoice, ReturnType<typeof drawBallot>>> = {};
 	const pulses = new Map<VoteChoice, number>();
@@ -41,6 +42,20 @@ export function createBallots(
 	}
 
 	return {
+		setArrival(up: number, down: number) {
+			for (const choice of choices) {
+				const t = choice === "up" ? up : down;
+				const mount = mounts[choice];
+				const center = cards[choice].position;
+				const lift = (1 - t) ** 3;
+				const impact = Math.sin(t * Math.PI * 2) * (1 - t);
+				mount.pivot.copyFrom(center);
+				mount.position.set(center.x, center.y - 12 * lift);
+				mount.scale.set(1 + 0.24 * lift - 0.12 * impact);
+				mount.rotation = (choice === "up" ? -0.06 : 0.06) * lift;
+				mount.alpha = Math.min(1, t * 4);
+			}
+		},
 		paint(scene: BallotScene, resized = false) {
 			const votes = scene.result?.votes;
 			const round = scene.voteMotionRound;
