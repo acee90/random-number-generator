@@ -1,15 +1,14 @@
 import { defaultDrawView, readDrawView } from "./drawView";
-import {
-	getWheelRotation,
-	randomWheelLandingFraction,
-	resolveLunchWinner,
-} from "./lunch";
+import { randomWheelLandingFraction, resolveLunchWinner } from "./lunch";
 import {
 	type ClientMessage,
 	type CreateRoomInput,
 	canChangeRoomDrawView,
 	getEligibleRoomCandidates,
+	getRoomDrawDuration,
+	getRoomDrawRotation,
 	isRoomDrawVoter,
+	isRoomSpinPower,
 	lunchRoomLimits,
 	normalizeLunchRoomNickname,
 	type RoomDraw,
@@ -19,6 +18,7 @@ import {
 } from "./lunchRoom";
 import {
 	clearDisabledRoomExclusions,
+	recordFinishedDriveExclusion,
 	recordRoomDrawMetadata,
 	setRoomExcludeDrawn,
 } from "./roomDrawMetadata";
@@ -27,6 +27,40 @@ import {
 	describeCandidateChange,
 	summarizeRoomWin,
 } from "./roomWinHistory";
+import {
+	changeSpinDrive,
+	getSpinDeadline,
+	getSpinLanding,
+	startSpinDrive,
+} from "./spinDrive";
+
+type RoomDriveInput = {
+	held: boolean;
+	sequence: number;
+};
+
+export interface RoomDriveIntent extends RoomDriveInput {
+	startIndex?: number;
+	inputs?: (RoomDriveInput & { at: number })[];
+}
+
+export function queueRoomDriveInput(
+	drive: RoomDriveIntent,
+	input: RoomDriveInput,
+	at: number,
+) {
+	if (input.sequence <= drive.sequence) return;
+	if (input.held !== drive.held) {
+		drive.inputs ??= [];
+		drive.inputs.push({
+			held: input.held,
+			sequence: input.sequence,
+			at,
+		});
+	}
+	drive.held = input.held;
+	drive.sequence = input.sequence;
+}
 
 export type LifecycleCommand = Extract<
 	ClientMessage,
@@ -334,6 +368,7 @@ export function applyRoomCommand(
 export function prepareRoomDraw(
 	snapshot: RoomSnapshot,
 	participants: RoomParticipant[],
+	spinPower?: number,
 ) {
 	const candidates = structuredClone(getEligibleRoomCandidates(snapshot));
 	return {
@@ -344,6 +379,7 @@ export function prepareRoomDraw(
 		participants: structuredClone(participants),
 		requestedAt: Date.now(),
 		probabilities: candidates.map(() => 1 / candidates.length),
+		...(isRoomSpinPower(spinPower) && spinPower > 0 && { spinPower }),
 		excludeDrawn: snapshot.excludeDrawn ?? false,
 		excludedIdsBefore: snapshot.excludeDrawn
 			? [...(snapshot.excludedIds ?? [])]
@@ -361,6 +397,7 @@ export function startRoomSpin(
 	result: { numbers: number[]; source: RoomDraw["source"] },
 	id: string,
 	startDelayMs: number,
+	driveIntent?: RoomDriveIntent,
 ) {
 	if (
 		!Array.isArray(result.numbers) ||
@@ -380,22 +417,93 @@ export function startRoomSpin(
 		source: result.source,
 		timestamp,
 		startedAt: timestamp + startDelayMs,
-		durationMs: lunchRoomLimits.drawDurationMs,
+		durationMs: getRoomDrawDuration(prepared.spinPower),
 		fromRotation: 0,
-		toRotation: getWheelRotation(
-			0,
+		toRotation: getRoomDrawRotation(
 			winnerIndex,
 			prepared.candidates.length,
 			landingFraction,
+			prepared.spinPower,
 		),
 		landingFraction,
 		votes: [],
 	};
+	if (driveIntent) {
+		const index = driveIntent.startIndex ?? 0;
+		const origin =
+			prepared.viewMode === "slot-v1" && index < prepared.candidates.length
+				? index
+				: 0;
+		// Inputs received during entropy loading already started the local motor.
+		const driveStartAt = driveIntent.inputs?.length
+			? prepared.requestedAt
+			: draw.startedAt;
+		draw.drive = startSpinDrive(driveStartAt, prepared.viewMode, origin);
+		for (const input of driveIntent.inputs ?? [])
+			draw.drive = applyRoomDriveIntent(draw, input, input.at);
+		if (!driveIntent.inputs?.length || draw.drive?.held === driveIntent.held)
+			draw.drive = applyRoomDriveIntent(
+				draw,
+				driveIntent,
+				driveIntent.inputs?.at(-1)?.at ?? driveStartAt,
+			);
+	}
 	recordRoomDrawMetadata(snapshot, draw, prepared.excludeDrawn);
 	snapshot.candidateSetVersion = prepared.candidateSetVersion;
 	snapshot.draw = draw;
 	snapshot.status = "drawing";
 	snapshot.revision = (snapshot.revision ?? snapshot.listVersion) + 1;
+}
+
+function applyRoomDriveIntent(
+	draw: RoomDraw,
+	intent: RoomDriveInput,
+	at: number,
+) {
+	const drive = draw.drive;
+	if (!drive) return;
+	const { mode, landing, period } = getSpinLanding(draw);
+	return changeSpinDrive(
+		drive,
+		intent.held,
+		intent.sequence,
+		at,
+		mode,
+		landing,
+		period,
+	);
+}
+
+/** Apply a newer control input before this draw's committed stop. */
+export function updateRoomDrive(
+	snapshot: RoomSnapshot,
+	drawId: string,
+	intent: RoomDriveInput,
+	now: number,
+) {
+	const draw = snapshot.draw;
+	if (
+		snapshot.status !== "drawing" ||
+		!draw?.drive ||
+		draw.id !== drawId ||
+		intent.sequence <= draw.drive.sequence ||
+		now >= getSpinDeadline(draw)
+	)
+		return false;
+	const drive = applyRoomDriveIntent(draw, intent, now);
+	if (drive === draw.drive) return false;
+	snapshot.draw = { ...draw, drive };
+	return true;
+}
+
+export function finishRoomDraw(snapshot: RoomSnapshot, now: number) {
+	const draw = snapshot.draw;
+	if (snapshot.status !== "drawing" || !draw || now < getSpinDeadline(draw))
+		return false;
+	recordFinishedDriveExclusion(snapshot, draw);
+	snapshot.status = "result";
+	snapshot.revision = (snapshot.revision ?? snapshot.listVersion) + 1;
+	return true;
 }
 
 export function getRoomArchiveDraws({
@@ -467,7 +575,7 @@ export function castRoomVote(
 		};
 	}
 
-	const endedAt = draw.startedAt + draw.durationMs;
+	const endedAt = getSpinDeadline(draw);
 	if (snapshot.status !== "result" || now < endedAt) {
 		return {
 			error: {

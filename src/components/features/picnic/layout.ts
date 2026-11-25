@@ -85,6 +85,32 @@ export function layoutWheelLabels(labels: readonly WheelLabel[], side: number) {
 
 export type VoteChoice = "up" | "down";
 export type Control = "sound" | "draw" | VoteChoice;
+type WheelPhase = "spinning" | "fetching" | "idle" | "done";
+
+export function wheelControl(
+	phase: WheelPhase,
+	canDraw: boolean,
+	driven: boolean,
+	drawLabel = "점심 메뉴 추첨하기",
+	drawText = "추첨하기",
+) {
+	if (!driven && phase === "fetching")
+		return { busy: true, caption: "준비 중", label: "룰렛 준비 중" };
+	if (!driven && phase === "spinning")
+		return { busy: true, caption: "회전 중", label: "룰렛이 돌아가고 있어요" };
+	if (!canDraw)
+		return driven
+			? { busy: false, caption: "회전 중", label: "룰렛 회전 중" }
+			: {
+					busy: false,
+					caption: "방장 대기",
+					label: "방장이 추첨을 시작할 때까지 대기",
+				};
+	if (phase === "done")
+		return { busy: false, caption: "한 번 더", label: "한 번 더 추첨하기" };
+	return { busy: false, caption: drawText, label: drawLabel };
+}
+
 export type StageScene = {
 	/** The ticket or wheel occupies the top of the same canvas as the lists. */
 	mainHeight?: number;
@@ -94,8 +120,9 @@ export type StageScene = {
 		labels: readonly WheelLabel[];
 		count: number;
 		caption: string;
+		busy: boolean;
 		disabled: boolean;
-		phase: "spinning" | "fetching" | "idle" | "done";
+		phase: WheelPhase;
 	};
 	result: {
 		name: string;

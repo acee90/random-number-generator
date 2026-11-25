@@ -30,8 +30,9 @@ import {
 } from "@/components/ui/dialog";
 import { useRoomTimeline } from "@/hooks/useRoomTimeline";
 import type { RoomDraw, RoomDrawVote } from "@/lib/lunchRoom";
+import { getSpinDeadline } from "@/lib/spinDrive";
 import { MenuCard, WinnerTicket } from "./Scenes";
-import { sampleCandidates, sampleRound } from "./sample";
+import { previewSpinHeld, sampleCandidates, sampleRound } from "./sample";
 import "./draw-views.css";
 
 const modes = {
@@ -90,7 +91,7 @@ export function DrawViewPreview({
 		}
 	}, [finished]);
 
-	function start() {
+	function start(startIndex?: number) {
 		if (
 			guest ||
 			pending ||
@@ -98,9 +99,25 @@ export function DrawViewPreview({
 			!places.length ||
 			timer.current !== undefined
 		)
-			return;
+			return false;
 		const nextRound = finished ? round + 1 : round;
 		setRound(nextRound);
+		if (mode !== "cards") {
+			setDraw(
+				sampleRound(
+					places,
+					nextRound,
+					longName,
+					startIndex === undefined
+						? undefined
+						: {
+								mode: mode === "rolling" ? "slot-v1" : "wheel",
+								startIndex,
+							},
+				),
+			);
+			return true;
+		}
 		setDraw(null);
 		setPending(true);
 		timer.current = setTimeout(() => {
@@ -108,6 +125,17 @@ export function DrawViewPreview({
 			setPending(false);
 			timer.current = undefined;
 		}, 320);
+		return true;
+	}
+	function pressDrive(redraw: boolean, startIndex?: number) {
+		if (redraw || !draw) return start(startIndex ?? 0);
+		const next = previewSpinHeld(draw, true);
+		if (next === draw) return false;
+		setDraw(next);
+		return true;
+	}
+	function releaseDrive() {
+		setDraw((current) => current && previewSpinHeld(current, false));
 	}
 	function next() {
 		setRound(round + 1);
@@ -125,7 +153,7 @@ export function DrawViewPreview({
 					participantId: "preview-host",
 					name: "방장",
 					vote: choice,
-					reactionMs: Math.max(0, timestamp - draw.startedAt - draw.durationMs),
+					reactionMs: Math.max(0, timestamp - getSpinDeadline(draw)),
 					timestamp,
 				},
 			],
@@ -237,7 +265,7 @@ export function DrawViewPreview({
 								canRedraw
 								nextPending={false}
 								onNext={next}
-								onRedraw={start}
+								onRedraw={() => start()}
 							/>
 						</div>
 					)}
@@ -246,6 +274,9 @@ export function DrawViewPreview({
 				<RoomGameStage
 					viewMode={mode === "rolling" ? "slot-v1" : "wheel"}
 					activeDraw={draw}
+					canDrive={!guest}
+					onDrivePress={pressDrive}
+					onDriveRelease={releaseDrive}
 					draw={finished ? draw : null}
 					titleRef={result}
 					selfId="preview-host"
@@ -254,8 +285,9 @@ export function DrawViewPreview({
 					isHost={!guest}
 					reducedMotion={reduced}
 					canNext
+					canDriveRedraw={count > 1}
 					onNext={next}
-					onRedraw={start}
+					onRedraw={() => start()}
 					onVote={vote}
 					wheel={{
 						candidates: places,
@@ -270,7 +302,7 @@ export function DrawViewPreview({
 									: "idle",
 						controlled: true,
 						onComplete: () => {},
-						onDraw: start,
+						onDraw: () => start(),
 						buttonId: id,
 						covered: locked,
 						canDraw: !guest,
@@ -320,7 +352,7 @@ export function DrawViewPreview({
 								ref={drawButton}
 								disabled={locked}
 								aria-busy={locked}
-								onClick={start}
+								onClick={() => start()}
 							>
 								{locked ? (
 									<LoaderCircle aria-hidden="true" />

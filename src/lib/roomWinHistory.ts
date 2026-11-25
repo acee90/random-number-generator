@@ -6,6 +6,7 @@ import {
 	type RoomSnapshot,
 	type RoomWinSummary,
 } from "./lunchRoom";
+import { getSpinDeadline } from "./spinDrive";
 
 export function captureRoomCandidates(
 	snapshot: Pick<RoomSnapshot, "candidates" | "gameFilter">,
@@ -75,9 +76,14 @@ export function getRoomWins(
 ) {
 	const currentVersion = snapshot.candidateSetVersion ?? snapshot.listVersion;
 	const draws = new Map<string, RoomDraw>();
-	const active = showResult && snapshot.draw ? [snapshot.draw] : [];
+	const active =
+		showResult &&
+		snapshot.draw &&
+		!(snapshot.draw.drive && snapshot.status === "drawing")
+			? [snapshot.draw]
+			: [];
 	for (const draw of [...active, ...snapshot.history]) {
-		if (draws.has(draw.id) || now < draw.startedAt + draw.durationMs) continue;
+		if (draws.has(draw.id) || now < getSpinDeadline(draw)) continue;
 		draws.set(draw.id, draw);
 	}
 	const recent: RoomDraw[] = [];
@@ -221,7 +227,7 @@ export function getRoomHistoryTimeline(
 		}
 	}
 	for (const draw of previousDraws) {
-		if (!wins.has(draw.id) && now >= draw.startedAt + draw.durationMs)
+		if (!wins.has(draw.id) && now >= getSpinDeadline(draw))
 			wins.set(draw.id, {
 				kind: "draw",
 				id: draw.id,

@@ -155,26 +155,24 @@ function generateCSPRNGSeeds(count: number): number[] {
 	return Array.from(values);
 }
 
-/** Fetch a fresh batch for one request. Never read shared KV entropy here. */
-export async function fetchEntropy(count: number): Promise<EntropyBatch> {
+export async function fetchExternalEntropy(
+	count: number,
+): Promise<EntropyBatch | null> {
 	const quantum = await fetchQuantumSeeds(count);
 	if (quantum) return { seeds: quantum, source: "quantum" };
 	const atmospheric = await fetchAtmosphericSeeds(count);
 	if (atmospheric) return { seeds: atmospheric, source: "atmospheric" };
-	return { seeds: generateCSPRNGSeeds(count), source: "csprng" };
+	return null;
 }
 
-/** A room draw consumes its reserved words once, with Web Crypto on a cache miss. */
-export function drawFromPreparedEntropy(max: number, reserved?: EntropyBatch) {
-	const sampler = new RandomSampler(async (count) => {
-		const batch = reserved ?? {
+/** Fetch a fresh batch for one request. Never read shared KV entropy here. */
+export async function fetchEntropy(count: number): Promise<EntropyBatch> {
+	return (
+		(await fetchExternalEntropy(count)) ?? {
 			seeds: generateCSPRNGSeeds(count),
 			source: "csprng",
-		};
-		reserved = undefined;
-		return batch;
-	});
-	return drawNumbers({ min: 0, max, count: 1 }, sampler);
+		}
+	);
 }
 
 /** Legacy manual refill is diagnostic only; these values are never used by draws. */

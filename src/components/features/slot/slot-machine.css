@@ -180,7 +180,7 @@
 .slot-strip {
 	position: relative;
 }
-.slot-machine[data-phase="spinning"] .slot-strip {
+.slot-machine:is([data-phase="spinning"], [data-drive]) .slot-strip {
 	will-change: transform;
 	filter: blur(var(--drum-blur, 0px));
 }
@@ -253,12 +253,9 @@
 .slot-controls button:disabled {
 	cursor: default;
 }
-.slot-controls [data-variant="ghost"],
 .slot-controls .room-result-actions {
 	--foreground: var(--slot-type);
 	--accent: var(--paper-green);
-}
-.slot-controls .room-result-actions {
 	--card: var(--slot-shell-dark);
 	--input: var(--slot-brass);
 	word-break: keep-all;
@@ -271,15 +268,11 @@
 	padding-block: 0;
 	gap: min(0.5rem, 8px);
 	overflow-wrap: anywhere;
+	touch-action: none;
 }
-.slot-controls [data-size="icon"] {
-	flex: none;
-	inline-size: 44px;
-}
-/* Leave room for both 44px preview arrows and their 8px gaps. */
-.slot-controls:has([data-size="icon"]) :is(.slot-action, .slot-wait) {
-	inline-size: min(8rem, calc(100% - 104px));
+.slot-action-label {
 	min-inline-size: 0;
+	line-height: 1.1;
 }
 .slot-wait {
 	display: flex;
@@ -293,6 +286,13 @@
 .slot-reveal {
 	position: relative;
 	padding-block-start: 18px;
+}
+.slot-countdown {
+	position: relative;
+}
+.slot-countdown .room-motion-note {
+	position: absolute;
+	inset-inline: 0;
 }
 .slot-reveal .picnic-details {
 	width: 100%;

@@ -14,6 +14,7 @@ const waiting: StageScene = {
 		labels: [],
 		count: 6,
 		caption: "돌리기",
+		busy: false,
 		disabled: false,
 		phase: "idle",
 	},
@@ -51,9 +52,9 @@ it("keeps one canvas and uses the latest round and counts after loading and resi
 	await waitFor(() => expect(createPicnicPainter).toHaveBeenCalledOnce());
 	view.rerender(<PicnicArt scene={result} width={296} height={352} />);
 	await act(async () => ready(painter));
-	expect(painter.paint).toHaveBeenLastCalledWith(result, 296, 352);
+	expect(painter.paint).toHaveBeenLastCalledWith(result, 296, 352, false);
 	view.rerender(<PicnicArt scene={result} width={720} height={448} />);
-	expect(painter.paint).toHaveBeenLastCalledWith(result, 720, 448);
+	expect(painter.paint).toHaveBeenLastCalledWith(result, 720, 448, false);
 	expect(view.container.querySelector("canvas")).toBe(canvas);
 	expect(canvas?.dataset.painted).toBe("true");
 	view.unmount();

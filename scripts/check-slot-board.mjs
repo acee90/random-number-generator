@@ -116,12 +116,13 @@ try {
 				.evaluate((el) => getComputedStyle(el).opacity),
 			"0",
 		);
-		await button(host, "다음 후보").press("Enter");
-		await frame(host);
-		assert.notEqual((await host.evaluate(readLetters)).hash, idle.hash);
-		await button(host, "이전 후보").press("Space");
-		await frame(host);
-		assert.equal((await host.evaluate(readLetters)).hash, idle.hash);
+		const buttons = host.locator(".slot-controls").getByRole("button");
+		assert.equal(await buttons.count(), 1);
+		assert.equal(await buttons.first().innerText(), "슬롯 돌리기");
+		assert.equal(
+			await guest.locator(".slot-controls").getByRole("button").count(),
+			0,
+		);
 		await button(host, "당첨 내역 열기").press("Enter");
 		const history = host.getByRole("dialog", { name: "당첨 내역" });
 		await history.getByText("아직 당첨 내역이 없어요.").waitFor();
@@ -161,14 +162,27 @@ try {
 	const controls = host.locator(".slot-controls");
 	const controlsBox = await controls.boundingBox();
 	const drumBox = await host.locator(".slot-drum").boundingBox();
-	await spin.press("Enter");
+	await spin.focus();
+	await host.keyboard.down("Enter");
+	await host.locator('.slot-machine[data-drive="held"]').waitFor();
+	await guest.locator('.slot-machine[data-drive="held"]').waitFor();
+	assert.ok(await spin.isEnabled());
+	await frame(host);
+	assert.notEqual((await host.evaluate(readLetters)).hash, idle.hash);
+	await host.keyboard.up("Enter");
 	const spinning = host.locator('.slot-machine[data-phase="spinning"]');
 	await spinning.waitFor();
-	const busy = spinning.getByRole("button", { name: "추첨 중" });
-	assert.ok(await busy.isDisabled());
-	assert.equal(await busy.getAttribute("aria-busy"), "true");
-	const strip = spinning.locator(".slot-strip");
-	const nativePosition = await strip.evaluate((el) => el.style.transform);
+	const countdown = guest.getByText(/^결과 공개까지 \d초$/);
+	await countdown.waitFor();
+	const countdownBox = await countdown.boundingBox();
+	assert.ok(countdownBox.y >= 0 && countdownBox.y + countdownBox.height <= 800);
+	assert.ok(await spin.isEnabled());
+	await spin.focus();
+	await host.keyboard.down("Space");
+	await guest.locator('.slot-machine[data-drive="held"]').waitFor();
+	assert.equal(await countdown.count(), 0);
+	await host.keyboard.up("Space");
+	await countdown.waitFor();
 	const deadline = Date.now() + 4500;
 	let moving = await host.evaluate(readLetters);
 	while (moving.hash === idle.hash && Date.now() < deadline) {
@@ -179,10 +193,6 @@ try {
 		moving.hash,
 		idle.hash,
 		"Pixi must move the reel before the result is revealed",
-	);
-	assert.equal(
-		await strip.evaluate((el) => el.style.transform),
-		nativePosition,
 	);
 	assert.equal((await guest.evaluate(readLetters)).hash, reduced.hash);
 	assert.equal(await button(guest, "좋아요 투표").count(), 0);

@@ -81,6 +81,7 @@
 	font-weight: 700;
 	color: #263619;
 	cursor: pointer;
+	touch-action: none;
 	-webkit-tap-highlight-color: transparent;
 }
 

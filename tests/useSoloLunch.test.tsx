@@ -13,10 +13,16 @@ import { useSoloLunch } from "../src/hooks/useSoloLunch";
 import { lunchSpinDurationMs } from "../src/lib/lunch";
 import { getEligibleRoomCandidates } from "../src/lib/lunchRoom";
 import { createSoloRoom, readSoloRoom } from "../src/lib/soloRoom";
-import { generateRandomNumbers } from "../src/services/randomService";
+import { getDefaultSpinTuning, getSpinDeadline } from "../src/lib/spinDrive";
+import { drawFromSoloEntropy } from "../src/services/roomEntropy";
+import { prepareSoloRoomEntropy } from "../src/services/roomEntropyApi";
 
-vi.mock("../src/services/randomService", () => ({
-	generateRandomNumbers: vi.fn(),
+vi.mock("../src/services/roomEntropy", async (importOriginal) => ({
+	...(await importOriginal<typeof import("../src/services/roomEntropy")>()),
+	drawFromSoloEntropy: vi.fn(),
+}));
+vi.mock("../src/services/roomEntropyApi", () => ({
+	prepareSoloRoomEntropy: vi.fn(),
 }));
 const places = [
 	{ id: "a", name: "국밥", category: "한식" },
@@ -26,7 +32,8 @@ beforeEach(() => {
 	sessionStorage.clear();
 	localStorage.clear();
 	vi.useFakeTimers();
-	vi.mocked(generateRandomNumbers)
+	vi.mocked(prepareSoloRoomEntropy).mockReset().mockResolvedValue(null);
+	vi.mocked(drawFromSoloEntropy)
 		.mockReset()
 		.mockResolvedValue({ numbers: [0], source: "csprng" });
 });
@@ -52,6 +59,142 @@ async function spin(result: ReturnType<typeof setup>["result"]) {
 	await act(async () => vi.advanceTimersByTime(lunchSpinDurationMs));
 }
 describe("local game controller", () => {
+	it("keeps the tap boost from inputs received before the draw becomes available", async () => {
+		const { result } = setup();
+		const drawId = "solo-fast-drive";
+		await act(async () => {
+			expect(
+				result.current.room.startDraw({ driveId: drawId, driveStartIndex: 1 }),
+			).toBe(true);
+			result.current.room.setDriveHeld(drawId, false, 1);
+			result.current.room.setDriveHeld(drawId, true, 2);
+			result.current.room.setDriveHeld(drawId, false, 1);
+		});
+		expect(result.current.room.snapshot.draw).toMatchObject({
+			id: drawId,
+			winnerIndex: 0,
+			drive: {
+				held: true,
+				sequence: 2,
+				regripSequence: 2,
+				position: 1,
+				speed: 18,
+			},
+		});
+		await act(async () => vi.advanceTimersByTime(20_000));
+		expect(result.current.room.vote(drawId, "up")).toBe(false);
+		act(() => result.current.room.setDriveHeld(drawId, false, 3));
+		const draw = result.current.room.snapshot.draw;
+		assert(draw);
+		expect(draw.drive?.held).toBe(false);
+		await act(async () =>
+			vi.advanceTimersByTime(getSpinDeadline(draw) - Date.now()),
+		);
+		expect(result.current.room.snapshot.status).toBe("result");
+		expect(drawFromSoloEntropy).toHaveBeenCalledTimes(1);
+	});
+
+	it("coasts and keeps the locked winner when restored from a solo hold", async () => {
+		const view = setup();
+		const drawId = "solo-restore-drive";
+		const tuning = getDefaultSpinTuning("slot-v1");
+		await act(async () => {
+			await view.result.current.room.updateRoomOptions(true);
+			expect(view.result.current.room.startDraw({ driveId: drawId })).toBe(
+				true,
+			);
+		});
+		await act(async () => vi.advanceTimersByTime(1200));
+		expect(view.result.current.room.snapshot.draw?.drive?.held).toBe(true);
+		const { roomId } = view.result.current.room.snapshot;
+		view.unmount();
+		const saved = readSoloRoom(roomId);
+		assert(saved);
+		expect(saved.snapshot.draw?.drive).toMatchObject({
+			held: true,
+			speed: tuning.initialSpeed,
+			tuning,
+		});
+		const resumed = renderHook(() => useSoloLunch(saved.snapshot));
+		const draw = resumed.result.current.room.snapshot.draw;
+		assert(draw);
+		expect(draw).toMatchObject({
+			id: drawId,
+			winnerIndex: 0,
+			drive: { held: false, sequence: 1, tuning },
+		});
+		const deadline = getSpinDeadline(draw);
+		await act(async () => vi.advanceTimersByTime(deadline - Date.now()));
+		expect(readSoloRoom(roomId)?.snapshot).toMatchObject({
+			status: "result",
+			exclusionRecords: [{ drawId, drawnAt: deadline }],
+		});
+		expect(drawFromSoloEntropy).toHaveBeenCalledTimes(1);
+	});
+
+	it("draws and redraws while preparation is pending, then reserves different batches", async () => {
+		const sample = await vi.importActual<
+			typeof import("../src/services/roomEntropy")
+		>("../src/services/roomEntropy");
+		const draw = vi.mocked(drawFromSoloEntropy);
+		draw.mockImplementation(sample.drawFromSoloEntropy);
+		let finishPreparation!: () => void;
+		const prepare = vi.mocked(prepareSoloRoomEntropy).mockReturnValueOnce(
+			new Promise((resolve) => {
+				finishPreparation = () =>
+					resolve({
+						seeds: Array.from({ length: 32 }, (_, index) => index),
+						source: "atmospheric",
+					});
+			}),
+		);
+		const { result } = setup();
+		async function redraw() {
+			const previous = result.current.room.snapshot.draw;
+			assert(previous);
+			await act(async () => {
+				expect(
+					result.current.room.startDraw({ previousDrawId: previous.id }),
+				).toBe(true);
+			});
+			await act(async () => vi.advanceTimersByTime(lunchSpinDurationMs));
+		}
+		await spin(result);
+		expect(result.current.room.snapshot.draw?.source).toBe("csprng");
+		await redraw();
+		expect(result.current.room.snapshot.draw?.source).toBe("csprng");
+		await act(async () => finishPreparation());
+		await redraw();
+		expect(result.current.room.snapshot.draw?.source).toBe("mixed");
+		expect(draw).toHaveBeenLastCalledWith(1, {
+			seeds: [0, 1, 2, 3],
+			source: "atmospheric",
+		});
+		await redraw();
+		expect(result.current.room.snapshot.draw?.source).toBe("mixed");
+		expect(draw).toHaveBeenLastCalledWith(1, {
+			seeds: [4, 5, 6, 7],
+			source: "atmospheric",
+		});
+		expect(prepare).toHaveBeenCalledExactlyOnceWith();
+	});
+
+	it("discards an old solo screen's late preparation", async () => {
+		let finishPreparation!: () => void;
+		vi.mocked(prepareSoloRoomEntropy).mockReturnValueOnce(
+			new Promise((resolve) => {
+				finishPreparation = () =>
+					resolve({ seeds: Array(32).fill(5), source: "quantum" });
+			}),
+		);
+		const original = setup();
+		original.unmount();
+		const next = setup();
+		await act(async () => finishPreparation());
+		await spin(next.result);
+		expect(drawFromSoloEntropy).toHaveBeenCalledExactlyOnceWith(1, undefined);
+	});
+
 	it("persists the chosen result view and preserves the original slot winner and ballot in the archive", async () => {
 		const { result } = setup();
 		expect(result.current.room.snapshot.viewMode).toBe("slot-v1");
@@ -82,7 +225,7 @@ describe("local game controller", () => {
 				},
 			],
 		});
-		expect(generateRandomNumbers).toHaveBeenCalledTimes(1);
+		expect(drawFromSoloEntropy).toHaveBeenCalledTimes(1);
 	});
 
 	it("excludes winners on subsequent games and supports the last remaining candidate", async () => {
@@ -135,7 +278,7 @@ describe("local game controller", () => {
 		});
 		expect(result.current.room.snapshot.excludedIds).toEqual([]);
 		await spin(result);
-		expect(generateRandomNumbers).toHaveBeenCalledTimes(2);
+		expect(drawFromSoloEntropy).toHaveBeenCalledTimes(2);
 		const second = structuredClone(result.current.room.snapshot.draw);
 		assert(second);
 		expect(second.candidates).toHaveLength(2);
@@ -256,9 +399,7 @@ describe("local game controller", () => {
 		act(() => {
 			result.current.room.nextRound(draw.id);
 		});
-		vi.mocked(generateRandomNumbers).mockRejectedValueOnce(
-			new Error("offline"),
-		);
+		vi.mocked(drawFromSoloEntropy).mockRejectedValueOnce(new Error("offline"));
 		await act(async () => {
 			result.current.room.startDraw({ confirmReset: true });
 		});
@@ -291,7 +432,7 @@ describe("local game controller", () => {
 		assert(saved);
 		const resumed = renderHook(() => useSoloLunch(saved.snapshot));
 		await act(async () => vi.advanceTimersByTime(lunchSpinDurationMs));
-		expect(generateRandomNumbers).toHaveBeenCalledTimes(1);
+		expect(drawFromSoloEntropy).toHaveBeenCalledTimes(1);
 		act(() => {
 			expect(resumed.result.current.room.vote(draw.id, "up")).toBe(true);
 			expect(resumed.result.current.room.vote(draw.id, "down")).toBe(false);

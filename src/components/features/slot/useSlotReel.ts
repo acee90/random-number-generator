@@ -1,14 +1,36 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
+import type { LunchPlace } from "@/lib/lunch";
+import { getSpinSlotIndex, type SpinDrive } from "@/lib/spinDrive";
+import {
+	type SpinAdjustment,
+	sampleDisplaySpin,
+} from "../game-art/spin-motion";
 import type { BallotScene } from "../picnic/ballots";
-import { slotMotion, slotStripOffset } from "./motion";
+import { defaultSlotMaxBlurPx, slotMotion, slotStripOffset } from "./motion";
 import type { createSlotPainter } from "./paint";
+
+export type SlotMotionOptions = {
+	sampleDrive: (
+		drive: SpinDrive,
+		at: number,
+	) => { position: number; speed: number };
+	maxBlurPx: number;
+};
 
 type SlotState = Pick<BallotScene, "result" | "voteMotionRound"> & {
 	phase: "idle" | "fetching" | "spinning" | "done";
 	rowCount: number;
 	startedAt?: number;
 	duration?: number;
+	power: number;
 	clockOffset: number;
+	drive?: SpinDrive;
+	driveClockOffset: number;
+	driveAdjustment?: SpinAdjustment;
+	motionOptions?: SlotMotionOptions;
+	candidates: readonly LunchPlace[];
+	numbers: readonly number[];
+	preview: number;
 	reduced: boolean;
 };
 
@@ -30,6 +52,14 @@ export function useSlotReel(next: SlotState) {
 			prev.phase !== next.phase ||
 			prev.startedAt !== next.startedAt ||
 			prev.duration !== next.duration ||
+			prev.power !== next.power ||
+			prev.drive !== next.drive ||
+			prev.driveClockOffset !== next.driveClockOffset ||
+			prev.driveAdjustment !== next.driveAdjustment ||
+			prev.motionOptions !== next.motionOptions ||
+			prev.candidates !== next.candidates ||
+			prev.numbers !== next.numbers ||
+			prev.preview !== next.preview ||
 			prev.clockOffset !== next.clockOffset ||
 			prev.reduced !== next.reduced
 		)
@@ -109,35 +139,95 @@ export function useSlotReel(next: SlotState) {
 		let appearanceDirty = true,
 			transitioning = false,
 			focused = false;
-		const moveStrip = (row: number) => {
-			strip.style.transform = `translateY(${(-row * 100) / state.current.rowCount}%)`;
+		const moveStrip = (row: number, rowCount: number) => {
+			strip.style.transform = `translateY(${(-row * 100) / rowCount}%)`;
 		};
 		const schedule = () => {
 			if (!raf && !document.hidden) raf = requestAnimationFrame(frame);
 		};
-		const frame = (now: number) => {
+		const frame = () => {
 			raf = 0;
-			const { phase, rowCount, startedAt, duration, clockOffset, reduced } =
-				state.current;
+			const {
+				phase,
+				rowCount,
+				startedAt,
+				duration,
+				power,
+				clockOffset,
+				drive,
+				driveClockOffset,
+				driveAdjustment,
+				motionOptions,
+				candidates,
+				numbers,
+				preview,
+				reduced,
+			} = state.current;
 			const landing = rowCount - 3;
 			const done = phase === "done";
 			const still = reduced || motion.matches;
+			const now = Date.now();
 			const elapsed =
-				startedAt === undefined ? 0 : Date.now() + clockOffset - startedAt;
-			const spinning =
-				!still && phase === "spinning" && duration !== undefined && landing > 0;
-			const { travel, speed } = spinning
-				? slotMotion(elapsed, duration, landing)
+				startedAt === undefined ? 0 : now + clockOffset - startedAt;
+			const driveTime = now + driveClockOffset;
+			const live = Boolean(drive && !done);
+			const legacySpin =
+				!drive &&
+				!still &&
+				phase === "spinning" &&
+				duration !== undefined &&
+				landing > 0;
+			const legacySample = legacySpin
+				? slotMotion(elapsed, duration, landing, power)
 				: { travel: 0, speed: 0 };
-			const row = done ? landing : slotStripOffset(travel);
+			const active = drive && !done && !still;
+			const sample = active
+				? (motionOptions?.sampleDrive(drive, driveTime) ??
+					sampleDisplaySpin(drive, driveTime, "slot-v1", driveAdjustment))
+				: undefined;
+			const position = sample?.position ?? preview;
+			const baseRow = Math.floor(position);
+			const speed = sample
+				? Math.min(1, Math.abs(sample.speed) / (drive?.tuning?.maxSpeed ?? 26))
+				: legacySample.speed;
+			const blurPx =
+				(motionOptions?.maxBlurPx ?? defaultSlotMaxBlurPx) * speed ** 2;
+			const changedRows: number[] = [];
+			if (live && candidates.length) {
+				for (const [slot, row] of Array.from(strip.children).entries()) {
+					const raw = baseRow + slot - 1;
+					const index = getSpinSlotIndex(
+						raw,
+						candidates.length,
+						active ? drive : undefined,
+					);
+					const number = row.children[0];
+					const name = row.children[1];
+					const value = String(numbers[index] ?? index + 1).padStart(2, "0");
+					const label = candidates[index].name;
+					if (number.textContent === value && name.textContent === label)
+						continue;
+					number.textContent = value;
+					name.textContent = label;
+					changedRows.push(slot);
+				}
+			}
+			const row = done
+				? landing
+				: live
+					? position - baseRow
+					: slotStripOffset(legacySample.travel, power);
+			const printedRows = live ? 4 : rowCount;
 			const reveal =
 				done && !still && duration !== undefined
 					? Math.min(1, Math.max(0, (elapsed - duration) / 260))
 					: 1;
 			const art = painter.current;
 			try {
+				if (!layoutDirty && canPaint && changedRows.length)
+					art?.labels(strip, changedRows);
 				if (layoutDirty || roundDirty) {
-					moveStrip(done ? landing : 0);
+					moveStrip(done ? landing : 0, printedRows);
 					const name = drum.querySelector<HTMLElement>("h3");
 					machine.toggleAttribute(
 						"data-clipped-winner",
@@ -169,13 +259,7 @@ export function useSlotReel(next: SlotState) {
 						focused = drum.matches(":has(h3:focus-visible)");
 					controlsDirty = false;
 					appearanceDirty = false;
-					art.paint(
-						row,
-						speed,
-						reveal,
-						focused,
-						still ? 0 : ((now % 1000) * Math.PI) / 500,
-					);
+					art.paint(row, speed, reveal, focused, blurPx);
 					canvas.toggleAttribute("data-painted", true);
 				}
 			} catch (error) {
@@ -184,20 +268,15 @@ export function useSlotReel(next: SlotState) {
 				painter.current = null;
 				art?.destroy();
 			}
+			moveStrip(row, printedRows);
 			if (!canPaint) {
 				canvas.removeAttribute("data-painted");
-				moveStrip(row);
-				drum.style.setProperty("--drum-blur", `${1.6 * speed ** 2}px`);
+				drum.style.setProperty("--drum-blur", `${blurPx}px`);
 			}
-			const loadingIcon =
-				canPaint &&
-				!still &&
-				(phase === "fetching" || phase === "spinning") &&
-				art?.hasSpinner;
 			if (
-				(spinning && elapsed < duration) ||
+				(active && (drive.held || driveTime < (drive.stopAt ?? Infinity))) ||
+				(legacySpin && elapsed < duration) ||
 				(canPaint && reveal < 1) ||
-				loadingIcon ||
 				(canPaint && transitioning)
 			)
 				schedule();
@@ -226,7 +305,7 @@ export function useSlotReel(next: SlotState) {
 			sheetDirty = true;
 			schedule();
 		};
-		frame(performance.now());
+		frame();
 		let boardWidth = canvas.clientWidth;
 		const sizes =
 			typeof ResizeObserver === "undefined"
@@ -248,8 +327,21 @@ export function useSlotReel(next: SlotState) {
 		sizes?.observe(machine);
 		sizes?.observe(canvas);
 		const changes = new MutationObserver((records) => {
-			if (records.some(({ target }) => strip.contains(target))) layout();
-			if (records.some(({ target }) => controls.contains(target))) {
+			if (
+				records.some(
+					({ target, attributeName }) =>
+						attributeName !== "style" &&
+						strip.contains(target) &&
+						!(state.current.drive && state.current.phase !== "done"),
+				)
+			)
+				layout();
+			if (
+				records.some(
+					({ target, attributeName }) =>
+						controls.contains(target) && attributeName !== "style",
+				)
+			) {
 				controlsDirty = true;
 				schedule();
 			}
@@ -259,7 +351,7 @@ export function useSlotReel(next: SlotState) {
 			childList: true,
 			characterData: true,
 			attributes: true,
-			attributeFilter: ["class", "disabled", "aria-busy"],
+			attributeFilter: ["class", "disabled", "aria-busy", "style"],
 		});
 		const sheetChanges = new MutationObserver(updateSheet);
 		sheetChanges.observe(sheet, {

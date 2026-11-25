@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import CopyFallback from "@/components/features/CopyFallback";
 import { roomCandidateNumbers } from "@/components/features/RoomCandidateList";
 import RoomChatPanel from "@/components/features/RoomChatPanel";
@@ -11,15 +11,24 @@ import SiteHeader from "@/components/layout/SiteHeader";
 import { useDrawSound } from "@/hooks/useDrawPresentation";
 import type { useLunchRoom } from "@/hooks/useLunchRoom";
 import { useRoomTimeline } from "@/hooks/useRoomTimeline";
-import { drawViewLabels } from "@/lib/drawView";
+import { useSpinAdjustment } from "@/hooks/useSpinAdjustment";
+import { type DrawView, drawViewLabels } from "@/lib/drawView";
 import type { LunchHistoryRecord } from "@/lib/lunchHistory";
 import {
 	getEligibleRoomCandidates,
 	getRoomDrawView,
 	getRoomPhase,
 	type RoomDraw,
+	type RoomDrawStartOptions,
 } from "@/lib/lunchRoom";
 import { getRoomArchiveDraws } from "@/lib/roomGame";
+import {
+	changeSpinDrive,
+	getSpinDeadline,
+	getSpinLanding,
+	type SpinDrive,
+	startSpinDrive,
+} from "@/lib/spinDrive";
 import ClosedRoomHistory, {
 	ClosedRoomArchive,
 	RoomTerminalActions,
@@ -29,6 +38,12 @@ import "./lunch-room-mobile.css";
 
 type RoomView = "wheel" | "history";
 type CopyKind = "invite";
+type LocalSpin = {
+	id: string;
+	mode: DrawView;
+	drive: SpinDrive;
+};
+
 /** Shared presentation; transports and local session state live in their hooks. */
 export default function LunchSessionPage({
 	room,
@@ -49,6 +64,9 @@ export default function LunchSessionPage({
 	const [view, setView] = useState<RoomView>("wheel");
 	const [chatCollapsed, setChatCollapsed] = useState(false);
 	const [reducedMotion, setReducedMotion] = useState(false);
+	const [localLaunch, setLocalLaunch] = useState(false);
+	const localSpinRef = useRef<LocalSpin | null>(null);
+	const [localSpin, setLocalSpin] = useState<LocalSpin | null>(null);
 	const [copied, setCopied] = useState<CopyKind | null>(null);
 	const [copyHelp, setCopyHelp] = useState<{
 		kind: CopyKind;
@@ -95,17 +113,34 @@ export default function LunchSessionPage({
 	}, [boardVisible]);
 	const viewMode = getRoomDrawView(snapshot);
 	const viewLabel = drawViewLabels[viewMode];
+	const serverDrive = displayedDraw?.drive;
+	const optimisticSpin =
+		localSpin &&
+		((fetching && !displayedDraw) || displayedDraw?.id === localSpin.id) &&
+		(!serverDrive || serverDrive.sequence < localSpin.drive.sequence) &&
+		!(displayedDraw && snapshot?.status === "result")
+			? localSpin
+			: null;
+	useLayoutEffect(() => {
+		if (localSpin && !optimisticSpin && localSpinRef.current === localSpin) {
+			localSpinRef.current = null;
+			setLocalSpin(null);
+		}
+	}, [localSpin, optimisticSpin]);
 	const finished = useRoomTimeline(
-		displayedDraw,
+		optimisticSpin ? null : displayedDraw,
 		room.clockOffset,
 		rotorRef,
 		reducedMotion,
+		localLaunch,
 	);
-	const showResult = Boolean(displayedDraw && finished);
-	const spinning = Boolean(displayedDraw && !finished);
-	const busy = fetching || spinning || room.nextPending;
-	const connected = room.connection === "connected";
-	const isHost = connected && room.self?.isHost === true;
+	const showResult = Boolean(
+		displayedDraw &&
+			finished &&
+			(!displayedDraw.drive || snapshot?.status === "result"),
+	);
+	const drive = showResult ? undefined : (optimisticSpin?.drive ?? serverDrive);
+	const driveId = optimisticSpin?.id ?? displayedDraw?.id;
 	const eligibleCandidates = snapshot
 		? getEligibleRoomCandidates(snapshot)
 		: [];
@@ -113,8 +148,22 @@ export default function LunchSessionPage({
 		(drawMatchesCandidates || viewMode === "slot-v1"
 			? displayedDraw?.candidates
 			: undefined) ?? eligibleCandidates;
+	const driveAdjustment = useSpinAdjustment(
+		driveId,
+		drive,
+		viewMode,
+		room.clockOffset,
+		places.length,
+	);
+	const spinning = Boolean(optimisticSpin || (displayedDraw && !showResult));
+	useEffect(() => {
+		if (!fetching && !spinning) setLocalLaunch(false);
+	}, [fetching, spinning]);
+	const busy = fetching || spinning || room.nextPending;
+	const connected = room.connection === "connected";
+	const isHost = connected && room.self?.isHost === true;
 	const winner =
-		displayedDraw && finished
+		displayedDraw && showResult
 			? displayedDraw.candidates[displayedDraw.winnerIndex]
 			: null;
 	const participants = snapshot?.participants ?? [];
@@ -133,12 +182,11 @@ export default function LunchSessionPage({
 	const sound = useDrawSound(
 		presentationScope,
 		connected && view === "wheel",
-		displayedDraw?.id,
+		driveId,
 		showResult
 			? "result"
 			: spinning &&
-					displayedDraw &&
-					room.serverNow() < displayedDraw.startedAt + displayedDraw.durationMs
+					(!displayedDraw || room.serverNow() < getSpinDeadline(displayedDraw))
 				? "spinning"
 				: null,
 	);
@@ -266,16 +314,70 @@ export default function LunchSessionPage({
 			votingWasOpen: draw.id === snapshot?.draw?.id && !drawArchived,
 		});
 	}
-	function start(options?: {
-		expectedRevision?: number;
-		previousDrawId?: string;
-	}) {
-		if (!room.startDraw(options)) return;
+	function start(options?: RoomDrawStartOptions) {
+		if (!room.startDraw(options)) return false;
+		setLocalLaunch(true);
 		copyAttemptRef.current++;
 		setCopyHelp(null);
 		setCopied(null);
 		setView("wheel");
 		focusResultRef.current = true;
+		return true;
+	}
+	function beginDrive(
+		requestStart: (options: RoomDrawStartOptions) => boolean,
+	) {
+		const id = crypto.randomUUID();
+		if (!requestStart({ driveId: id })) return false;
+		const local = {
+			id,
+			mode: viewMode,
+			drive: startSpinDrive(room.serverNow(), viewMode),
+		};
+		localSpinRef.current = local;
+		setLocalSpin(local);
+		return true;
+	}
+	function changeDrive(held: boolean) {
+		const pending =
+			localSpinRef.current === localSpin
+				? optimisticSpin
+				: localSpinRef.current;
+		const current = pending?.drive ?? serverDrive;
+		const id = pending?.id ?? displayedDraw?.id;
+		if (!current || !id || current.held === held) return false;
+		// Until the winner arrives, coast to a full turn or any integer slot row.
+		const target =
+			displayedDraw?.id === id
+				? getSpinLanding(displayedDraw)
+				: {
+						mode: pending?.mode ?? viewMode,
+						landing: 0,
+						period: 1,
+					};
+		const updated = changeSpinDrive(
+			current,
+			held,
+			current.sequence + 1,
+			room.serverNow(),
+			target.mode,
+			target.landing,
+			target.period,
+		);
+		if (updated === current) return false;
+		const next = { id, mode: target.mode, drive: updated };
+		localSpinRef.current = next;
+		setLocalSpin(next);
+		room.setDriveHeld(id, held, updated.sequence);
+		return true;
+	}
+	function redraw(options?: RoomDrawStartOptions) {
+		if (!displayedDraw || !snapshot) return false;
+		return start({
+			previousDrawId: displayedDraw.id,
+			expectedRevision: snapshot.revision ?? snapshot.listVersion,
+			...options,
+		});
 	}
 	function advanceRound(editCandidates = false) {
 		if (!displayedDraw) return false;
@@ -316,19 +418,15 @@ export default function LunchSessionPage({
 			? "다시 연결 중"
 			: !connected
 				? "방에 연결 중"
-				: fetching
-					? "난수 출처에서 추첨 결과를 가져오고 있습니다."
-					: spinning
-						? viewMode === "slot-v1"
-							? "릴이 멈추면 결과를 공개합니다."
-							: "룰렛이 멈추면 결과를 공개합니다."
-						: winner
-							? `추첨 결과: ${winner.name}`
-							: isHost
-								? "돌리기 버튼으로 추첨을 시작하세요."
-								: hostOnline
-									? "방장이 추첨을 시작하면 결과를 함께 볼 수 있습니다."
-									: "방장이 오프라인입니다. 방장이 돌아오면 추첨을 시작할 수 있습니다.";
+				: drive || fetching || spinning
+					? "추첨 중입니다."
+					: winner
+						? `추첨 결과: ${winner.name}`
+						: isHost
+							? "돌리기 버튼으로 추첨을 시작하세요."
+							: hostOnline
+								? "방장이 추첨을 시작하면 결과를 함께 볼 수 있습니다."
+								: "방장이 오프라인입니다. 방장이 돌아오면 추첨을 시작할 수 있습니다.";
 
 	if (awaitingEntry)
 		return (
@@ -468,6 +566,22 @@ export default function LunchSessionPage({
 											<RoomGameStage
 												viewMode={viewMode}
 												activeDraw={displayedDraw}
+												drive={drive}
+												driveAdjustment={driveAdjustment}
+												canDrive={
+													isHost &&
+													view === "wheel" &&
+													!selectedDraw &&
+													room.serverNow() < (drive?.stopAt ?? Infinity)
+												}
+												onDrivePress={(redrawing) =>
+													drive
+														? changeDrive(true)
+														: beginDrive(redrawing ? redraw : requestStart)
+												}
+												onDriveRelease={() => {
+													changeDrive(false);
+												}}
 												clockOffset={room.clockOffset}
 												draw={showResult ? displayedDraw : null}
 												wheel={{
@@ -476,7 +590,7 @@ export default function LunchSessionPage({
 														(place, index) =>
 															roomCandidateNumbers.get(place.id) ?? index + 1,
 													),
-													rotation: finished
+													rotation: showResult
 														? (displayedDraw?.toRotation ?? 0)
 														: 0,
 													phase: fetching
@@ -487,7 +601,7 @@ export default function LunchSessionPage({
 																? "done"
 																: "idle",
 													onComplete: () => {},
-													onDraw: requestStart,
+													onDraw: () => requestStart(),
 													buttonId: `${id}-start`,
 													errorId: room.error ? `${id}-error` : undefined,
 													covered: !canStart,
@@ -542,14 +656,8 @@ export default function LunchSessionPage({
 														snapshot && getRoomPhase(snapshot) === "result",
 													)
 												}
-												onRedraw={() => {
-													if (displayedDraw && snapshot)
-														start({
-															previousDrawId: displayedDraw.id,
-															expectedRevision:
-																snapshot.revision ?? snapshot.listVersion,
-														});
-												}}
+												canDriveRedraw={eligibleCandidates.length > 1}
+												onRedraw={() => redraw()}
 												onVote={room.vote}
 												titleRef={resultTitleRef}
 												titleId={`${id}-winner`}
@@ -557,13 +665,6 @@ export default function LunchSessionPage({
 											<output className="sr-only" aria-live="polite">
 												{status}
 											</output>
-
-											{spinning && reducedMotion && (
-												<p className="room-motion-note">
-													동작 줄이기 설정을 적용했습니다. 추첨이 끝나면 결과를
-													표시합니다.
-												</p>
-											)}
 										</section>
 									)}
 								</RoomLifecyclePanel>

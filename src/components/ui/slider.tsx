@@ -11,8 +11,16 @@ function Slider({
 	value,
 	min = 0,
 	max = 100,
+	getThumbProps,
 	...props
-}: React.ComponentProps<typeof SliderPrimitive.Root>) {
+}: React.ComponentProps<typeof SliderPrimitive.Root> & {
+	getThumbProps?: (
+		index: number,
+	) => Pick<
+		React.ComponentProps<typeof SliderPrimitive.Thumb>,
+		"aria-labelledby" | "aria-describedby" | "aria-valuetext"
+	>;
+}) {
 	const _values = React.useMemo(
 		() =>
 			Array.isArray(value)
@@ -52,8 +60,10 @@ function Slider({
 			{Array.from({ length: _values.length }, (_, index) => (
 				<SliderPrimitive.Thumb
 					data-slot="slider-thumb"
+					// biome-ignore lint/suspicious/noArrayIndexKey: Each thumb belongs to a fixed slider position.
 					key={index}
 					className="border-primary block size-4 shrink-0 rounded-full border bg-white shadow-sm disabled:pointer-events-none disabled:opacity-50"
+					{...getThumbProps?.(index)}
 				/>
 			))}
 		</SliderPrimitive.Root>

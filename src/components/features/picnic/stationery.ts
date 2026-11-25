@@ -161,16 +161,12 @@ export function drawHub(
 	const g = pen(hub),
 		cream = 0xfff3d5,
 		{ wheel } = scene;
-	const busy = wheel.phase === "spinning" || wheel.phase === "fetching";
-	const normal = wheel.disabled && !busy ? 0x795d54 : 0xa64235;
+	const normal = wheel.disabled && !wheel.busy ? 0x795d54 : 0xa64235;
 	g.circle(0, 0, 44)
 		.fill(stateFill(scene, "draw", normal, 0x94382e, 0x792e28, !wheel.disabled))
 		.stroke({ color: 0xffe2b2, width: 1.4 });
-	if (busy) {
-		for (const a of [-2.7, 0.5])
-			g.moveTo(8 * Math.cos(a), -17 + 8 * Math.sin(a))
-				.arc(0, -17, 8, a, a + 1.95)
-				.stroke({ color: cream, width: 2, cap: "round" });
+	if (wheel.busy) {
+		g.poly([3, -27, -8, -15, -1, -15, -3, -7, 8, -19, 1, -19]).fill(cream);
 	} else {
 		g.moveTo(-9, -18)
 			.quadraticCurveTo(-2, -18, 1, -13)

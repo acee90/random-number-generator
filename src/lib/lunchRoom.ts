@@ -6,6 +6,13 @@ import {
 	lunchSpinDurationMs,
 	sampleLunchPlaces,
 } from "./lunch";
+import {
+	getSpinDeadline,
+	getSpinLanding,
+	getSpinSlotIndex,
+	isSpinDrive,
+	type SpinDrive,
+} from "./spinDrive";
 
 export const lunchRoomLimits = {
 	ttlMs: 24 * 60 * 60 * 1000,
@@ -22,6 +29,26 @@ export const lunchRoomLimits = {
 	maxEditMessageBytes: 256 * 1024,
 	maxServerMessageBytes: 8 * 1024 * 1024,
 } as const;
+
+export function isRoomSpinPower(value: unknown): value is number {
+	return typeof value === "number" && value >= 0 && value <= 1;
+}
+
+export function getRoomDrawDuration(spinPower = 0): number {
+	return lunchRoomLimits.drawDurationMs + Math.round(spinPower * 2000);
+}
+
+export function getRoomDrawRotation(
+	winnerIndex: number,
+	candidateCount: number,
+	landingFraction?: number,
+	spinPower = 0,
+): number {
+	return (
+		getWheelRotation(0, winnerIndex, candidateCount, landingFraction) +
+		360 * Math.ceil(spinPower * 3)
+	);
+}
 
 export interface RoomParticipant {
 	id: string;
@@ -88,9 +115,12 @@ export interface RoomDraw {
 	source: RandomSource;
 	timestamp: number;
 	startedAt: number;
-	durationMs: typeof lunchSpinDurationMs | 7200;
+	durationMs: number;
 	fromRotation: 0;
 	toRotation: number;
+	/** Optional presentation strength. It does not enter the winner calculation. */
+	spinPower?: number;
+	drive?: SpinDrive;
 	/** Position inside the winning slice; old centered draws omit this field. */
 	landingFraction?: number;
 	listVersion: number;
@@ -188,7 +218,7 @@ export function canStartRoomDraw(
 	return (
 		getRoomPhase(snapshot) === "result" &&
 		draw?.id === previousDrawId &&
-		now >= draw.startedAt + draw.durationMs &&
+		now >= getSpinDeadline(draw) &&
 		!snapshot.history.some((entry) => entry.id === previousDrawId)
 	);
 }
@@ -235,6 +265,15 @@ export interface CreateRoomInput {
 	startInWaiting?: true;
 }
 
+export interface RoomDrawStartOptions {
+	previousDrawId?: string;
+	expectedRevision?: number;
+	confirmReset?: boolean;
+	spinPower?: number;
+	driveId?: string;
+	driveStartIndex?: number;
+}
+
 export type ClientMessage =
 	| {
 			type: "join";
@@ -248,13 +287,8 @@ export type ClientMessage =
 	| { type: "activity" }
 	| { type: "room-close"; id: string }
 	| { type: "chat"; id: string; text: string; diagnosticId?: string }
-	| {
-			type: "start";
-			id: string;
-			previousDrawId?: string;
-			expectedRevision?: number;
-			confirmReset?: boolean;
-	  }
+	| ({ type: "start"; id: string } & RoomDrawStartOptions)
+	| { type: "drive"; drawId: string; held: boolean; sequence: number }
 	| { type: "next"; id: string; drawId: string; editCandidates?: boolean }
 	| { type: "vote"; id: string; drawId: string; vote: "up" | "down" }
 	| { type: "candidates"; ids: string[] }
@@ -627,7 +661,18 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
 					}
 				: null;
 		}
-		case "start":
+		case "start": {
+			const { driveId, driveStartIndex, spinPower } = value;
+			if (spinPower !== undefined && !isRoomSpinPower(spinPower)) return null;
+			if (driveId !== undefined && !isId(driveId)) return null;
+			if (
+				driveStartIndex !== undefined &&
+				(!driveId ||
+					typeof driveStartIndex !== "number" ||
+					!Number.isSafeInteger(driveStartIndex) ||
+					driveStartIndex < 0)
+			)
+				return null;
 			return isId(value.id) &&
 				(value.previousDrawId === undefined || isId(value.previousDrawId)) &&
 				(value.expectedRevision === undefined ||
@@ -646,6 +691,22 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
 						...(value.confirmReset === undefined
 							? {}
 							: { confirmReset: value.confirmReset as boolean }),
+						...(spinPower && { spinPower }),
+						...(driveId && { driveId }),
+						...(driveStartIndex === undefined ? {} : { driveStartIndex }),
+					}
+				: null;
+		}
+		case "drive":
+			return isId(value.drawId) &&
+				typeof value.held === "boolean" &&
+				isVersion(value.sequence) &&
+				value.sequence < Number.MAX_SAFE_INTEGER
+				? {
+						type: "drive",
+						drawId: value.drawId,
+						held: value.held,
+						sequence: value.sequence,
 					}
 				: null;
 		case "next":
@@ -875,8 +936,10 @@ function parseDraw(value: unknown): RoomDraw | null {
 		!isVersion(value.listVersion) ||
 		(value.candidateSetVersion !== undefined &&
 			!isVersion(value.candidateSetVersion)) ||
-		(value.durationMs !== lunchRoomLimits.drawDurationMs &&
-			value.durationMs !== 7200) ||
+		(value.spinPower !== undefined && !isRoomSpinPower(value.spinPower)) ||
+		typeof value.durationMs !== "number" ||
+		(value.durationMs !== getRoomDrawDuration(value.spinPower) &&
+			!(value.spinPower === undefined && value.durationMs === 7200)) ||
 		value.fromRotation !== 0 ||
 		typeof value.toRotation !== "number" ||
 		!Number.isFinite(value.toRotation) ||
@@ -897,13 +960,36 @@ function parseDraw(value: unknown): RoomDraw | null {
 		value.winnerIndex >= candidates.length
 	)
 		return null;
-	const toRotation = getWheelRotation(
-		0,
+	const toRotation = getRoomDrawRotation(
 		value.winnerIndex,
 		candidates.length,
 		value.landingFraction as number | undefined,
+		value.spinPower,
 	);
 	if (Math.abs(value.toRotation - toRotation) > 1e-7) return null;
+	const drive = value.drive;
+	if (drive !== undefined) {
+		const viewMode = readDrawView(value.viewMode);
+		const driveStart =
+			(value.requestedAt as number | undefined) ?? value.startedAt;
+		if (!isSpinDrive(drive, viewMode) || drive.at < driveStart) return null;
+		const { mode, landing, period } = getSpinLanding({
+			viewMode,
+			candidates,
+			winnerIndex: value.winnerIndex,
+			toRotation,
+		});
+		if (mode === "slot-v1" && drive.target !== undefined) {
+			if (
+				!Number.isSafeInteger(drive.target) ||
+				getSpinSlotIndex(drive.target, period, drive) !== landing
+			)
+				return null;
+		} else if (mode === "wheel" && drive.target !== undefined) {
+			const turns = (drive.target - landing) / period;
+			if (Math.abs(turns - Math.round(turns)) > 1e-7) return null;
+		}
+	}
 	const participants =
 		value.participants === undefined
 			? undefined
@@ -915,7 +1001,14 @@ function parseDraw(value: unknown): RoomDraw | null {
 	const votes =
 		value.votes === undefined
 			? undefined
-			: parseDrawVotes(value.votes, value.startedAt + value.durationMs);
+			: parseDrawVotes(
+					value.votes,
+					getSpinDeadline({
+						startedAt: value.startedAt,
+						durationMs: value.durationMs,
+						drive,
+					}),
+				);
 	if (participants === null || probabilities === null || votes === null)
 		return null;
 	const excludedIdsBefore =
@@ -943,9 +1036,11 @@ function parseDraw(value: unknown): RoomDraw | null {
 		source: value.source as RandomSource,
 		timestamp: value.timestamp,
 		startedAt: value.startedAt,
-		durationMs: value.durationMs as RoomDraw["durationMs"],
+		durationMs: value.durationMs,
 		fromRotation: 0,
 		toRotation,
+		...(value.spinPower && { spinPower: value.spinPower }),
+		...(drive === undefined ? {} : { drive }),
 		...(value.landingFraction === undefined
 			? {}
 			: { landingFraction: value.landingFraction as number }),
@@ -1046,7 +1141,7 @@ function parseDrawVotes(
 	if (
 		!Array.isArray(value) ||
 		value.length > lunchRoomLimits.maxMembers ||
-		!isTime(endedAt)
+		(value.length > 0 && !isTime(endedAt))
 	)
 		return null;
 	const votes: RoomDrawVote[] = [];
@@ -1174,7 +1269,8 @@ function parseList<T extends { id: string }>(
 
 /** Validate completed draw archives independently of a live room's list version. */
 export function parseRoomDrawHistory(value: unknown): RoomDraw[] | null {
-	return parseList(value, lunchRoomLimits.maxHistory, parseDraw);
+	const draws = parseList(value, lunchRoomLimits.maxHistory, parseDraw);
+	return draws?.some((draw) => draw.drive?.held) ? null : draws;
 }
 
 function parseWinSummary(value: unknown): RoomWinSummary | null {
@@ -1369,6 +1465,9 @@ export function parseRoomSnapshot(value: unknown): RoomSnapshot | null {
 			value.intakeId !== undefined &&
 			value.intakeId !== null) ||
 		(draw !== null && draw.listVersion > value.listVersion) ||
+		(draw?.drive?.held &&
+			value.status !== "drawing" &&
+			value.status !== "closed") ||
 		history.some((entry) => entry.listVersion > (value.listVersion as number))
 	)
 		return null;

@@ -34,6 +34,7 @@ import {
 	getRoomDrawView,
 	getRoomPhase,
 	type RoomCandidate,
+	type RoomDrawStartOptions,
 	type RoomSnapshot,
 } from "@/lib/lunchRoom";
 import CandidateListLoadDialog, {
@@ -46,7 +47,6 @@ import type { ExclusionOptions } from "./RoomExclusionPanel";
 import "./room-lifecycle.css";
 
 type Room = ReturnType<typeof useLunchRoom>;
-type StartOptions = { expectedRevision?: number };
 type StageAction = "open" | "close" | "finalize";
 
 function gameFilterFor(snapshot: RoomSnapshot | null): GameFilter {
@@ -82,9 +82,11 @@ export default function RoomLifecyclePanel({
 	busy: boolean;
 	showResult: boolean;
 	onEditResult?: () => boolean;
-	onStart: (options?: StartOptions) => void;
+	onStart: (options?: RoomDrawStartOptions) => boolean;
 	children: (
-		requestStart: () => void,
+		requestStart: (
+			options?: Pick<RoomDrawStartOptions, "driveId" | "driveStartIndex">,
+		) => boolean,
 		exclusion: ExclusionOptions,
 	) => ReactNode;
 }) {
@@ -335,8 +337,10 @@ export default function RoomLifecyclePanel({
 		if (unsaved) setDiscardOpen(true);
 		else resetDraft();
 	}
-	function requestStart() {
-		onStart({ expectedRevision: revision });
+	function requestStart(
+		options?: Pick<RoomDrawStartOptions, "driveId" | "driveStartIndex">,
+	) {
+		return onStart({ expectedRevision: revision, ...options });
 	}
 	async function recommend() {
 		const name = recommendation.trim();

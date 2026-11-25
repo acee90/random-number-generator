@@ -2,6 +2,7 @@ import {
 	type ComponentProps,
 	type CSSProperties,
 	type RefObject,
+	useEffect,
 	useId,
 	useLayoutEffect,
 	useRef,
@@ -9,15 +10,19 @@ import {
 } from "react";
 import type { useDrawSound } from "@/hooks/useDrawPresentation";
 import { type FeedbackOptions, useRoomFeedback } from "@/hooks/useRoomFeedback";
+import { useSpinInput } from "@/hooks/useSpinInput";
 import { type DrawView, defaultDrawView, readDrawView } from "@/lib/drawView";
 import type { RoomDraw } from "@/lib/lunchRoom";
+import { getSpinDeadline, type SpinDrive } from "@/lib/spinDrive";
 import DrawPresentationControls from "./DrawPresentationControls";
+import type { SpinAdjustment } from "./game-art/spin-motion";
 import { LunchWheel } from "./LunchWheel";
 import {
 	type Control,
 	getWheelLabels,
 	type StageScene,
 	stageLayout,
+	wheelControl,
 } from "./picnic/layout";
 import { PicnicArt } from "./picnic/PicnicArt";
 import { roomCandidateNumbers } from "./RoomCandidateList";
@@ -36,6 +41,11 @@ type Props = Omit<FeedbackOptions, "draw"> & {
 	/** Frozen round used by the animation before draw is released to voting. */
 	activeDraw?: RoomDraw | null;
 	clockOffset?: number;
+	drive?: SpinDrive;
+	driveAdjustment?: SpinAdjustment;
+	canDrive?: boolean;
+	onDrivePress?: (redraw: boolean) => boolean;
+	onDriveRelease?: () => void;
 	showVoting?: boolean;
 	isHost: boolean;
 	wheel?: WheelProps;
@@ -48,6 +58,7 @@ type Props = Omit<FeedbackOptions, "draw"> & {
 	nextPending?: boolean;
 	onNext: () => void;
 	canRedraw?: boolean;
+	canDriveRedraw?: boolean;
 	onRedraw: () => void;
 };
 
@@ -58,11 +69,43 @@ function hitTarget(target: EventTarget | null): Control | null {
 		: null;
 }
 
+function DrawRevealCountdown({
+	deadline,
+	clockOffset,
+}: {
+	deadline: number;
+	clockOffset: number;
+}) {
+	const [seconds, setSeconds] = useState(() =>
+		Math.ceil((deadline - Date.now() - clockOffset) / 1000),
+	);
+	useEffect(() => {
+		let timer: ReturnType<typeof setTimeout>;
+		function tick() {
+			const left = deadline - Date.now() - clockOffset;
+			const next = Math.ceil(left / 1000);
+			setSeconds(next);
+			if (next > 0)
+				timer = setTimeout(tick, Math.max(1, left - (next - 1) * 1000));
+		}
+		tick();
+		return () => clearTimeout(timer);
+	}, [clockOffset, deadline]);
+	return (
+		seconds > 0 && <p className="room-motion-note">결과 공개까지 {seconds}초</p>
+	);
+}
+
 export default function RoomGameStage({
 	draw,
 	viewMode,
 	activeDraw,
 	clockOffset = 0,
+	drive,
+	driveAdjustment,
+	canDrive = false,
+	onDrivePress,
+	onDriveRelease,
 	showVoting = true,
 	isHost,
 	wheel,
@@ -75,6 +118,7 @@ export default function RoomGameStage({
 	nextPending = false,
 	onNext,
 	canRedraw = true,
+	canDriveRedraw = true,
 	onRedraw,
 	...voting
 }: Props) {
@@ -92,6 +136,68 @@ export default function RoomGameStage({
 	});
 	const [hover, setHover] = useState<Control | null>(null);
 	const [pressed, setPressed] = useState<Control | null>(null);
+	const focusPrimary = useRef(false);
+	const activeDrive = draw ? undefined : (drive ?? round?.drive);
+	const phase = activeDrive ? "spinning" : (wheel?.phase ?? "idle");
+	const hostCanStart = Boolean(
+		wheel &&
+			isHost &&
+			wheel.canDraw !== false &&
+			!wheel.covered &&
+			wheel.candidates.length &&
+			phase === "idle",
+	);
+	const hostCanDrive = isHost && canDrive && Boolean(activeDrive);
+	const resultDisabled = !canNext || nextPending || voting.pending;
+	const primarySpinInput = Boolean(
+		onDrivePress &&
+			(hostCanDrive || (hostCanStart && (wheel?.candidates.length ?? 0) > 1)),
+	);
+	const redrawSpinInput = Boolean(
+		onDrivePress &&
+			isHost &&
+			!voting.readOnly &&
+			draw &&
+			canRedraw &&
+			canDriveRedraw &&
+			!resultDisabled,
+	);
+	const buttonProps = useSpinInput({
+		enabled: primarySpinInput || redrawSpinInput,
+		onPress: (focus) => {
+			if (!onDrivePress?.(Boolean(draw))) return false;
+			focusPrimary.current = focus && Boolean(draw);
+			return true;
+		},
+		onRelease: () => onDriveRelease?.(),
+	});
+	useLayoutEffect(() => {
+		if (focusPrimary.current && !draw && wheel?.buttonRef.current) {
+			focusPrimary.current = false;
+			wheel.buttonRef.current.focus({ preventScroll: true });
+		}
+	}, [draw, wheel]);
+	const primaryButtonProps = primarySpinInput
+		? buttonProps
+		: { onClick: () => wheel?.onDraw() };
+	const holdHintId = `${id}-hold`;
+	const motionHint = (primarySpinInput || redrawSpinInput) && (
+		<p id={holdHintId} className="sr-only">
+			길게 누르거나 연달아 누르면 빨라집니다. 놓으면 천천히 멈춥니다.
+		</p>
+	);
+	const deadline = activeDrive
+		? activeDrive.stopAt
+		: round
+			? getSpinDeadline(round)
+			: undefined;
+	const countdown =
+		phase === "spinning" &&
+		reducedMotion &&
+		deadline !== undefined &&
+		Number.isFinite(deadline) ? (
+			<DrawRevealCountdown deadline={deadline} clockOffset={clockOffset} />
+		) : undefined;
 	useLayoutEffect(() => {
 		const el = frame.current;
 		if (!el || slot) return;
@@ -142,7 +248,9 @@ export default function RoomGameStage({
 		result && showNext ? (
 			<RoomResultActions
 				canRedraw={canRedraw}
-				disabled={!canNext || nextPending || voting.pending}
+				holdHintId={redrawSpinInput ? holdHintId : undefined}
+				redrawButtonProps={redrawSpinInput ? buttonProps : undefined}
+				disabled={resultDisabled}
 				nextPending={nextPending}
 				onNext={onNext}
 				onRedraw={onRedraw}
@@ -192,6 +300,7 @@ export default function RoomGameStage({
 		return (
 			<div data-own-choice={feedback.ownChoice}>
 				<section aria-label="게임 보드" className="picnic-frame slot-stage">
+					{motionHint}
 					{options}
 					<div className="slot-stage-main">
 						{soundControl}
@@ -200,11 +309,16 @@ export default function RoomGameStage({
 							numbers={wheel.candidateNumbers}
 							draw={round}
 							clockOffset={clockOffset}
-							phase={wheel.phase}
+							phase={phase}
 							reduced={Boolean(reducedMotion)}
 							host={isHost}
-							disabled={wheel.covered || wheel.canDraw === false}
-							onDraw={wheel.onDraw}
+							disabled={!hostCanStart && !hostCanDrive}
+							drive={activeDrive}
+							driveClockOffset={clockOffset}
+							driveAdjustment={driveAdjustment}
+							holdHintId={primarySpinInput ? holdHintId : undefined}
+							drawButtonProps={primaryButtonProps}
+							countdown={countdown}
 							resultActions={resultActions}
 							result={result}
 							voteMotionRound={voteMotionRound}
@@ -221,15 +335,13 @@ export default function RoomGameStage({
 			</div>
 		);
 	}
-	const phase = wheel?.phase ?? "idle";
-	const caption =
-		phase === "fetching"
-			? "준비 중"
-			: phase === "spinning"
-				? "회전 중"
-				: !wheel?.canDraw
-					? "방장 대기"
-					: (wheel.drawText ?? "돌리기");
+	const { busy, caption } = wheelControl(
+		phase,
+		Boolean(wheel && wheel.canDraw !== false),
+		Boolean(activeDrive),
+		wheel?.drawLabel,
+		wheel?.drawText,
+	);
 	const scene: StageScene = {
 		mainHeight: size.mainHeight,
 		voteMotionRound,
@@ -242,11 +354,8 @@ export default function RoomGameStage({
 			count: wheel?.candidates.length ?? 0,
 			phase,
 			caption,
-			disabled:
-				!wheel?.canDraw ||
-				wheel.covered ||
-				phase === "spinning" ||
-				phase === "fetching",
+			busy,
+			disabled: !hostCanStart && !hostCanDrive,
 		},
 		result,
 		hover,
@@ -300,8 +409,12 @@ export default function RoomGameStage({
 					scene={scene}
 					{...size}
 					rotorRef={wheel?.rotorRef}
-					animate={!result && phase === "spinning" && !reducedMotion}
+					motionOff={reducedMotion}
+					drive={activeDrive}
+					driveClockOffset={clockOffset}
+					driveAdjustment={driveAdjustment}
 				/>
+				{motionHint}
 				{options}
 				<div
 					ref={main}
@@ -309,9 +422,21 @@ export default function RoomGameStage({
 					data-result={Boolean(result) || undefined}
 				>
 					{soundControl}
+					{countdown && <div className="picnic-countdown">{countdown}</div>}
 					{!result && wheel && (
 						<div className="picnic-wheel">
-							<LunchWheel {...wheel} wheelSide={layout.wheelSide} />
+							<LunchWheel
+								{...wheel}
+								wheelSide={layout.wheelSide}
+								covered={!hostCanStart && !hostCanDrive}
+								phase={phase}
+								drive={activeDrive}
+								driveClockOffset={clockOffset}
+								driveAdjustment={driveAdjustment}
+								motionOff={reducedMotion}
+								holdHintId={primarySpinInput ? holdHintId : undefined}
+								drawButtonProps={primaryButtonProps}
+							/>
 						</div>
 					)}
 					{result && (

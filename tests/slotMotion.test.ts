@@ -50,4 +50,19 @@ describe("slot drum", () => {
 		expect(at(8000)).toEqual(at(4000));
 		expect(slotMotion(1600, 4000, 0)).toEqual({ travel: 0, speed: 0 });
 	});
+	it("spins faster for a charged release and lands on the same frozen row", () => {
+		const strip = slotStrip(200, 31, 172);
+		const landingRow = strip.length - 3;
+		const rowsPerSecond = (duration: number, power: number) =>
+			slotMotion(1500, duration, landingRow, power).travel -
+			slotMotion(1000, duration, landingRow, power).travel;
+		expect(rowsPerSecond(6000, 1)).toBeGreaterThan(rowsPerSecond(4000, 0));
+		for (const power of [0, 0.2, 0.55, 1]) {
+			const duration = 4000 + power * 2000;
+			const stopped = slotMotion(duration, duration, landingRow, power);
+			expect(stopped.speed).toBe(0);
+			expect(slotStripOffset(stopped.travel, power)).toBe(landingRow);
+			expect(strip[landingRow + 1]).toBe(172);
+		}
+	});
 });

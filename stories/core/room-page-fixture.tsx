@@ -8,11 +8,7 @@ import {
 	useState,
 } from "react";
 import { defaultDrawView } from "@/lib/drawView";
-import {
-	getWheelRotation,
-	randomWheelLandingFraction,
-	sampleLunchPlaces,
-} from "@/lib/lunch";
+import { getWheelRotation, sampleLunchPlaces } from "@/lib/lunch";
 import {
 	type ChatMessage,
 	canChangeRoomDrawView,
@@ -29,10 +25,19 @@ import {
 	type RoomSnapshot,
 } from "@/lib/lunchRoom";
 import {
-	recordRoomDrawMetadata,
 	setRoomExcludeDrawn,
+	visibleRoomExclusions,
 } from "@/lib/roomDrawMetadata";
-import { advanceRoomRound, beginRoomDraw } from "@/lib/roomGame";
+import {
+	advanceRoomRound,
+	beginRoomDraw,
+	finishRoomDraw,
+	prepareRoomDraw,
+	type RoomDriveIntent,
+	startRoomSpin,
+	updateRoomDrive,
+} from "@/lib/roomGame";
+import { getSpinDeadline } from "@/lib/spinDrive";
 import type { useLunchRoom as useServiceLunchRoom } from "../../src/hooks/useLunchRoom";
 import {
 	appendPreviewVote,
@@ -207,7 +212,11 @@ export function RoomPageFixtureProvider({
 		initialState(options, sequence.current),
 	);
 	const current = useRef(frame);
+	const pendingDrive = useRef<(RoomDriveIntent & { id: string }) | null>(null);
 	const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
+	const drawTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+		undefined,
+	);
 	const selfId = options.isHost ? host.id : previewSelfId;
 	function commit(update: (value: PreviewState) => PreviewState) {
 		current.current = update(current.current);
@@ -219,6 +228,7 @@ export function RoomPageFixtureProvider({
 			callback();
 		}, delay);
 		timers.current.add(timer);
+		return timer;
 	}
 	const cancelTimers = useCallback(() => {
 		for (const timer of timers.current) clearTimeout(timer);
@@ -227,6 +237,7 @@ export function RoomPageFixtureProvider({
 	useEffect(() => () => cancelTimers(), [cancelTimers]);
 	function reset() {
 		cancelTimers();
+		pendingDrive.current = null;
 		commit(() => initialState(options, ++sequence.current));
 	}
 	function appendMessage(
@@ -257,7 +268,38 @@ export function RoomPageFixtureProvider({
 		};
 	}
 	function drawFinished(draw: RoomDraw | null) {
-		return Boolean(draw && Date.now() >= draw.startedAt + draw.durationMs);
+		return Boolean(draw && Date.now() >= getSpinDeadline(draw));
+	}
+	function scheduleDrawFinish() {
+		if (drawTimer.current !== undefined) {
+			clearTimeout(drawTimer.current);
+			timers.current.delete(drawTimer.current);
+		}
+		const draw = current.current.snapshot.draw;
+		if (!draw) return;
+		const deadline = getSpinDeadline(draw);
+		if (!Number.isFinite(deadline)) return;
+		drawTimer.current = later(
+			() => {
+				const frame = current.current;
+				const snapshot = { ...frame.snapshot };
+				if (
+					snapshot.draw?.id !== draw.id ||
+					!finishRoomDraw(snapshot, Date.now())
+				)
+					return;
+				commit(() =>
+					appendMessage(
+						{ ...frame, snapshot },
+						systemMessage(
+							`추첨 결과: ${draw.candidates[draw.winnerIndex].name}`,
+							"draw-finished",
+						),
+					),
+				);
+			},
+			Math.max(0, deadline - Date.now()),
+		);
 	}
 	function mutable() {
 		const value = current.current;
@@ -359,7 +401,9 @@ export function RoomPageFixtureProvider({
 	}
 	const room: RoomState = {
 		...frame,
-		snapshot: options.entryLoading ? null : frame.snapshot,
+		snapshot: options.entryLoading
+			? null
+			: { ...frame.snapshot, ...visibleRoomExclusions(frame.snapshot) },
 		connection: options.entryLoading ? "connecting" : frame.connection,
 		waitingForEntry: options.entryLoading ?? false,
 		entryPending: options.entryLoading ?? false,
@@ -581,111 +625,85 @@ export function RoomPageFixtureProvider({
 			applySnapshot((value) => ({ ...value, excludedIds: [] }));
 			return true;
 		},
-		startDraw({ expectedRevision, previousDrawId } = {}) {
+		startDraw({
+			driveId,
+			driveStartIndex,
+			expectedRevision,
+			previousDrawId,
+			spinPower,
+		} = {}) {
 			const value = current.current;
-			const eligible = getEligibleRoomCandidates(value.snapshot);
+			const prepared = prepareRoomDraw(
+				value.snapshot,
+				value.snapshot.participants,
+				spinPower,
+			);
 			if (
 				!mutable() ||
 				!revisionMatches(expectedRevision) ||
 				!canStartRoomDraw(value.snapshot, previousDrawId) ||
-				eligible.length === 0
+				prepared.candidates.length === 0
 			)
 				return false;
-			const requestedAt = Date.now();
+			pendingDrive.current = driveId
+				? {
+						id: driveId,
+						held: true,
+						sequence: 0,
+						startIndex: driveStartIndex,
+					}
+				: null;
 			const fetching = { ...value.snapshot };
 			beginRoomDraw(fetching);
 			commit((state) =>
 				appendMessage(
 					{
 						...state,
+						error: "",
 						startPending: true,
 						snapshot: fetching,
 					},
 					systemMessage(
-						`방장이 ${eligible.length}곳 중 추첨을 시작했습니다.`,
+						`방장이 ${prepared.candidates.length}곳 중 추첨을 시작했습니다.`,
 						"draw-started",
 					),
 				),
 			);
 			later(() => {
 				const state = current.current;
-				const candidates = eligible;
-				const winnerIndex = ++sequence.current % candidates.length;
-				const landingFraction = randomWheelLandingFraction();
-				const draw: RoomDraw = {
-					id: `page-draw-${sequence.current}`,
-					viewMode: value.snapshot.viewMode,
-					candidates,
-					winnerIndex,
-					source: "csprng",
-					requestedAt,
-					timestamp: requestedAt,
-					startedAt: Date.now(),
-					durationMs: lunchRoomLimits.drawDurationMs,
-					fromRotation: 0,
-					toRotation: getWheelRotation(
-						0,
-						winnerIndex,
-						candidates.length,
-						landingFraction,
-					),
-					landingFraction,
-					listVersion: state.snapshot.listVersion,
-					gameFilter: state.snapshot.gameFilter
-						? {
-								categories:
-									state.snapshot.gameFilter.categories === null
-										? null
-										: [...state.snapshot.gameFilter.categories],
-								excludedIds: [...state.snapshot.gameFilter.excludedIds],
-							}
-						: undefined,
-					participants: state.snapshot.participants,
-					probabilities: candidates.map(() => 1 / candidates.length),
-					votes: [],
-					excludeDrawn: state.snapshot.excludeDrawn ?? false,
-					excludedIdsBefore: [...(state.snapshot.excludedIds ?? [])],
-				};
-				const withMetadata = { ...state.snapshot };
-				recordRoomDrawMetadata(withMetadata, draw, Boolean(draw.excludeDrawn));
-				const { excludedIds, exclusionRecords, drawCount, drawCountIsExact } =
-					withMetadata;
-				commit((latest) => ({
-					...latest,
+				const snapshot = { ...state.snapshot };
+				const winnerIndex = ++sequence.current % prepared.candidates.length;
+				startRoomSpin(
+					snapshot,
+					prepared,
+					{ source: "csprng", numbers: [winnerIndex] },
+					driveId ?? `page-draw-${sequence.current}`,
+					0,
+					pendingDrive.current ?? undefined,
+				);
+				pendingDrive.current = null;
+				commit(() => ({
+					...state,
 					startPending: false,
-					snapshot: {
-						...latest.snapshot,
-						status: "drawing",
-						draw,
-						excludedIds: draw.excludeDrawn ? draw.excludedIdsBefore : [],
-						revision: (latest.snapshot.revision ?? 1) + 1,
-					},
+					snapshot,
 				}));
-				later(() => {
-					if (current.current.snapshot.draw?.id !== draw.id) return;
-					commit((latest) =>
-						appendMessage(
-							{
-								...latest,
-								snapshot: {
-									...latest.snapshot,
-									status: "result",
-									excludedIds,
-									exclusionRecords,
-									drawCount,
-									drawCountIsExact,
-									revision: (latest.snapshot.revision ?? 1) + 1,
-								},
-							},
-							systemMessage(
-								`추첨 결과: ${draw.candidates[draw.winnerIndex].name}`,
-								"draw-finished",
-							),
-						),
-					);
-				}, draw.durationMs);
+				scheduleDrawFinish();
 			}, 350);
 			return true;
+		},
+		setDriveHeld(id, held, sequence) {
+			if (!options.isHost) return;
+			const pending = pendingDrive.current;
+			if (pending?.id === id) {
+				if (sequence > pending.sequence)
+					pendingDrive.current = { ...pending, held, sequence };
+				return;
+			}
+			const snapshot = { ...current.current.snapshot };
+			if (updateRoomDrive(snapshot, id, { held, sequence }, Date.now())) {
+				commit((value) => ({ ...value, snapshot }));
+				scheduleDrawFinish();
+			}
 		},
 		nextRound(drawId, editCandidates) {
 			const draw = current.current.snapshot.draw;

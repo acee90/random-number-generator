@@ -1,7 +1,7 @@
 import { Container } from "pixi.js";
 import { createBoardRenderer } from "../game-art/renderer";
 import { createBallots } from "./ballots";
-import { drawRim, drawTable, drawWheel } from "./board";
+import { drawPointer, drawRim, drawTable, drawWheel } from "./board";
 import { drawDetails, observeDetails } from "./details";
 import { type StageScene, stageLayout } from "./layout";
 import { drawCloth, drawHub, drawSound, layer, pen } from "./stationery";
@@ -15,6 +15,7 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 		disc = layer(stage),
 		rotor = layer(disc),
 		table = layer(stage),
+		pointer = layer(stage),
 		hub = layer(stage),
 		ticket = layer(stage),
 		details = layer(stage),
@@ -28,6 +29,8 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 	const keys = new Map<Container, string>();
 	const destroyChildren = { children: true, context: true, style: true };
 	let angle = 0;
+	let pin: ReturnType<typeof drawPointer> | undefined;
+	let candidateCount = 0;
 	let dirty = true;
 	const detailsRoot =
 		canvas.parentElement?.querySelector<HTMLElement>(".picnic-details");
@@ -80,7 +83,12 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 		dirty = true;
 	}
 	return {
-		paint(scene: StageScene, width: number, height: number) {
+		paint(
+			scene: StageScene,
+			width: number,
+			height: number,
+			motionOff: boolean,
+		) {
 			latestScene = scene;
 			const resolution = Math.min(window.devicePixelRatio || 1, 2);
 			const resized =
@@ -98,12 +106,14 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 			const result = scene.result,
 				layout = stageLayout(width, scene.mainHeight ?? height);
 			const { wheelSide: side, wheelY } = layout;
+			candidateCount = scene.wheel.count;
 			update(cloth, true, () => drawCloth(cloth, { width, height }), true);
 			if (rotor.visible !== !result) dirty = true;
 			rim.visible =
 				disc.visible =
 				rotor.visible =
 				table.visible =
+				pointer.visible =
 				hub.visible =
 					!result;
 			ticket.visible = Boolean(result);
@@ -115,6 +125,12 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 					() => drawTicket(ticket, layout, result),
 				);
 			} else {
+				update(pointer, [side, wheelY], () => {
+					pin = drawPointer(
+						layer(pointer, (width - side) / 2, wheelY - side / 2),
+						side,
+					);
+				});
 				update(
 					rim,
 					[side, wheelY],
@@ -153,7 +169,7 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 						side,
 						wheelY,
 						scene.wheel.caption,
-						scene.wheel.phase,
+						scene.wheel.busy,
 						scene.wheel.count,
 						scene.wheel.disabled,
 						scene.hover === "draw",
@@ -161,7 +177,11 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 					],
 					() => drawHub(hub, layout, scene),
 				);
-				if (scene.wheel.phase !== "spinning") angle = 0;
+				if (motionOff || scene.wheel.phase === "idle") {
+					if (angle !== 0) dirty = true;
+					angle = 0;
+					if (pin) pin.rotation = 0;
+				}
 				rotor.rotation = angle;
 			}
 			const rtl = canvas.matches(":dir(rtl)");
@@ -176,7 +196,15 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 			}
 		},
 		rotate(radians: number) {
-			if (radians === angle || !rotor.visible) return;
+			if (!rotor.visible) return;
+			const difference = radians - angle;
+			const delta = Math.atan2(Math.sin(difference), Math.cos(difference));
+			const notch =
+				(radians * Math.min(24, Math.max(8, candidateCount))) / (2 * Math.PI);
+			const step = notch - Math.floor(notch);
+			const bend = Math.min(0.15, Math.abs(delta) * 4) * (1 - step) ** 3;
+			if (radians === angle && pin?.rotation === bend) return;
+			if (pin) pin.rotation = bend;
 			rotor.rotation = angle = radians;
 			renderer.render({ container: stage });
 		},
