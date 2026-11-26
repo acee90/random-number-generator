@@ -171,12 +171,18 @@ describe("shared solo game screen", () => {
 		expect(drawFromSoloEntropy).toHaveBeenLastCalledWith(2, undefined);
 		expect(screen.getByRole("heading", { name: "분식집" })).toBeTruthy();
 	});
-	it("locks duplicate draws and candidate edits until the timeline completes", async () => {
+	it("locks duplicate entropy requests while regrip refreshes the winner", async () => {
 		let resolve!: (value: { numbers: number[]; source: "csprng" }) => void;
 		vi.mocked(drawFromSoloEntropy).mockReturnValueOnce(
 			new Promise((done) => {
 				resolve = done;
 			}),
+		);
+		vi.spyOn(globalThis.crypto, "getRandomValues").mockImplementation(
+			(array) => {
+				(array as Uint32Array)[0] = 1;
+				return array;
+			},
 		);
 		renderRoom();
 		const button = screen.getByRole("button", { name: "슬롯 돌리기" });
@@ -192,7 +198,7 @@ describe("shared solo game screen", () => {
 		).toBeNull();
 		expect(screen.queryByRole("heading", { name: "한식당" })).toBeNull();
 		await act(async () => vi.advanceTimersByTime(15000));
-		expect(screen.getByRole("heading", { name: "한식당" })).toBeTruthy();
+		expect(screen.getByRole("heading", { name: "중식당" })).toBeTruthy();
 	});
 	it("recovers from invalid random results without recording them", async () => {
 		vi.mocked(drawFromSoloEntropy).mockResolvedValueOnce({

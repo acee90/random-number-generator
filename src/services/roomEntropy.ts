@@ -21,6 +21,22 @@ function localWords(count: number) {
 	return crypto.getRandomValues(new Uint16Array(count));
 }
 
+/** Sample an unbiased candidate index from fresh Web Crypto randomness. */
+export function drawRandomIndex(count: number) {
+	if (!Number.isSafeInteger(count) || count < 1 || count > 2 ** 32) {
+		throw new RangeError("Invalid random index range");
+	}
+	const range = 2 ** 32;
+	const limit = range - (range % count);
+	let value: number;
+	do {
+		const sample = crypto.getRandomValues(new Uint32Array(1))[0];
+		if (sample === undefined) throw new Error("Web Crypto returned no value");
+		value = sample;
+	} while (value >= limit);
+	return value % count;
+}
+
 /** Uses only an already reserved batch or fresh Web Crypto. */
 export function drawFromPreparedEntropy(max: number, reserved?: EntropyBatch) {
 	const sampler = new RandomSampler(async (count) => {

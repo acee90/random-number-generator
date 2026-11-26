@@ -281,10 +281,16 @@ afterEach(() => {
 });
 
 describe("continuous room drive", () => {
-	it("holds one winner across release and re-press, then opens feedback and records the final deadline", async () => {
+	it("draws a fresh winner on a valid regrip and blocks one below the speed gate", async () => {
 		const { server, context } = await room(false, true);
 		const host = await connect(server, context, "방장", hostToken);
 		const guest = await connect(server, context, "참가자");
+		vi.spyOn(globalThis.crypto, "getRandomValues").mockImplementation(
+			(array) => {
+				(array as Uint32Array)[0] = 0;
+				return array;
+			},
+		);
 		await send(server, host, {
 			type: "options",
 			id: "drive-exclude-winner",
@@ -323,26 +329,21 @@ describe("continuous room drive", () => {
 			held: false,
 			sequence: 1,
 		});
-		const firstStop = getSpinDeadline(latestDraw(guest));
-		vi.setSystemTime(firstStop - 50);
+		vi.advanceTimersByTime(100);
 		await send(server, host, {
 			type: "drive",
 			drawId,
 			held: true,
 			sequence: 2,
 		});
-		await send(server, host, {
-			type: "drive",
-			drawId,
-			held: false,
-			sequence: 1,
+		expect(latestDraw(guest)).toMatchObject({
+			winnerIndex: 0,
+			source: "mixed",
+			drive: { held: true, sequence: 2 },
 		});
-		vi.setSystemTime(firstStop + 100);
-		await server.onAlarm();
-		expect(latestSnapshot(guest).snapshot.draw?.drive).toMatchObject({
-			held: true,
-			sequence: 2,
-		});
+		expect(storedSnapshot(context).excludedIds).toEqual([
+			latestDraw(guest).candidates[0]?.id,
+		]);
 		await send(server, guest, {
 			type: "vote",
 			id: "vote-while-held",
@@ -350,7 +351,6 @@ describe("continuous room drive", () => {
 			vote: "up",
 		});
 		expect(hasError(guest, "VOTE_NOT_READY")).toBe(true);
-
 		await send(server, host, {
 			type: "drive",
 			drawId,
@@ -359,6 +359,17 @@ describe("continuous room drive", () => {
 		});
 		const finalStop = getSpinDeadline(latestDraw(guest));
 		expect(context.storage.alarm).toBe(finalStop);
+		vi.setSystemTime(finalStop - 1);
+		await send(server, host, {
+			type: "drive",
+			drawId,
+			held: true,
+			sequence: 4,
+		});
+		expect(latestDraw(guest)).toMatchObject({
+			winnerIndex: 0,
+			drive: { held: false, sequence: 3, stopAt: finalStop },
+		});
 		vi.setSystemTime(finalStop + 42);
 		await server.onAlarm();
 		await send(server, guest, {
@@ -369,7 +380,12 @@ describe("continuous room drive", () => {
 		});
 		expect(latestSnapshot(guest).snapshot).toMatchObject({
 			status: "result",
-			draw: { id: drawId, winnerIndex: 1, votes: [{ reactionMs: 42 }] },
+			draw: {
+				id: drawId,
+				winnerIndex: 0,
+				source: "mixed",
+				votes: [{ reactionMs: 42 }],
+			},
 			exclusionRecords: [{ drawId, drawnAt: finalStop }],
 		});
 		expect(entropy).toHaveBeenCalledTimes(1);
@@ -436,6 +452,12 @@ describe("continuous room drive", () => {
 		const { server, context } = await room(false, true);
 		const host = await connect(server, context, "방장", hostToken);
 		const guest = await connect(server, context, "참가자");
+		vi.spyOn(globalThis.crypto, "getRandomValues").mockImplementation(
+			(array) => {
+				(array as Uint32Array)[0] = 0;
+				return array;
+			},
+		);
 		const drawId = "rapid-tap-drive";
 		let finishEntropy!: () => void;
 		entropy.mockImplementationOnce(
@@ -460,7 +482,8 @@ describe("continuous room drive", () => {
 		const draw = latestDraw(guest);
 		expect(draw).toMatchObject({
 			id: drawId,
-			winnerIndex: 1,
+			winnerIndex: 0,
+			source: "mixed",
 			drive: { held: true, sequence: 4, regripSequence: 4 },
 		});
 		expect(draw.drive?.speed).toBeGreaterThan(24);
@@ -475,7 +498,7 @@ describe("continuous room drive", () => {
 		await server.onAlarm();
 		expect(latestSnapshot(guest).snapshot).toMatchObject({
 			status: "result",
-			draw: { id: drawId, winnerIndex: 1 },
+			draw: { id: drawId, winnerIndex: 0, source: "mixed" },
 		});
 		expect(entropy).toHaveBeenCalledTimes(1);
 	});
