@@ -196,7 +196,7 @@ try {
 							).data,
 					];
 				});
-			await page.waitForTimeout(460);
+			await page.waitForTimeout(320);
 			const duringPause = await ticketPixels();
 			await page.waitForTimeout(190);
 			assert.notDeepEqual(
