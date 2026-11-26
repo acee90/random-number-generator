@@ -239,6 +239,7 @@ export async function createSlotPainter(canvas: HTMLCanvasElement) {
 			reveal: number,
 			focused: boolean,
 			rowBlurPx: number,
+			pulse: number,
 		) {
 			if (!width || !height) return;
 			revealProgress = reveal;
@@ -282,23 +283,20 @@ export async function createSlotPainter(canvas: HTMLCanvasElement) {
 			);
 			sheet.alpha = 1;
 			detent.clear();
-			if (reveal < 0.28) {
-				const pulse = Math.sin((reveal / 0.28) * Math.PI);
-				if (pulse > 0.01)
-					detent
-						.roundRect(
-							viewport.x + 3,
-							viewport.y + height / 3 + 3,
-							width - 6,
-							height / 3 - 6,
-							5,
-						)
-						.stroke({
-							color: 0xffe18b,
-							width: 2 + pulse * 2,
-							alpha: pulse * 0.9,
-						});
-			}
+			if (pulse > 0.01)
+				detent
+					.roundRect(
+						viewport.x + 3,
+						viewport.y + height / 3 + 3,
+						width - 6,
+						height / 3 - 6,
+						5,
+					)
+					.stroke({
+						color: 0xffe18b,
+						width: 2 + pulse * 2,
+						alpha: pulse * 0.9,
+					});
 			focus.visible = focused;
 			renderer.render({ container: stage });
 		},

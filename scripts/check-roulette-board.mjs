@@ -1,5 +1,6 @@
 // Run against npm run dev. Use a fresh browser profile and a local room for each run.
 import assert from "node:assert/strict";
+import { writeFile } from "node:fs/promises";
 import { chromium } from "playwright-core";
 
 const origin = new URL(process.argv[2] ?? "http://localhost:3000").origin;
@@ -160,7 +161,19 @@ try {
 		);
 		assert.equal((await board.boundingBox()).height, idleHeight);
 		const result = board.locator('canvas[data-painted][data-scene="result"]');
-		await result.waitFor();
+		await page.waitForFunction(() =>
+			document.querySelector('canvas[data-painted][data-scene="result"]'),
+		);
+		if (!reduce && process.env.ROULETTE_CAPTURE_DIR) {
+			const png = await result.evaluate(async (el) => {
+				await new Promise((resolve) => setTimeout(resolve, 140));
+				return el.toDataURL();
+			});
+			await writeFile(
+				`${process.env.ROULETTE_CAPTURE_DIR}/winner-${width}.png`,
+				Buffer.from(png.split(",")[1], "base64"),
+			);
+		}
 		assert.equal(
 			(await board.boundingBox()).height,
 			idleHeight,
@@ -198,7 +211,7 @@ try {
 				`${width}px: reserve three visible voter rows in each column`,
 			);
 		}
-		await page.waitForTimeout(680);
+		await page.waitForTimeout(1000);
 		if (process.env.ROULETTE_CAPTURE_DIR) {
 			await board.screenshot({
 				path: `${process.env.ROULETTE_CAPTURE_DIR}/result-${width}.png`,

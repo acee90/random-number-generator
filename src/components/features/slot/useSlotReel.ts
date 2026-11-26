@@ -6,7 +6,12 @@ import {
 	sampleDisplaySpin,
 } from "../game-art/spin-motion";
 import type { BallotScene } from "../picnic/ballots";
-import { defaultSlotMaxBlurPx, slotMotion, slotStripOffset } from "./motion";
+import {
+	defaultSlotMaxBlurPx,
+	slotDetentPosition,
+	slotMotion,
+	slotStripOffset,
+} from "./motion";
 import type { createSlotPainter } from "./paint";
 
 export type SlotMotionOptions = {
@@ -189,7 +194,14 @@ export function useSlotReel(next: SlotState) {
 				? (motionOptions?.sampleDrive(drive, driveTime) ??
 					sampleDisplaySpin(drive, driveTime, "slot-v1", driveAdjustment))
 				: undefined;
-			const position = sample?.position ?? preview;
+			const target =
+				driveAdjustment?.kind === "coast"
+					? driveAdjustment.target
+					: drive?.target;
+			const position =
+				sample && !drive?.held && target !== undefined
+					? slotDetentPosition(sample.position, target)
+					: (sample?.position ?? preview);
 			const baseRow = Math.floor(position);
 			const speed = sample
 				? Math.min(1, Math.abs(sample.speed) / (drive?.tuning?.maxSpeed ?? 26))
@@ -228,7 +240,7 @@ export function useSlotReel(next: SlotState) {
 				if (reveal === 0) sheetExitStartedAt.current = null;
 			}
 			const row = done
-				? landing + Math.sin(reveal * Math.PI * 3) * 0.12 * (1 - reveal)
+				? landing
 				: live
 					? position - baseRow
 					: slotStripOffset(legacySample.travel, power);
@@ -270,7 +282,19 @@ export function useSlotReel(next: SlotState) {
 						focused = drum.matches(":has(h3:focus-visible)");
 					controlsDirty = false;
 					appearanceDirty = false;
-					art.paint(row, speed, reveal, focused, blurPx);
+					// Light the payline across the stop, independently of result panel motion.
+					const sinceStop =
+						drive?.stopAt !== undefined
+							? driveTime - drive.stopAt
+							: elapsed - (duration ?? Infinity);
+					const pulse =
+						!still &&
+						(done || legacySpin || (active && !drive.held)) &&
+						sinceStop > -100 &&
+						sinceStop < 140
+							? Math.sin((Math.PI * (sinceStop + 100)) / 240)
+							: 0;
+					art.paint(row, speed, reveal, focused, blurPx, pulse);
 					canvas.toggleAttribute("data-painted", true);
 				}
 			} catch (error) {

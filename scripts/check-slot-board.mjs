@@ -202,7 +202,24 @@ try {
 	await button(guest, "입장하기").click();
 	await painted(guest).waitFor();
 	const result = host.locator('.slot-machine[data-phase="done"] h3');
-	await result.waitFor();
+	await host.waitForFunction(() =>
+		document.querySelector('.slot-machine[data-phase="done"] h3'),
+	);
+	const settled = await host.locator(".slot-strip").evaluate(async (strip) => {
+		await new Promise(requestAnimationFrame);
+		const start = performance.now();
+		const poses = new Set();
+		while (performance.now() - start < 400) {
+			await new Promise(requestAnimationFrame);
+			poses.add(strip.style.transform);
+		}
+		return poses.size;
+	});
+	assert.equal(
+		settled,
+		1,
+		"the stopped reel must stay seated throughout the result reveal",
+	);
 	const winner = await result.textContent();
 	await host.waitForFunction(paintedVote);
 	assert.ok(await host.locator(".slot-machine[data-clipped-winner]").count());
