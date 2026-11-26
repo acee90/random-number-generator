@@ -1,10 +1,15 @@
 import { Container } from "pixi.js";
 import { createBoardRenderer } from "../game-art/renderer";
 import { createBallots } from "./ballots";
-import { drawPointer, drawRim, drawTable, drawWheel } from "./board";
+import {
+	drawPointer,
+	drawRim,
+	drawTable,
+	drawWheel,
+	drawWinnerFocus,
+} from "./board";
 import { drawDetails, observeDetails } from "./details";
-import { type StageScene, stageLayout, wheelFaceRadius } from "./layout";
-import { picnic } from "./palette";
+import { type StageScene, stageLayout } from "./layout";
 import { assemblyPose, assemblyProgress } from "./resultAssembly";
 import { drawCloth, drawHub, drawSound, layer, pen } from "./stationery";
 import { drawTicket } from "./ticket";
@@ -201,28 +206,10 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 			hub.visible = showWheel && !scene.continuous;
 			if (resized || initial) pose();
 			if (hasResult && scene.continuous && (resized || !showing)) {
-				// Landing can be off-center within its wedge. Find its actual edges under the pin.
-				const step = (2 * Math.PI) / Math.max(1, candidateCount);
-				const rotation = ((scene.landing ?? 0) * Math.PI) / 180;
-				const start =
-					-Math.PI / 2 + rotation + Math.floor(-rotation / step) * step;
+				// Landing can be off-center; keep the emphasis aligned to the actual wedge.
 				winner.position.set(width / 2, wheelY);
 				winner.scale.set(side / 440);
-				winner
-					.clear()
-					.moveTo(0, 0)
-					.arc(0, 0, wheelFaceRadius - 2, start, start + step)
-					.closePath()
-					.fill({ color: picnic.cream, alpha: 0.46 });
-				winner
-					.arc(0, 0, wheelFaceRadius - 3, start, start + step)
-					.stroke({ color: picnic.cream, width: 6 });
-				for (const direction of [-1, 1]) {
-					winner
-						.star(direction * 19, -170, 4, 8, 2.5)
-						.fill(picnic.cream)
-						.stroke({ color: picnic.seam, width: 1 });
-				}
+				drawWinnerFocus(winner, scene.landing ?? 0, candidateCount);
 			}
 			reveal(hasResult, motionOff || initial || !scene.continuous);
 			if (result || !scene.continuous) {
