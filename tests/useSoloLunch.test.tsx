@@ -62,6 +62,12 @@ describe("local game controller", () => {
 	it("keeps the tap boost from inputs received before the draw becomes available", async () => {
 		const { result } = setup();
 		const drawId = "solo-fast-drive";
+		vi.spyOn(globalThis.crypto, "getRandomValues").mockImplementation(
+			(array) => {
+				(array as Uint32Array)[0] = 1;
+				return array;
+			},
+		);
 		await act(async () => {
 			expect(
 				result.current.room.startDraw({ driveId: drawId, driveStartIndex: 1 }),
@@ -72,7 +78,7 @@ describe("local game controller", () => {
 		});
 		expect(result.current.room.snapshot.draw).toMatchObject({
 			id: drawId,
-			winnerIndex: 0,
+			winnerIndex: 1,
 			drive: {
 				held: true,
 				sequence: 2,

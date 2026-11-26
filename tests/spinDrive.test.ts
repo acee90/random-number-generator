@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	canRegripSpinDrive,
 	changeSpinDrive,
 	getDefaultSpinTuning,
 	getDefaultTapBoost,
@@ -184,10 +185,10 @@ describe("continuous spin", () => {
 		let drive = startSpinDrive(0, "wheel");
 		for (const [time, held] of [
 			[1300, false],
-			[3600, true],
-			[3900, false],
-			[7500, true],
-			[8600, false],
+			[1400, true],
+			[1450, false],
+			[1550, true],
+			[1600, false],
 		] as const) {
 			const previous = sampleSpinDrive(drive, time, "wheel");
 			drive = changeSpinDrive(
@@ -304,10 +305,10 @@ describe("continuous spin", () => {
 				let drive = startSpinDrive(0, "slot-v1", Math.min(count - 1, 83));
 				for (const [at, held] of [
 					[35, false],
-					[2850, true],
-					[3250, false],
-					[5700, true],
-					[6360, false],
+					[80, true],
+					[120, false],
+					[180, true],
+					[240, false],
 				] as const) {
 					const prior = drive;
 					drive = changeSpinDrive(
@@ -360,7 +361,7 @@ describe("continuous spin", () => {
 	it.each([
 		"wheel",
 		"slot-v1",
-	] as const)("settles a tiny late regrip with zero boost onto the same mark in %s", (mode) => {
+	] as const)("rejects a regrip after speed falls below the gate in %s", (mode) => {
 		const [landing, period] = mode === "wheel" ? [0.82, 1] : [84, 107];
 		const coast = changeSpinDrive(
 			startSpinDrive(0, mode),
@@ -372,37 +373,15 @@ describe("continuous spin", () => {
 			period,
 		);
 		if (coast.stopAt === undefined) throw Error("Expected a stop time");
-		const grip = changeSpinDrive(
-			coast,
-			true,
-			2,
-			coast.stopAt - 1,
-			mode,
-			landing,
-			period,
-			0,
-		);
-		const last = changeSpinDrive(
-			grip,
-			false,
-			3,
-			grip.at + 10,
-			mode,
-			landing,
-			period,
-		);
-		if (last.stopAt === undefined || last.target === undefined)
-			throw Error("Expected a final landing");
-		expect(isSpinDrive(last)).toBe(true);
-		expect(last.stopAt - last.at).toBeLessThan(1800);
-		expect(sampleSpinDrive(last, last.at, mode)).toEqual(
-			sampleSpinDrive(grip, last.at, mode),
-		);
-		expect(sampleSpinDrive(last, last.stopAt, mode)).toEqual({
-			position: last.target,
-			speed: 0,
-		});
-		if (mode === "wheel") expect(last.target % 1).toBeCloseTo(landing);
-		else expect(getSpinSlotIndex(last.target, period, last)).toBe(landing);
+		let cutoff = coast.at;
+		while (cutoff < coast.stopAt && canRegripSpinDrive(coast, cutoff, mode))
+			cutoff++;
+		expect(cutoff).toBeLessThan(coast.stopAt);
+		expect(canRegripSpinDrive(coast, cutoff - 1, mode)).toBe(true);
+		expect(canRegripSpinDrive(coast, cutoff, mode)).toBe(false);
+		expect(
+			changeSpinDrive(coast, true, 2, cutoff, mode, landing, period, 0),
+		).toBe(coast);
+		expect(isSpinDrive(coast)).toBe(true);
 	});
 });

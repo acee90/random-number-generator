@@ -1,3 +1,4 @@
+import { drawRandomIndex } from "../services/roomEntropy";
 import { defaultDrawView, readDrawView } from "./drawView";
 import { randomWheelLandingFraction, resolveLunchWinner } from "./lunch";
 import {
@@ -28,6 +29,7 @@ import {
 	summarizeRoomWin,
 } from "./roomWinHistory";
 import {
+	canRegripSpinDrive,
 	changeSpinDrive,
 	getSpinDeadline,
 	getSpinLanding,
@@ -440,9 +442,10 @@ export function startRoomSpin(
 			: draw.startedAt;
 		draw.drive = startSpinDrive(driveStartAt, prepared.viewMode, origin);
 		for (const input of driveIntent.inputs ?? [])
-			draw.drive = applyRoomDriveIntent(draw, input, input.at);
+			draw.drive = applyRoomDriveIntent(snapshot, draw, input, input.at);
 		if (!driveIntent.inputs?.length || draw.drive?.held === driveIntent.held)
 			draw.drive = applyRoomDriveIntent(
+				snapshot,
 				draw,
 				driveIntent,
 				driveIntent.inputs?.at(-1)?.at ?? driveStartAt,
@@ -456,13 +459,46 @@ export function startRoomSpin(
 }
 
 function applyRoomDriveIntent(
+	snapshot: RoomSnapshot,
 	draw: RoomDraw,
 	intent: RoomDriveInput,
 	at: number,
 ) {
 	const drive = draw.drive;
 	if (!drive) return;
-	const { mode, landing, period } = getSpinLanding(draw);
+	const { mode } = getSpinLanding(draw);
+	if (
+		intent.sequence > drive.sequence &&
+		!drive.held &&
+		intent.held &&
+		canRegripSpinDrive(drive, at, mode)
+	) {
+		const previousWinnerId = draw.candidates[draw.winnerIndex]?.id;
+		const winnerIndex = drawRandomIndex(draw.candidates.length);
+		resolveLunchWinner(draw.candidates, winnerIndex);
+		draw.winnerIndex = winnerIndex;
+		if (draw.source !== "csprng") draw.source = "mixed";
+		const landingFraction = randomWheelLandingFraction();
+		draw.landingFraction = landingFraction;
+		draw.toRotation = getRoomDrawRotation(
+			winnerIndex,
+			draw.candidates.length,
+			landingFraction,
+			draw.spinPower,
+		);
+		if (draw.excludeDrawn) {
+			const priorExclusions = draw.excludedIdsBefore
+				? [...draw.excludedIdsBefore]
+				: (snapshot.excludedIds ?? []).filter((id) => id !== previousWinnerId);
+			const winnerId = draw.candidates[winnerIndex]?.id;
+			if (winnerId)
+				snapshot.excludedIds = [...new Set([...priorExclusions, winnerId])];
+			snapshot.exclusionRecords = (snapshot.exclusionRecords ?? []).filter(
+				(record) => record.drawId !== draw.id,
+			);
+		}
+	}
+	const { landing, period } = getSpinLanding(draw);
 	return changeSpinDrive(
 		drive,
 		intent.held,
@@ -490,7 +526,7 @@ export function updateRoomDrive(
 		now >= getSpinDeadline(draw)
 	)
 		return false;
-	const drive = applyRoomDriveIntent(draw, intent, now);
+	const drive = applyRoomDriveIntent(snapshot, draw, intent, now);
 	if (drive === draw.drive) return false;
 	snapshot.draw = { ...draw, drive };
 	return true;

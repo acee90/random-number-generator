@@ -1,4 +1,5 @@
 import {
+	canRegripSpinDrive,
 	changeSpinDrive,
 	defaultSlotBrake,
 	getDefaultSpinTuning,
@@ -163,6 +164,7 @@ export function changeTunedSlotDrive(
 ): TunedSlotDrive {
 	if (held === drive.held || at >= (drive.stopAt ?? Infinity)) return drive;
 	at = Math.max(drive.at, at);
+	if (held && !canRegripSpinDrive(drive, at, mode)) return drive;
 	const anchored = { ...drive, ...sampleTunedSlotDrive(drive, at), at };
 	if (held) {
 		const grip = changeSpinDrive(

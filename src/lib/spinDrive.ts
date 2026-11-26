@@ -78,6 +78,20 @@ export function getDefaultTapBoost(mode: DrawView) {
 	return defaultTuning[mode].initialSpeed;
 }
 
+/** A coasting drive can only be regripped while it is moving above half speed. */
+export function canRegripSpinDrive(
+	drive: SpinDrive,
+	at: number,
+	mode: DrawView,
+) {
+	if (drive.held) return true;
+	if (drive.stopAt === undefined || at >= drive.stopAt) return false;
+	const speed = sampleSpinDrive(drive, at, mode).speed;
+	const minimumSpeed =
+		(drive.tuning?.initialSpeed ?? defaultTuning[mode].initialSpeed) * 0.5;
+	return speed > minimumSpeed;
+}
+
 export function getRegripSpeed(
 	speed: number,
 	maxSpeed: number,
@@ -331,6 +345,7 @@ export function changeSpinDrive(
 	)
 		return drive;
 	if (drive.held === held) return { ...drive, sequence };
+	if (held && !canRegripSpinDrive(drive, at, mode)) return drive;
 	at = Math.max(at, drive.at);
 	const { position, speed } = sampleSpinDrive(drive, at, mode);
 	const next: SpinDrive = { held, at, sequence, position, speed };

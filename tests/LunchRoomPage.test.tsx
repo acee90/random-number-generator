@@ -27,6 +27,7 @@ import { getWheelRotation, sampleLunchPlaces } from "../src/lib/lunch";
 import { lunchHistoryKey } from "../src/lib/lunchHistory";
 import type { RoomDraw, RoomSnapshot } from "../src/lib/lunchRoom";
 import {
+	canRegripSpinDrive,
 	changeSpinDrive,
 	getSpinDeadline,
 	getSpinLanding,
@@ -416,12 +417,20 @@ describe("current result feedback and frozen history", () => {
 		).toBeTruthy();
 	});
 
-	it("keeps a guest on the board when a re-press update arrives after the former stop", () => {
+	it.each([
+		{ mode: "wheel" as const, buttonName: "룰렛 돌리기" },
+		{ mode: "slot-v1" as const, buttonName: "슬롯 돌리기" },
+	])("disables regripping once $mode slows below the speed gate", ({
+		mode,
+		buttonName,
+	}) => {
+		room.self = { id: "host-client", isHost: true };
 		const active = {
 			...draw(Date.now()),
-			drive: startSpinDrive(Date.now(), "wheel"),
+			viewMode: mode,
+			drive: startSpinDrive(Date.now(), mode),
 		};
-		const { mode, landing, period } = getSpinLanding(active);
+		const { landing, period } = getSpinLanding(active);
 		const braking = {
 			...active,
 			drive: changeSpinDrive(
@@ -434,16 +443,29 @@ describe("current result feedback and frozen history", () => {
 				period,
 			),
 		};
-		room.snapshot = snapshot({ status: "drawing", draw: braking });
+		room.snapshot = snapshot({
+			status: "drawing",
+			viewMode: mode,
+			draw: braking,
+		});
 		const view = render(<LunchRoomPage roomId={roomId} />);
 		const oldStop = getSpinDeadline(braking);
-		act(() => vi.advanceTimersByTime(oldStop - Date.now() + 50));
+		const spinButton = screen.getByRole("button", { name: buttonName });
+		expect(spinButton.matches(":disabled")).toBe(false);
+		let gateAt = braking.drive.at;
+		while (gateAt < oldStop && canRegripSpinDrive(braking.drive, gateAt, mode))
+			gateAt++;
+		expect(gateAt).toBeLessThan(oldStop);
+		act(() => vi.advanceTimersByTime(gateAt - Date.now()));
+		fireEvent.click(spinButton);
+		expect(room.setDriveHeld).not.toHaveBeenCalled();
+		act(() => vi.advanceTimersByTime(16));
+		expect(spinButton.matches(":disabled")).toBe(true);
 		expect(
 			screen.queryByRole("heading", {
 				name: active.candidates[active.winnerIndex].name,
 			}),
 		).toBeNull();
-		expect(screen.queryByRole("button", { name: "좋아요 투표" })).toBeNull();
 
 		const reaccelerated = {
 			...active,
@@ -451,17 +473,22 @@ describe("current result feedback and frozen history", () => {
 				braking.drive,
 				true,
 				2,
-				oldStop - 500,
+				gateAt,
 				mode,
 				landing,
 				period,
 			),
 		};
+		expect(reaccelerated.drive).toBe(braking.drive);
 		updateRoom(view, {
-			snapshot: snapshot({ status: "drawing", draw: reaccelerated }),
+			snapshot: snapshot({
+				status: "drawing",
+				viewMode: mode,
+				draw: reaccelerated,
+			}),
 		});
 		expect(
-			screen.getByRole("button", { name: "룰렛 회전 중" }).matches(":disabled"),
+			screen.getByRole("button", { name: buttonName }).matches(":disabled"),
 		).toBe(true);
 		const final = {
 			...active,
@@ -476,11 +503,13 @@ describe("current result feedback and frozen history", () => {
 			),
 		};
 		updateRoom(view, {
-			snapshot: snapshot({ status: "drawing", draw: final }),
+			snapshot: snapshot({ status: "drawing", viewMode: mode, draw: final }),
 		});
 		act(() => vi.advanceTimersByTime(getSpinDeadline(final) - Date.now()));
 		expect(screen.queryByRole("button", { name: "좋아요 투표" })).toBeNull();
-		updateRoom(view, { snapshot: snapshot({ status: "result", draw: final }) });
+		updateRoom(view, {
+			snapshot: snapshot({ status: "result", viewMode: mode, draw: final }),
+		});
 		expect(
 			screen.getByRole("heading", {
 				name: active.candidates[active.winnerIndex].name,

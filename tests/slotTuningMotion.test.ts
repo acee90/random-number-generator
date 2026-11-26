@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	canRegripSpinDrive,
 	changeSpinDrive,
 	getSpinSlotIndex,
 	sampleSpinDrive,
@@ -273,27 +274,12 @@ describe("slot tuning motion", () => {
 		expectWinner(release(grip, at + 1400));
 	});
 
-	it("keeps a late regrip's gentle detent correction through coast-time edits", () => {
+	it("rejects a late regrip at the production speed gate", () => {
 		const tuning = { ...getDefaultSlotTuning(), tapBoost: 0 };
 		const coast = release(startTunedSlotDrive(0, 0, tuning), 3000);
 		const gripAt = (coast.stopAt ?? 0) - 1;
 		const grip = changeTunedSlotDrive(coast, true, gripAt, winner, count);
-		const tapped = release(grip, gripAt + 90);
-		expect(tapped.target).toBe(coast.target);
-		expect(tapped.target).toBeLessThan(tapped.position);
-		const at = tapped.at + 200;
-		const adjusted = retuneSlotDrive(
-			tapped,
-			{ ...tuning, coastSeconds: 3 },
-			at,
-			winner,
-			count,
-		);
-		for (let sampleAt = at; sampleAt < (tapped.stopAt ?? at); sampleAt += 10) {
-			const sample = sampleTunedSlotDrive(adjusted, sampleAt);
-			expect(sample).toEqual(sampleTunedSlotDrive(tapped, sampleAt));
-			expect(sample.speed).toBeGreaterThan(-1);
-		}
-		expectWinner(adjusted);
+		expect(canRegripSpinDrive(coast, gripAt, mode)).toBe(false);
+		expect(grip).toBe(coast);
 	});
 });
