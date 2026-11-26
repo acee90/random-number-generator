@@ -14,7 +14,7 @@ import { assemblyPose, assemblyProgress } from "./resultAssembly";
 import { drawCloth, drawHub, drawSound, layer, pen } from "./stationery";
 import { drawTicket } from "./ticket";
 
-const winnerHighlightMs = 300;
+const winnerEmphasisLeadMs = 300;
 const winnerPauseMs = 300;
 
 export async function createPicnicPainter(canvas: HTMLCanvasElement) {
@@ -82,7 +82,8 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 		if (showing === next && !immediate) return;
 		cancelAnimationFrame(animation);
 		showing = next;
-		winner.visible = false;
+		winner.visible = next;
+		winner.alpha = 1;
 		if (immediate) {
 			const target = next ? 1 : 0;
 			if (arrival !== target) dirty = true;
@@ -92,23 +93,18 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 		}
 		const from = arrival;
 		const target = next ? 1 : 0;
-		const highlight = next ? winnerHighlightMs : 0;
-		const delay = highlight + (next ? winnerPauseMs : 0);
-		winner.visible = next;
-		winner.alpha = 1;
+		const delay = next ? winnerEmphasisLeadMs + winnerPauseMs : 0;
 		pose();
 		const start = performance.now();
 		function tick(now: number) {
 			const elapsed = Math.max(0, now - start);
-			winner.visible = elapsed < highlight;
 			const distance = Math.max(0, elapsed - delay) / 640;
 			arrival = next
 				? Math.min(1, from + distance)
 				: Math.max(0, from - distance);
 			pose();
 			renderer.render({ container: stage });
-			if (winner.visible || arrival !== target)
-				animation = requestAnimationFrame(tick);
+			if (arrival !== target) animation = requestAnimationFrame(tick);
 		}
 		animation = requestAnimationFrame(tick);
 	}
