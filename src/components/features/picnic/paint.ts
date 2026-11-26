@@ -9,7 +9,8 @@ import { assemblyPose, assemblyProgress } from "./resultAssembly";
 import { drawCloth, drawHub, drawSound, layer, pen } from "./stationery";
 import { drawTicket } from "./ticket";
 
-const winnerHoldMs = 320;
+const winnerHighlightMs = 300;
+const winnerPauseMs = 300;
 
 export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 	const renderer = await createBoardRenderer(canvas);
@@ -86,16 +87,18 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 		}
 		const from = arrival;
 		const target = next ? 1 : 0;
-		const hold = next ? winnerHoldMs : 0;
+		const highlight = next ? winnerHighlightMs : 0;
+		const delay = highlight + (next ? winnerPauseMs : 0);
 		winner.visible = next;
 		winner.alpha = 0;
 		pose();
 		const start = performance.now();
 		function tick(now: number) {
 			const elapsed = Math.max(0, now - start);
-			winner.visible = elapsed < hold;
-			if (winner.visible) winner.alpha = Math.sin((Math.PI * elapsed) / hold);
-			const distance = Math.max(0, elapsed - hold) / 640;
+			winner.visible = elapsed < highlight;
+			if (winner.visible)
+				winner.alpha = Math.sin((Math.PI * elapsed) / highlight);
+			const distance = Math.max(0, elapsed - delay) / 640;
 			arrival = next
 				? Math.min(1, from + distance)
 				: Math.max(0, from - distance);

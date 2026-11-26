@@ -174,6 +174,37 @@ try {
 				Buffer.from(png.split(",")[1], "base64"),
 			);
 		}
+		if (!reduce) {
+			const ticketPixels = () =>
+				result.evaluate((canvas) => {
+					const ticket = canvas.parentElement.querySelector(".picnic-ticket");
+					const bounds = canvas.getBoundingClientRect();
+					const rect = ticket.getBoundingClientRect();
+					const scale = canvas.width / bounds.width;
+					return [
+						...canvas
+							.getContext("2d")
+							.getImageData(
+								Math.floor(
+									(rect.left - bounds.left + rect.width / 2 - 10) * scale,
+								),
+								Math.floor(
+									(rect.top - bounds.top + rect.height / 2 - 10) * scale,
+								),
+								Math.round(20 * scale),
+								Math.round(20 * scale),
+							).data,
+					];
+				});
+			await page.waitForTimeout(460);
+			const duringPause = await ticketPixels();
+			await page.waitForTimeout(190);
+			assert.notDeepEqual(
+				await ticketPixels(),
+				duringPause,
+				`${width}px: the ticket should start assembling after the 300ms pause`,
+			);
+		}
 		assert.equal(
 			(await board.boundingBox()).height,
 			idleHeight,
