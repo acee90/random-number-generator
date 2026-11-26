@@ -165,6 +165,46 @@ export function drawWheel(
 	drawLabels(board, labels, side);
 }
 
+export function drawWinnerFocus(
+	graphic: Graphics,
+	rotationDegrees: number,
+	count: number,
+) {
+	const sectors = Math.max(1, Math.floor(count));
+	const step = turn / sectors;
+	const rotation = (((rotationDegrees % 360) + 360) % 360) * (Math.PI / 180);
+	const start = top + rotation + Math.floor(-rotation / step) * step;
+	graphic.clear();
+	for (let sector = 1; sector < sectors; sector++) {
+		const angle = start + sector * step;
+		graphic
+			.moveTo(0, 0)
+			.lineTo(
+				wheelFaceRadius * Math.cos(angle),
+				wheelFaceRadius * Math.sin(angle),
+			)
+			.arc(0, 0, wheelFaceRadius, angle, angle + step)
+			.closePath()
+			.fill({ color: picnic.ink, alpha: 0.38 });
+	}
+	if (sectors === 1) {
+		graphic
+			.circle(0, 0, wheelFaceRadius - 2)
+			.stroke({ color: picnic.ink, width: 5 });
+		return;
+	}
+	graphic
+		.moveTo(0, 0)
+		.lineTo(
+			wheelFaceRadius * Math.cos(start),
+			wheelFaceRadius * Math.sin(start),
+		)
+		.arc(0, 0, wheelFaceRadius, start, start + step)
+		.lineTo(0, 0)
+		.closePath()
+		.stroke({ color: picnic.ink, width: 5, join: "round" });
+}
+
 export function drawTable(stage: Container, side: number) {
 	const board = boardLayer(stage, side);
 	const die = board.addChild(new Graphics());

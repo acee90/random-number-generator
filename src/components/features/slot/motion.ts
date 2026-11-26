@@ -69,3 +69,10 @@ export function slotMotion(
 		speed: 0,
 	};
 }
+
+/** The spring catches over the last half row, while the reel still has momentum. */
+export function slotDetentPosition(position: number, target: number) {
+	const gap = target - position;
+	const engagement = Math.max(0, 1 - 2 * Math.abs(gap));
+	return position + 2.6 * gap * engagement ** 2;
+}

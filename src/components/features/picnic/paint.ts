@@ -1,12 +1,21 @@
 import { Container } from "pixi.js";
 import { createBoardRenderer } from "../game-art/renderer";
 import { createBallots } from "./ballots";
-import { drawPointer, drawRim, drawTable, drawWheel } from "./board";
+import {
+	drawPointer,
+	drawRim,
+	drawTable,
+	drawWheel,
+	drawWinnerFocus,
+} from "./board";
 import { drawDetails, observeDetails } from "./details";
 import { type StageScene, stageLayout } from "./layout";
 import { assemblyPose, assemblyProgress } from "./resultAssembly";
 import { drawCloth, drawHub, drawSound, layer, pen } from "./stationery";
 import { drawTicket } from "./ticket";
+
+const winnerHighlightMs = 300;
+const winnerPauseMs = 300;
 
 export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 	const renderer = await createBoardRenderer(canvas);
@@ -15,6 +24,7 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 		rim = layer(stage),
 		disc = layer(stage),
 		rotor = layer(disc),
+		winner = pen(stage),
 		table = layer(stage),
 		pointer = layer(stage),
 		hub = layer(stage),
@@ -28,6 +38,7 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 	// Clip the cached square texture to the disc, including its antialiased edge.
 	const discMask = pen(stage).circle(0, 0, 174.5).fill(0xffffff);
 	disc.mask = discMask;
+	winner.visible = false;
 	const keys = new Map<Container, string>();
 	const destroyChildren = { children: true, context: true, style: true };
 	let angle = 0;
@@ -71,6 +82,7 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 		if (showing === next && !immediate) return;
 		cancelAnimationFrame(animation);
 		showing = next;
+		winner.visible = false;
 		if (immediate) {
 			const target = next ? 1 : 0;
 			if (arrival !== target) dirty = true;
@@ -78,15 +90,25 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 			pose();
 			return;
 		}
-		arrival = next ? 0 : 1;
+		const from = arrival;
+		const target = next ? 1 : 0;
+		const highlight = next ? winnerHighlightMs : 0;
+		const delay = highlight + (next ? winnerPauseMs : 0);
+		winner.visible = next;
+		winner.alpha = 1;
 		pose();
 		const start = performance.now();
 		function tick(now: number) {
-			const t = Math.min(1, (now - start) / 640);
-			arrival = next ? t : 1 - t;
+			const elapsed = Math.max(0, now - start);
+			winner.visible = elapsed < highlight;
+			const distance = Math.max(0, elapsed - delay) / 640;
+			arrival = next
+				? Math.min(1, from + distance)
+				: Math.max(0, from - distance);
 			pose();
 			renderer.render({ container: stage });
-			if (t < 1) animation = requestAnimationFrame(tick);
+			if (winner.visible || arrival !== target)
+				animation = requestAnimationFrame(tick);
 		}
 		animation = requestAnimationFrame(tick);
 	}
@@ -183,6 +205,12 @@ export async function createPicnicPainter(canvas: HTMLCanvasElement) {
 					showWheel;
 			hub.visible = showWheel && !scene.continuous;
 			if (resized || initial) pose();
+			if (hasResult && scene.continuous && (resized || !showing)) {
+				// Landing can be off-center; keep the emphasis aligned to the actual wedge.
+				winner.position.set(width / 2, wheelY);
+				winner.scale.set(side / 440);
+				drawWinnerFocus(winner, scene.landing ?? 0, candidateCount);
+			}
 			reveal(hasResult, motionOff || initial || !scene.continuous);
 			if (result || !scene.continuous) {
 				if (voteCards.paint(ballotScene, resized)) dirty = true;
