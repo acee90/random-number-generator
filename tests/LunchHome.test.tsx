@@ -52,8 +52,8 @@ describe("Jeommechu lunch home", () => {
 		expect(within(main).queryByRole("textbox")).toBeNull();
 		expect(screen.queryByRole("dialog")).toBeNull();
 		expect(
-			within(main).getByRole("button", { name: "내 후보 목록" }),
-		).toBeTruthy();
+			within(main).queryByRole("button", { name: "내 후보 목록" }),
+		).toBeNull();
 		expect(screen.queryByText(/곳으로 시작합니다/)).toBeNull();
 		expect(mocks.readName).not.toHaveBeenCalled();
 		expect(fetchMock).not.toHaveBeenCalled();
@@ -79,7 +79,16 @@ describe("Jeommechu lunch home", () => {
 		).toEqual(["false", "false", "true"]);
 		expect(preview.getByRole("img", { name: /방탈출이 당첨/ })).toBeTruthy();
 		const guide = within(screen.getByRole("region", { name: "이용 방법" }));
-		expect(guide.getAllByRole("listitem")).toHaveLength(3);
+		expect(
+			guide
+				.getAllByRole("heading", { level: 3 })
+				.map((heading) => heading.textContent),
+		).toEqual([
+			"첫 추첨 후보를 준비해요",
+			"링크로 친구를 초대해요",
+			"룰렛으로 하나 뽑아요",
+			"결과에 반응을 남겨요",
+		]);
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 

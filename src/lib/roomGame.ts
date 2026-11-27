@@ -29,7 +29,6 @@ import {
 	summarizeRoomWin,
 } from "./roomWinHistory";
 import {
-	canRegripSpinDrive,
 	changeSpinDrive,
 	getSpinDeadline,
 	getSpinLanding,
@@ -471,7 +470,7 @@ function applyRoomDriveIntent(
 		intent.sequence > drive.sequence &&
 		!drive.held &&
 		intent.held &&
-		canRegripSpinDrive(drive, at, mode)
+		at < (drive.stopAt ?? Infinity)
 	) {
 		const previousWinnerId = draw.candidates[draw.winnerIndex]?.id;
 		const winnerIndex = drawRandomIndex(draw.candidates.length);

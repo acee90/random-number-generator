@@ -281,7 +281,7 @@ afterEach(() => {
 });
 
 describe("continuous room drive", () => {
-	it("draws a fresh winner on a valid regrip and blocks one below the speed gate", async () => {
+	it("draws again on regrip, including just before the drive stops", async () => {
 		const { server, context } = await room(false, true);
 		const host = await connect(server, context, "방장", hostToken);
 		const guest = await connect(server, context, "참가자");
@@ -357,9 +357,9 @@ describe("continuous room drive", () => {
 			held: false,
 			sequence: 3,
 		});
-		const finalStop = getSpinDeadline(latestDraw(guest));
-		expect(context.storage.alarm).toBe(finalStop);
-		vi.setSystemTime(finalStop - 1);
+		const firstStop = getSpinDeadline(latestDraw(guest));
+		expect(context.storage.alarm).toBe(firstStop);
+		vi.setSystemTime(firstStop - 1);
 		await send(server, host, {
 			type: "drive",
 			drawId,
@@ -368,8 +368,16 @@ describe("continuous room drive", () => {
 		});
 		expect(latestDraw(guest)).toMatchObject({
 			winnerIndex: 0,
-			drive: { held: false, sequence: 3, stopAt: finalStop },
+			drive: { held: true, sequence: 4 },
 		});
+		await send(server, host, {
+			type: "drive",
+			drawId,
+			held: false,
+			sequence: 5,
+		});
+		const finalStop = getSpinDeadline(latestDraw(guest));
+		expect(context.storage.alarm).toBe(finalStop);
 		vi.setSystemTime(finalStop + 42);
 		await server.onAlarm();
 		await send(server, guest, {

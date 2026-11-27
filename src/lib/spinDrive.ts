@@ -46,9 +46,9 @@ const legacyMotor = {
 };
 
 const defaultTuning: Record<DrawView, SpinTuning> = {
-	wheel: { initialSpeed: 1.15, maxSpeed: 5, acceleration: 2, coastSeconds: 7 },
+	wheel: { initialSpeed: 1.725, maxSpeed: 5, acceleration: 2, coastSeconds: 7 },
 	"slot-v1": {
-		initialSpeed: 9,
+		initialSpeed: 13.5,
 		maxSpeed: 42,
 		acceleration: 17,
 		coastSeconds: 4,
@@ -57,13 +57,13 @@ const defaultTuning: Record<DrawView, SpinTuning> = {
 
 const tuningLimits = {
 	wheel: {
-		initialSpeed: { min: 0.75, max: 3, step: 0.05 },
+		initialSpeed: { min: 0.75, max: 3, step: 0.025 },
 		maxSpeed: { min: 3, max: 8, step: 0.25 },
 		acceleration: { min: 0.5, max: 5, step: 0.1 },
 		coastSeconds: { min: 3, max: 10, step: 0.25 },
 	},
 	"slot-v1": {
-		initialSpeed: { min: 6, max: 24, step: 1 },
+		initialSpeed: { min: 6, max: 24, step: 0.5 },
 		maxSpeed: { min: 24, max: 64, step: 1 },
 		acceleration: { min: 4, max: 36, step: 1 },
 		coastSeconds: { min: 3, max: 10, step: 0.25 },
@@ -76,20 +76,6 @@ export function getDefaultSpinTuning(mode: DrawView): SpinTuning {
 
 export function getDefaultTapBoost(mode: DrawView) {
 	return defaultTuning[mode].initialSpeed;
-}
-
-/** A coasting drive can only be regripped while it is moving above half speed. */
-export function canRegripSpinDrive(
-	drive: SpinDrive,
-	at: number,
-	mode: DrawView,
-) {
-	if (drive.held) return true;
-	if (drive.stopAt === undefined || at >= drive.stopAt) return false;
-	const speed = sampleSpinDrive(drive, at, mode).speed;
-	const minimumSpeed =
-		(drive.tuning?.initialSpeed ?? defaultTuning[mode].initialSpeed) * 0.5;
-	return speed > minimumSpeed;
 }
 
 export function getRegripSpeed(
@@ -345,7 +331,6 @@ export function changeSpinDrive(
 	)
 		return drive;
 	if (drive.held === held) return { ...drive, sequence };
-	if (held && !canRegripSpinDrive(drive, at, mode)) return drive;
 	at = Math.max(at, drive.at);
 	const { position, speed } = sampleSpinDrive(drive, at, mode);
 	const next: SpinDrive = { held, at, sequence, position, speed };
