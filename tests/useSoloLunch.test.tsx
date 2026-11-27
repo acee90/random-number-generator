@@ -84,7 +84,7 @@ describe("local game controller", () => {
 				sequence: 2,
 				regripSequence: 2,
 				position: 1,
-				speed: 18,
+				speed: 27,
 			},
 		});
 		await act(async () => vi.advanceTimersByTime(20_000));

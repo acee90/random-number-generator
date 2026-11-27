@@ -60,8 +60,8 @@ describe("slot tuning motion", () => {
 		expectWinner(tuned);
 	});
 
-	it("reproduces the approved tap, regrip, and full-speed release trajectories", () => {
-		// Samples recorded from the tuning story at a 4 s coast and 0.6 s ease-out.
+	it("reproduces the tap, regrip, and full-speed release trajectories", () => {
+		// Default start speed of 13.5 slots/s, 4 s coast, and 0.6 s ease-out.
 		const tap = changeSpinDrive(
 			startSpinDrive(0, mode, 2),
 			false,
@@ -91,21 +91,21 @@ describe("slot tuning motion", () => {
 			798,
 		);
 		for (const [drive, at, position, speed] of [
-			[tap, 100, 2.9530926662347294, 9.428317518358977],
-			[tap, 1050, 9.32161545884503, 4.779788699928435],
-			[regrip, 190, 3.7698439265639667, 17.73516219417506],
-			[releaseAgain, 2260, 25.015642242300864, 4.83526515940929],
-			[full, 2800, 81.72741093754098, 28.060985001519718],
-			[full, 6299, 116.99999993314663, 0.00016411771933973857],
+			[tap, 100, 3.397594076284655, 13.710799517956206],
+			[tap, 1050, 12.506023869470868, 6.6807202991095105],
+			[regrip, 190, 4.5833885952600095, 26.160689293428057],
+			[releaseAgain, 2260, 34.74831559781002, 6.593747872895292],
+			[full, 2800, 89.85966296842591, 28.03421702333282],
+			[full, 6299, 124.99999993717738, 0.00015467167770836894],
 		] as const) {
 			const sample = sampleSpinDrive(drive, at, mode);
 			expect(sample.position).toBeCloseTo(position, 10);
 			expect(sample.speed).toBeCloseTo(speed, 10);
 		}
 		for (const [drive, stopAt, target, index, period] of [
-			[tap, 4050, 15, winner, count],
-			[releaseAgain, 4260, 29, winner, count],
-			[full, 6300, 117, 150, 798],
+			[tap, 4050, 20, winner, count],
+			[releaseAgain, 4260, 40, winner, count],
+			[full, 6300, 125, 150, 798],
 		] as const) {
 			expect(drive.stopAt).toBe(stopAt);
 			expect(sampleSpinDrive(drive, stopAt, mode)).toEqual({
