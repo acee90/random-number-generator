@@ -152,8 +152,7 @@ export default function RoomGameStage({
 	const resultDisabled = !canNext || nextPending || voting.pending;
 	const primarySpinInput = Boolean(
 		onDrivePress &&
-			(hostCanDrive ||
-				(hostCanStart && (wheel?.candidates.length ?? 0) > 1)),
+			(hostCanDrive || (hostCanStart && (wheel?.candidates.length ?? 0) > 1)),
 	);
 	const redrawSpinInput = Boolean(
 		onDrivePress &&
@@ -372,7 +371,7 @@ export default function RoomGameStage({
 			phase,
 			caption,
 			busy,
-			disabled: !hostCanStart && (!hostCanDrive || !driveCanRegrip),
+			disabled: !hostCanStart && !hostCanDrive,
 		},
 		result,
 		hover,
@@ -455,9 +454,7 @@ export default function RoomGameStage({
 								driveClockOffset={clockOffset}
 								driveAdjustment={driveAdjustment}
 								motionOff={reducedMotion}
-								holdHintId={
-									primarySpinInput ? holdHintId : undefined
-								}
+								holdHintId={primarySpinInput ? holdHintId : undefined}
 								drawButtonProps={primaryButtonProps}
 							/>
 						</div>
