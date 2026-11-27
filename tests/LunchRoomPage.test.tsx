@@ -27,7 +27,6 @@ import { getWheelRotation, sampleLunchPlaces } from "../src/lib/lunch";
 import { lunchHistoryKey } from "../src/lib/lunchHistory";
 import type { RoomDraw, RoomSnapshot } from "../src/lib/lunchRoom";
 import {
-	canRegripSpinDrive,
 	changeSpinDrive,
 	getSpinDeadline,
 	getSpinLanding,
@@ -420,7 +419,7 @@ describe("current result feedback and frozen history", () => {
 	it.each([
 		{ mode: "wheel" as const, buttonName: "룰렛 돌리기" },
 		{ mode: "slot-v1" as const, buttonName: "슬롯 돌리기" },
-	])("disables regripping once $mode slows below the speed gate", ({
+	])("keeps regripping enabled until $mode stops", ({
 		mode,
 		buttonName,
 	}) => {
@@ -448,74 +447,19 @@ describe("current result feedback and frozen history", () => {
 			viewMode: mode,
 			draw: braking,
 		});
-		const view = render(<LunchRoomPage roomId={roomId} />);
+		render(<LunchRoomPage roomId={roomId} />);
 		const oldStop = getSpinDeadline(braking);
 		const spinButton = screen.getByRole("button", { name: buttonName });
 		expect(spinButton.matches(":disabled")).toBe(false);
-		let gateAt = braking.drive.at;
-		while (gateAt < oldStop && canRegripSpinDrive(braking.drive, gateAt, mode))
-			gateAt++;
-		expect(gateAt).toBeLessThan(oldStop);
-		act(() => vi.advanceTimersByTime(gateAt - Date.now()));
+		const lateRegripAt = oldStop - 1;
+		act(() => vi.advanceTimersByTime(lateRegripAt - Date.now()));
+		expect(spinButton.matches(":disabled")).toBe(false);
 		fireEvent.click(spinButton);
-		expect(room.setDriveHeld).not.toHaveBeenCalled();
-		act(() => vi.advanceTimersByTime(16));
-		expect(spinButton.matches(":disabled")).toBe(true);
-		expect(
-			screen.queryByRole("heading", {
-				name: active.candidates[active.winnerIndex].name,
-			}),
-		).toBeNull();
-
-		const reaccelerated = {
-			...active,
-			drive: changeSpinDrive(
-				braking.drive,
-				true,
-				2,
-				gateAt,
-				mode,
-				landing,
-				period,
-			),
-		};
-		expect(reaccelerated.drive).toBe(braking.drive);
-		updateRoom(view, {
-			snapshot: snapshot({
-				status: "drawing",
-				viewMode: mode,
-				draw: reaccelerated,
-			}),
-		});
-		expect(
-			screen.getByRole("button", { name: buttonName }).matches(":disabled"),
-		).toBe(true);
-		const final = {
-			...active,
-			drive: changeSpinDrive(
-				reaccelerated.drive,
-				false,
-				3,
-				Date.now(),
-				mode,
-				landing,
-				period,
-			),
-		};
-		updateRoom(view, {
-			snapshot: snapshot({ status: "drawing", viewMode: mode, draw: final }),
-		});
-		act(() => vi.advanceTimersByTime(getSpinDeadline(final) - Date.now()));
-		expect(screen.queryByRole("button", { name: "좋아요 투표" })).toBeNull();
-		updateRoom(view, {
-			snapshot: snapshot({ status: "result", viewMode: mode, draw: final }),
-		});
-		expect(
-			screen.getByRole("heading", {
-				name: active.candidates[active.winnerIndex].name,
-			}),
-		).toBeTruthy();
-		expect(screen.getByRole("button", { name: "좋아요 투표" })).toBeTruthy();
+		expect(room.setDriveHeld).toHaveBeenCalledWith(
+			active.id,
+			true,
+			expect.any(Number),
+		);
 	});
 
 	it("switches the finished board without replacing the round and starts a redraw from that result", () => {

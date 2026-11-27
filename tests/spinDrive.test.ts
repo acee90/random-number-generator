@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-	canRegripSpinDrive,
 	changeSpinDrive,
 	getDefaultSpinTuning,
 	getDefaultTapBoost,
@@ -361,7 +360,7 @@ describe("continuous spin", () => {
 	it.each([
 		"wheel",
 		"slot-v1",
-	] as const)("rejects a regrip after speed falls below the gate in %s", (mode) => {
+	] as const)("allows regripping until the drive reaches its stop time in %s", (mode) => {
 		const [landing, period] = mode === "wheel" ? [0.82, 1] : [84, 107];
 		const coast = changeSpinDrive(
 			startSpinDrive(0, mode),
@@ -373,14 +372,19 @@ describe("continuous spin", () => {
 			period,
 		);
 		if (coast.stopAt === undefined) throw Error("Expected a stop time");
-		let cutoff = coast.at;
-		while (cutoff < coast.stopAt && canRegripSpinDrive(coast, cutoff, mode))
-			cutoff++;
-		expect(cutoff).toBeLessThan(coast.stopAt);
-		expect(canRegripSpinDrive(coast, cutoff - 1, mode)).toBe(true);
-		expect(canRegripSpinDrive(coast, cutoff, mode)).toBe(false);
+		const lateRegrip = changeSpinDrive(
+			coast,
+			true,
+			2,
+			coast.stopAt - 1,
+			mode,
+			landing,
+			period,
+		);
+		expect(lateRegrip).not.toBe(coast);
+		expect(lateRegrip).toMatchObject({ held: true, sequence: 2 });
 		expect(
-			changeSpinDrive(coast, true, 2, cutoff, mode, landing, period, 0),
+			changeSpinDrive(coast, true, 2, coast.stopAt, mode, landing, period),
 		).toBe(coast);
 		expect(isSpinDrive(coast)).toBe(true);
 	});

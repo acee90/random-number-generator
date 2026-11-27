@@ -14,11 +14,7 @@ import { type FeedbackOptions, useRoomFeedback } from "@/hooks/useRoomFeedback";
 import { useSpinInput } from "@/hooks/useSpinInput";
 import { type DrawView, defaultDrawView, readDrawView } from "@/lib/drawView";
 import type { RoomDraw } from "@/lib/lunchRoom";
-import {
-	canRegripSpinDrive,
-	getSpinDeadline,
-	type SpinDrive,
-} from "@/lib/spinDrive";
+import { getSpinDeadline, type SpinDrive } from "@/lib/spinDrive";
 import DrawPresentationControls from "./DrawPresentationControls";
 import type { SpinAdjustment } from "./game-art/spin-motion";
 import { LunchWheel } from "./LunchWheel";
@@ -144,29 +140,6 @@ export default function RoomGameStage({
 	const focusPrimary = useRef(false);
 	const activeDrive = draw ? undefined : (drive ?? round?.drive);
 	const phase = activeDrive ? "spinning" : (wheel?.phase ?? "idle");
-	const [gatedDrive, setGatedDrive] = useState<SpinDrive | null>(null);
-	const driveCanRegrip =
-		!activeDrive ||
-		(gatedDrive !== activeDrive &&
-			canRegripSpinDrive(activeDrive, Date.now() + clockOffset, mode));
-	useEffect(() => {
-		if (!activeDrive || activeDrive.held) {
-			setGatedDrive(null);
-			return;
-		}
-		let timer: ReturnType<typeof setTimeout> | undefined;
-		const checkSpeed = () => {
-			if (!canRegripSpinDrive(activeDrive, Date.now() + clockOffset, mode)) {
-				setGatedDrive(activeDrive);
-				return;
-			}
-			timer = setTimeout(checkSpeed, 16);
-		};
-		checkSpeed();
-		return () => {
-			if (timer !== undefined) clearTimeout(timer);
-		};
-	}, [activeDrive, clockOffset, mode]);
 	const hostCanStart = Boolean(
 		wheel &&
 			isHost &&
@@ -176,11 +149,10 @@ export default function RoomGameStage({
 			phase === "idle",
 	);
 	const hostCanDrive = isHost && canDrive && Boolean(activeDrive);
-	const regripHintVisible = hostCanDrive && !driveCanRegrip;
 	const resultDisabled = !canNext || nextPending || voting.pending;
 	const primarySpinInput = Boolean(
 		onDrivePress &&
-			((hostCanDrive && driveCanRegrip) ||
+			(hostCanDrive ||
 				(hostCanStart && (wheel?.candidates.length ?? 0) > 1)),
 	);
 	const redrawSpinInput = Boolean(
@@ -195,12 +167,6 @@ export default function RoomGameStage({
 	const buttonProps = useSpinInput({
 		enabled: primarySpinInput || redrawSpinInput,
 		onPress: (focus) => {
-			if (
-				!draw &&
-				activeDrive &&
-				!canRegripSpinDrive(activeDrive, Date.now() + clockOffset, mode)
-			)
-				return false;
 			if (!onDrivePress?.(Boolean(draw))) return false;
 			focusPrimary.current = focus && Boolean(draw);
 			return true;
@@ -222,13 +188,9 @@ export default function RoomGameStage({
 			: { onClick: onRedraw }
 		: primaryButtonProps;
 	const holdHintId = `${id}-hold`;
-	const motionHint = (primarySpinInput ||
-		redrawSpinInput ||
-		regripHintVisible) && (
+	const motionHint = (primarySpinInput || redrawSpinInput) && (
 		<p id={holdHintId} className="sr-only">
-			{regripHintVisible
-				? "회전 속도가 낮아져 다시 가속할 수 없습니다. 결과가 공개될 때까지 기다려 주세요."
-				: "길게 누르거나 연달아 누르면 빨라집니다. 놓으면 천천히 멈춥니다. 속도가 시작 속도의 절반 이하가 되면 다시 누를 수 없습니다."}
+			길게 누르거나 연달아 누르면 빨라집니다. 놓으면 천천히 멈춥니다.
 		</p>
 	);
 	const deadline = activeDrive
@@ -291,7 +253,7 @@ export default function RoomGameStage({
 	const showNext = isHost && !voting.readOnly;
 	const spinDisabled = result
 		? !showNext || !canRedraw || resultDisabled
-		: !hostCanStart && (!hostCanDrive || !driveCanRegrip);
+		: !hostCanStart && !hostCanDrive;
 	const resultActions =
 		!wheel && result && showNext ? (
 			<RoomResultActions
@@ -365,9 +327,7 @@ export default function RoomGameStage({
 							driveClockOffset={clockOffset}
 							driveAdjustment={driveAdjustment}
 							holdHintId={
-								primarySpinInput || redrawSpinInput || regripHintVisible
-									? holdHintId
-									: undefined
+								primarySpinInput || redrawSpinInput ? holdHintId : undefined
 							}
 							drawButtonProps={spinButtonProps}
 							countdown={countdown}
@@ -496,7 +456,7 @@ export default function RoomGameStage({
 								driveAdjustment={driveAdjustment}
 								motionOff={reducedMotion}
 								holdHintId={
-									primarySpinInput || regripHintVisible ? holdHintId : undefined
+									primarySpinInput ? holdHintId : undefined
 								}
 								drawButtonProps={primaryButtonProps}
 							/>
@@ -528,8 +488,7 @@ export default function RoomGameStage({
 							aria-describedby={
 								[
 									wheel.errorId,
-									(redrawSpinInput || primarySpinInput || regripHintVisible) &&
-										holdHintId,
+									(redrawSpinInput || primarySpinInput) && holdHintId,
 								]
 									.filter(Boolean)
 									.join(" ") || undefined

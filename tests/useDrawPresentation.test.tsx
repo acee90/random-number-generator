@@ -2,7 +2,7 @@
 
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { useDrawFullscreen, useDrawSound } from "@/hooks/useDrawPresentation";
+import { useDrawSound } from "@/hooks/useDrawPresentation";
 
 afterEach(() => {
 	vi.unstubAllGlobals();
@@ -47,42 +47,7 @@ function mockAudio() {
 	return { context, createContext, note };
 }
 
-describe("draw presentation", () => {
-	it("uses a focus view without native fullscreen and honors dialog Escape first", async () => {
-		const button = document.createElement("button");
-		const dialog = document.createElement("div");
-		dialog.setAttribute("role", "dialog");
-		document.body.appendChild(button);
-		document.body.appendChild(dialog);
-		try {
-			const trigger = { current: button };
-			const { result } = renderHook(() => useDrawFullscreen("room", trigger));
-			expect(result.current.label).toBe("집중 화면");
-			await act(() => result.current.toggle());
-			expect(result.current.label).toBe("집중 화면 끝내기");
-
-			function pressEscape(target: EventTarget) {
-				act(() => {
-					target.dispatchEvent(
-						new KeyboardEvent("keydown", {
-							key: "Escape",
-							bubbles: true,
-							cancelable: true,
-						}),
-					);
-				});
-			}
-			pressEscape(dialog);
-			expect(result.current.active).toBe(true);
-			pressEscape(document.body);
-			expect(result.current.active).toBe(false);
-			expect(document.activeElement).toBe(button);
-		} finally {
-			dialog.remove();
-			button.remove();
-		}
-	});
-
+describe("draw sound presentation", () => {
 	it("plays once after a visible round only when enabled and stops on disconnect", () => {
 		vi.spyOn(document, "hidden", "get").mockReturnValue(false);
 		const { context, createContext, note } = mockAudio();

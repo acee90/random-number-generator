@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-	canRegripSpinDrive,
 	changeSpinDrive,
 	getSpinSlotIndex,
 	sampleSpinDrive,
@@ -274,12 +273,15 @@ describe("slot tuning motion", () => {
 		expectWinner(release(grip, at + 1400));
 	});
 
-	it("rejects a late regrip at the production speed gate", () => {
+	it("allows a late regrip until the tuned reel reaches its stop time", () => {
 		const tuning = { ...getDefaultSlotTuning(), tapBoost: 0 };
 		const coast = release(startTunedSlotDrive(0, 0, tuning), 3000);
 		const gripAt = (coast.stopAt ?? 0) - 1;
 		const grip = changeTunedSlotDrive(coast, true, gripAt, winner, count);
-		expect(canRegripSpinDrive(coast, gripAt, mode)).toBe(false);
-		expect(grip).toBe(coast);
+		expect(grip).not.toBe(coast);
+		expect(grip.held).toBe(true);
+		expect(
+			changeTunedSlotDrive(coast, true, coast.stopAt ?? 0, winner, count),
+		).toBe(coast);
 	});
 });
