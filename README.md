@@ -1,238 +1,120 @@
 # 점메추 · Jeommechu
 
-**[jeommechu.dev](https://jeommechu.dev)** — 친구를 링크로 초대해 후보를 모으고, 룰렛으로 점심 메뉴나 모임 활동을 정하는 서비스입니다.
-
-TanStack Start · React · Cloudflare Workers · Durable Objects · PartyServer/PartySocket으로 구현했습니다.
-
-**2026-11-16 로컬 구현:** 빈 방에서 후보 만들기, 목록 편집·게임 필터, 개인 목록 저장·불러오기·삭제와 아래 lifecycle을 실제 클라이언트·서버에 연결했습니다. 로컬 구현·검증을 완료했으며 운영 배포 전입니다. 커밋·푸시 및 진행 상태는 [후보 목록 #4](https://github.com/acee90/random-number-generator/issues/4), [lifecycle #46](https://github.com/acee90/random-number-generator/issues/46), [공통 UI #44](https://github.com/acee90/random-number-generator/issues/44)와 [로드맵 #7](https://github.com/acee90/random-number-generator/issues/7), 최종 검증은 [lifecycle 구현 상태](docs/features/game-screen-lifecycle.md#0-실제-구현-상태--2026-11-16-로컬)에서 관리합니다.
-
-## 이용 방법
-
-1. 홈에서 **방 만들기**를 선택합니다.
-2. 방 이름과 닉네임을 입력한 뒤 **후보 준비**로 이동합니다. 추첨방과 같은 편집기에서 후보를 추가하고 분류나 제외 조건을 정합니다. **방 만들기**를 누르면 룰렛 대기 화면으로 자동 입장합니다.
-3. 초대 링크를 공유합니다. 참가자는 닉네임 확인 후 직접 입장합니다.
-4. 방에서 **후보 보기**로 이번 추첨 대상을 확인합니다. 후보나 필터를 바꾸려면 **후보 편집**을 열고, **후보 추천받기**로 참가자 접수를 열 수 있습니다. 편집을 **마감**하면 룰렛 대기로 돌아갑니다. 방 이름은 우상단 **방 설정**에서 변경합니다.
-5. 방장이 룰렛을 시작하면 참가자가 같은 회차와 결과를 함께 봅니다.
-6. 참가자는 현재 결과에 **좋아요 / 싫어요**를 남깁니다. 방장은 **다음 게임 대기 화면으로** 돌아온 뒤 다음 추첨을 별도로 시작합니다.
-
-방 만들기에서 정한 닉네임으로 자동 입장하는 동안에는 **입장 준비 중…** 화면을 표시합니다. 일반 초대 링크에서는 닉네임을 확인한 뒤 직접 입장하며, 자동 입장이 거절되면 입력 화면에서 다시 정할 수 있습니다.
-
-혼자 사용할 때는 [단독 룰렛](https://jeommechu.dev/solo)을 이용할 수 있습니다.
+친구를 링크로 초대해 점심 메뉴나 모임 활동 후보를 모으고, 룰렛이나 슬롯머신으로 함께 정하는 웹 서비스입니다. [공동방 만들기](https://jeommechu.dev/create) · [혼자 추첨](https://jeommechu.dev/solo)
 
 ## 주요 기능
 
-### 함께 보는 추첨방
+- **공동 추첨.** 방장이 후보를 준비하고 링크를 공유하면 참가자는 닉네임으로 입장합니다. 방장은 후보 추천을 받아 마감하고, 참가자들은 같은 회차와 결과를 보며 채팅하고 좋아요·싫어요를 남깁니다.
+- **룰렛과 슬롯머신.** 버튼을 누르면 가속하고 손을 떼면 감속합니다. 정지 전에 다시 누르면 같은 회차에서 가속하면서 당첨 후보를 다시 뽑습니다. 중복 제외, 집중 화면, 선택형 효과음을 지원합니다.
+- **후보 준비.** 직접 입력하거나 기본·개인 목록을 불러올 수 있습니다. 주변 음식점 검색에서 네이버 지도와 전국 일반음식점 공공데이터를 사용해 업소나 업종을 후보로 추가합니다. 위치 권한을 거부하면 선정릉역에서 시작합니다.
+- **기록과 복귀.** 당첨 내역에서 후보 변경 전 기록까지 볼 수 있습니다. 공동방은 생성 후 24시간 동안 재입장할 수 있으며, 방장이 종료한 뒤에도 기존 참가자는 원래 만료 전까지 기록을 조회하고 TXT로 내보낼 수 있습니다.
+- **혼자 추첨.** 활성 방은 탭에 저장하며 이전 추첨과 개인 후보 목록은 같은 브라우저에서 다시 열 수 있습니다.
 
-- 방 생성·링크 초대·실시간 룰렛과 채팅, 방장 전용 전체 편집·접수 관리·추첨 시작
-- 닉네임 1~12자, 입력 중 중복 확인·확인 중 표시, 입장 후 이름 변경
-- 내 메시지는 오른쪽, 다른 참가자는 왼쪽에 표시하고 입장·퇴장·이름 변경·추첨 알림 제공
-- 참가자 온라인·5분 이상 자리비움·오프라인 상태와 재접속 지원
-- 대기에는 큰 룰렛, 접수·목록 확인에는 후보, 종료 후에는 결과를 보여주는 단계별 화면
-- 접수 중 참가자 후보 추천·확인 후 자기 추천 삭제, 방장의 접수 종료·재개·즉시 마감
-- 방 생성 전 후보 준비와 기본·개인 목록 불러오기, 같은 브라우저의 개인 사본 저장·삭제
-- 후보 준비 화면의 목록 편집·게임 필터와 읽기 전용 대기 조회, 개수 제한 없는 임의 후보·선택 자유 분류·안정된 ID·초안 충돌 보호
-- 후보와 독립된 우상단 방 설정
-- 게임 사이 중복 제외 변경·초기화 확인과 룰렛 옆 제외 목록
-- 회차별 후보·확률·참가자·시각·난수 출처 기록과 복사
-- 작은 화면, 키보드 조작과 동작 줄이기 설정 지원
+## 아키텍처
 
-방은 **생성 후 24시간** 유지됩니다. 방장이나 전원이 나가도 즉시 삭제되지 않으며 재입장해도 만료 시각은 연장되지 않습니다. 최대 30명, 최근 채팅·시스템 메시지 100개, 확정 결과 20개와 현재 회차를 보관하고 만료되면 방 데이터를 삭제합니다.
+React·TanStack Start 앱을 Cloudflare Workers에서 실행하고, 공동방은 방마다 하나의 SQLite 기반 Durable Object가 관리합니다. 브라우저는 PartySocket으로 방에 연결하며, 확정된 결과와 회전 데이터를 PixiJS 보드에서 표시합니다. 혼자 추첨과 공동방은 후보·추첨 규칙을 공유합니다.
 
-접수 종료는 목록에 머물고 마감은 즉시 룰렛 대기로 돌아옵니다. 같은 목록이면 접수·마감을 반복할 필요가 없습니다. 중복 제외 ON 추첨은 당첨자를 누적하고, OFF 추첨 성공은 이전 제외 목록을 이번 당첨자 1개로 바꿉니다. 기존 내역을 지우는 OFF 추첨과 수동 초기화는 먼저 확인합니다. 옵션을 OFF로 바꾸기만 해서는 내역을 지우지 않습니다. Ready와 추첨 전 확률 투표는 이번 구현에 포함하지 않았습니다.
+| 문서 | 내용 |
+| --- | --- |
+| [C4 다이어그램](docs/architecture/c4.md) | 시스템 컨텍스트, 컨테이너, 공동방 컴포넌트, 재가속 코드 흐름 |
+| [arc42 아키텍처](docs/architecture/arc42.md) | 런타임, 저장·권한 경계, 배포, 설계 결정, 품질 요구 |
+| [공동방](docs/lunch-rooms.md) | 방 수명, WebSocket 계약, 충돌 처리와 결과 보관 |
+| [운영 확인과 복구](docs/release-runbook.md) | 미리보기, 운영 확인, Worker 버전 대조와 롤백 |
 
-상단에는 방 제목·연결 상태·인원만 간결하게 표시하고 생성·종료 시각은 **방 정보**에서 확인합니다. **채팅** 헤더를 눌러 접거나 펼칠 수 있으며 입력 초안과 새 메시지를 유지합니다. 작은 화면에서는 접힌 채팅이 헤더 높이만 차지하고 추첨·결과 공간이 늘어납니다.
+## 인프라 맵
 
-### 현재 결과의 up/down 투표
+```mermaid
+flowchart TD
+    github["GitHub 저장소"]
+    builds["Cloudflare Workers Builds"]
+    preview["PR 미리보기<br/>미리보기별 DO · 미리보기용 KV"]
+    browser["사용자 브라우저<br/>개인방·목록·이전 추첨을 로컬에 저장"]
+    maps["네이버 지도<br/>SDK · 지도 타일"]
+    entropy["ANU Quantum Numbers · Random.org"]
 
-- **추첨 시작 당시 입장한 참가자만** 현재 완료된 결과에 회차별 한 번 투표할 수 있습니다. 추첨 시작 후 들어온 사람은 다음 회차부터 참여하며, 원래 참가자는 재입장해도 자격과 첫 표를 유지합니다. 제출 후 취소·변경할 수 없습니다.
-- 별도의 투표 시간제한은 없습니다. 방장은 투표하지 않고 실시간 집계를 확인합니다.
-- 투표 당시 이름·결과 공개 후 반응 시간과 전체 선착순 세 명의 메달을 표시합니다. 반응 시간에는 네트워크 지연이 포함됩니다.
-- 방장이 **다음 게임 대기 화면으로**를 누르면 결과와 투표를 확정 기록으로 고정하고, 모두 다음 추첨 대기 화면으로 이동합니다. 다음 룰렛은 방장이 별도로 시작합니다. 과거 기록에는 투표할 수 없고 내용도 바뀌지 않습니다. 다음 추첨 준비가 실패해도 이전 기록을 다시 열지 않습니다.
-- 같은 참가자의 재입장·닉네임 변경·다중 연결·서버 재시작 후에도 첫 표를 유지합니다. 투표 자격은 추첨 시작 때의 참가 명단으로 확인합니다.
-- 큰 투표 버튼에 내 선택을 표시합니다. 투표 현황은 PC에서 결과 오른쪽, 좁은 화면에서는 아래에 표시합니다. 좋아요·싫어요 팀을 좌우 반반으로 나누고 팀원·전체 반응 속도 순위·시간을 바로 표시합니다. 새 표가 승인되면 해당 편의 아이콘과 숫자에 팝 효과를 표시하며, 결과 복사·추첨 정보 버튼은 제공하지 않습니다. 투표가 다음 추첨의 확률을 바꾸거나 자동 재추첨을 실행하지는 않습니다.
+    subgraph cloudflare["Cloudflare 운영 · jeommechu.dev"]
+        worker["jeommechu Worker<br/>TanStack Start SSR · HTTP API · WebSocket 진입"]
+        assets["Worker Static Assets<br/>JS/CSS · 음식점 공공데이터 색인"]
+        room["LunchRooms · LunchRoomServer<br/>방마다 하나의 SQLite Durable Object"]
+        kv["SEED_POOL · Workers KV<br/>보조 시드 풀 조회·리필"]
+    end
 
-참가자 구분은 같은 브라우저에서 공유하는 방별 비공개 증명을 사용합니다. 다른 브라우저나 저장소 삭제까지 같은 사람으로 판별하는 계정 기반 인증은 제공하지 않습니다. 방장 권한도 저장된 별도 증명으로 복원하며 자동 승계하지 않습니다.
+    github -->|커밋 푸시| builds
+    builds -->|PR 브랜치| preview
+    builds -->|main 배포| worker
+    builds -->|main 배포| assets
+    browser -->|HTTPS · WSS| worker
+    browser -->|번들 · 음식점 색인| assets
+    browser -->|지도 표시| maps
+    worker -->|방 UUID로 요청 전달| room
+    worker -->|풀 관리 API| kv
+    worker -->|개인방·도구 난수| entropy
+    room -->|공동방 난수 사전 요청| entropy
+```
 
-### 단독 룰렛과 음식점 목록
+| 운영 항목 | 설정과 역할 |
+| --- | --- |
+| 공동방 저장 | `LunchRooms`의 각 객체가 방 상태·채팅·회차를 저장합니다. 생성 후 24시간이 지나면 방 데이터를 정리합니다. |
+| 환경 분리 | 로컬 DO·KV는 `.wrangler/`에 저장합니다. PR 미리보기는 운영과 별도의 DO와 KV를 사용합니다. |
+| 설정·인증 | [wrangler.jsonc](wrangler.jsonc)에서 Worker 바인딩과 마이그레이션을 관리합니다. 운영 난수 인증 키는 Worker secrets, 로컬 공유 설정은 Infisical의 `dev` 환경에서 관리합니다. |
+| 관측 | Workers Observability와 트레이스를 사용합니다. 빌드 결과, 운영 트래픽의 활성 버전과 스모크 검사 절차는 [운영 런북](docs/release-runbook.md)에 있습니다. |
 
-기본 후보는 제공받은 회사 주변 음식점 엑셀의 **107곳·11개 분류**입니다. 음식 분류와 개별 후보를 골라 이름이 표시된 룰렛으로 추첨하고, 최근 20개의 개인 기록을 브라우저에 보관합니다.
-
-거리 값은 엑셀에 기재된 회사 기준 거리이며 현재 기기 위치에서 측정하지 않습니다. 실시간 주변 검색·단독 룰렛의 커스텀 목록·실제 엑셀 업로드/내보내기는 후속 개발 항목입니다. 공동 추첨방의 임의 후보 편집·추천과 개인 목록 연결은 위 로컬 구현 범위입니다. 새 방에는 이 기본 목록을 자동으로 넣지 않고 **목록 불러오기**에서 선택합니다.
-
-## 경로
+## 주요 경로
 
 | 경로 | 기능 |
 | --- | --- |
-| `/` | 방 만들기·혼자 추첨 중 시작 방식 선택 |
-| `/create` | 방 이름·닉네임 입력, 후보 준비와 새 방 생성 |
-| `/lunch-room/<UUID>` | 닉네임 입장·공동 룰렛·채팅·투표·결과 기록 |
-| `/solo` | 같은 방 만들기 화면에서 개인 방 정보 입력·후보 준비 |
-| `/solo/<UUID>` | 현재 탭에 보관하는 개인 룰렛·투표·결과 기록 |
-| `/lunch` | 메인(`/`)으로 이동 |
-| `/tools?tool=number` | 랜덤 정수 생성 |
-| `/tools?tool=lotto` | 로또 6/45 번호 생성 |
-| `/tools?tool=pension` | 연금복권 720+ 번호 생성 |
+| `/` | 공동방·혼자 추첨 시작, 내 후보 목록 |
+| `/create` | 방 정보 입력, 후보 준비, 공동방 생성 |
+| `/lunch-room/<UUID>` | 공동 추첨, 채팅, 결과 피드백과 기록 |
+| `/solo`, `/solo/<UUID>` | 개인 방 준비와 추첨 |
+| `/lunch` | 홈으로 이동 |
+| `/tools?tool=number`, `/tools?tool=lotto`, `/tools?tool=pension` | 랜덤 정수, 로또 6/45, 연금복권 720+ |
 
-상단 메뉴에는 점메추만 표시합니다. 기존 번호 도구는 직접 주소로 사용할 수 있으며 검색 색인에서 제외합니다. 방 만들기와 추첨방도 검색 색인에서 제외하고, 메인·단독 룰렛에는 `jeommechu.dev` 기준 canonical·Open Graph·공유 이미지를 제공합니다. 홈과 생성 화면을 나누는 레이아웃 작업·진행 상태는 [#34](https://github.com/acee90/random-number-generator/issues/34)에서 관리합니다.
+## 로컬 개발
 
-번호 도구에는 범위·중복·정렬 설정, 로또 고정/제외 번호와 게임 간 분산, 연금복권 조 선택, 개별/전체 복사와 브라우저 기록이 남아 있습니다. 복권 번호를 선택하는 도구이며 당첨 예측이나 구매 기능은 없습니다.
+Node.js 22.12 이상과 npm을 사용합니다.
 
-## 난수 출처
-
-다음 순서로 사용 가능한 난수 출처를 선택합니다.
-
-1. **ANU Quantum Numbers** — API 키가 있을 때 양자 난수 요청
-2. **Random.org** — 대기 잡음 기반 난수 요청
-3. **서버 Web Crypto CSPRNG** — 외부 출처를 사용할 수 없을 때 암호학적 난수 생성
-
-결과에는 실제 사용한 출처를 표시하고, 여러 출처를 사용한 요청은 혼합으로 표시합니다. 범위 변환에는 rejection sampling을 사용해 편향을 제거합니다. 외부 출처를 사용할 수 없으면 CSPRNG로 대체합니다. 기존 KV 시드 풀은 진단용이며 실제 추첨에서는 소비하지 않습니다.
-
-공동 추첨방은 방장이 대기 중일 때 시드를 미리 받아 5분마다 갱신합니다. 회차마다 별도의 난수 값을 소비합니다. 준비된 값이 없으면 서버 Web Crypto로 바로 추첨합니다. 구현 상태는 [방 만들기와 시드 준비 이슈 #92](https://github.com/acee90/random-number-generator/issues/92)에서 관리합니다.
-
-## 로컬 실행
-
-Node.js 22 계열(22.12 이상)과 npm을 사용합니다. 저장소 루트에서 실행합니다.
-
-```powershell
+```bash
 npm ci
-Copy-Item .env.example .env.local
-# Infisical CLI에 한 번 로그인한 뒤 실행합니다.
-infisical login
-npm run cf-typegen
-npm run dev
+npm run dev:plain
 ```
 
-`npm run dev`는 Infisical의 점메추 프로젝트 `dev` 환경에서 키를 주입한 뒤 서버를 시작합니다. 일반 로컬 환경으로 실행하려면 `npm run dev:plain`을 사용하고 필요한 키를 `.env.local`에 입력하세요. 개발 주소는 **[localhost:3000](http://localhost:3000)**입니다.
+[localhost:3000](http://localhost:3000)에서 접속합니다. 외부 설정을 추가하려면 `.env.example`을 `.env.local`로 복사하고 필요한 값을 채웁니다. `.dev.vars`를 사용할 경우 Cloudflare 로컬 런타임에서 그 파일이 우선합니다. Infisical로 키를 받으려면 CLI에 로그인한 뒤 `npm run dev`를 실행합니다.
 
 | 환경 변수 | 용도 |
 | --- | --- |
-| `ANU_API_KEY` | [ANU Quantum Numbers](https://quantumnumbers.anu.edu.au/) 키. 비어 있으면 ANU를 건너뜁니다. |
-| `RANDOM_ORG_API_KEY` | [Random.org](https://api.random.org/api-keys) 키. 있으면 JSON-RPC API, 없으면 공개 HTTP API를 사용합니다. |
-| `RANDOM_ORG_HASHED_API_KEY` | 기존 설정 호환용. 현재 난수 요청 인증에는 사용하지 않습니다. |
-| `VITE_NAVER_MAPS_KEY_ID` | 네이버 Web Dynamic Map 공개 Client ID. `npm run dev` 실행 시 Infisical `dev` 환경에서 가져옵니다. |
+| `ANU_API_KEY` | 서버의 ANU Quantum Numbers 인증. 값이 없으면 ANU 호출을 건너뜁니다. |
+| `RANDOM_ORG_API_KEY` | 서버의 Random.org JSON-RPC 인증. 값이 없으면 공개 HTTP API를 사용합니다. |
+| `VITE_NAVER_MAPS_KEY_ID` | 네이버 지도 Web Dynamic Map의 공개 Client ID. 로컬에서는 Vite 설정으로, 운영에서는 Worker 런타임 설정으로도 제공할 수 있습니다. |
 
-ANU·Random.org 키는 서버에서만 읽고, 네이버 지도 Client ID는 지도 SDK가 브라우저에서 사용합니다. `.env.local`과 `.dev.vars`는 Git에서 제외됩니다. **`.dev.vars` 파일이 있으면 `.env.local`을 읽지 않으므로** 한 방식만 사용합니다. 키를 바꾸면 개발 서버를 다시 시작합니다. Infisical 키 주입은 CLI 계정 로그인이 필요하지만 로컬 개발에 Cloudflare 인증 토큰은 필요하지 않습니다.
+외부 난수가 준비되지 않으면 Web Crypto를 사용합니다. 주변 음식점의 이름·업종·좌표는 `public/nearby-restaurants/`에 배포된 색인에서 읽습니다. 데이터 생성 방식과 운영 검증 기록은 [주변 음식점 #10](https://github.com/acee90/random-number-generator/issues/10)에서 확인할 수 있습니다.
 
-로컬 KV와 Durable Object 저장소는 `.wrangler/` 아래에 생성됩니다. 로컬 방과 운영 방은 서로 별개입니다. 같은 브라우저의 여러 탭은 참가 정보를 공유하므로 방장·참가자를 따로 확인하려면 다른 브라우저나 별도 브라우저 프로필을 사용합니다.
+로컬 DO와 KV 저장소는 `.wrangler/` 아래에 있습니다. 공동방의 방장과 참가자를 독립적으로 확인하려면 서로 다른 브라우저 프로필을 사용합니다. Worker 바인딩을 바꾼 뒤에는 `npm run cf-typegen`으로 타입을 갱신합니다.
 
-## 공통 UI
+## 검사와 미리보기
 
-[shadcn/ui](https://ui.shadcn.com/docs)의 소스 공개 방식과 Radix 기반 컴포넌트를 사용합니다. 홈·방 만들기·입장·추첨방·단독 룰렛·번호 도구의 버튼, 입력, 라벨, 선택 상자와 확인창을 `src/components/ui/`에서 관리합니다. 테마 색상은 `src/styles.css`, 공통 조작부의 크기·테두리·포커스·상태는 `src/components/ui/primitives.css`에서 바꿉니다. 관련 작업: [#44](https://github.com/acee90/random-number-generator/issues/44).
-
-일반 버튼은 `Button`의 variant와 size를 사용합니다. 룰렛·투표·탭·번호 타일처럼 조작 모양 자체가 기능인 부분만 `plain`/`auto`로 기존 모양과 애니메이션을 유지합니다. 체크박스·라디오·범위 입력은 브라우저의 기본 폼 동작을 사용하고, PC의 비모달 기록 창은 채팅과 함께 조작하는 동작을 유지하기 위해 Radix Dialog를 직접 구성합니다.
-
-홈의 ‘방장과 참가자 화면 둘러보기’는 실제 방 화면을 캡처한 WebP를 사용합니다. 방 UI나 예시 후보(`src/data/homeRoomExample.ts`)가 바뀌면 `npm run capture:home`을 실행해 방장·참가자·결과의 데스크톱 및 모바일 이미지 6장을 함께 갱신합니다. 캡처는 설치된 Chrome을 사용하며 다른 Chromium을 쓰려면 `CHROME_PATH`에 실행 파일 경로를 지정합니다.
-
-## CORE 컴포넌트 미리보기
-
-[Storybook 작업 #31](https://github.com/acee90/random-number-generator/issues/31)은 **룰렛·투표처럼 재미와 조작감을 결정하는 CORE**만 다룹니다. 서버/API 키나 다중 브라우저 없이 화면과 반응을 확인합니다.
-
-```powershell
-npm run storybook
-```
-
-[로컬 Storybook](http://localhost:6006/)에서 다음 예제를 선택합니다.
-
-- **CORE / 룰렛 / 직접 돌려보기**: 실제 서비스와 같은 회전·7.2초 뒤 결과 공개·초기화. 후보 6/12/30/107곳, 준비 중·회전 중·멈춘 결과·방장 대기·애니메이션 끄기·모바일 예제도 제공합니다.
-- **CORE / 투표 / 직접 눌러보기**: 좋아요/싫어요 +1, 연속 투표 시작·멈춤, 내 선택, 초기화와 팝 효과를 확인합니다. 방장·이미 투표함·늦은 입장·재연결·전송 중·확정 기록·긴 이름/많은 팀원 상태도 선택할 수 있습니다.
-- **모바일 보기**: ‘모바일 · 직접 돌려보기/눌러보기’에서 실제 390px 화면을 확인합니다. 상단 화면 크기 메뉴에서 320px도 선택할 수 있습니다.
-
-‘직접 돌려보기/눌러보기’는 조작하는 놀이터이고, 나머지는 특정 상태를 고정한 검수용 예제입니다. 아래 Controls에서 권한·연결·후보 수 등을 바꿀 수 있습니다.
-
-Storybook은 **스코어시트 한 가지 스타일**만 관리합니다. 서비스의 실제 CSS와 컴포넌트를 그대로 사용하며, 비교용 시안·스타일 선택기·중복 페이지는 정리했습니다. [정리 작업 #38](https://github.com/acee90/random-number-generator/issues/38)에서 범위와 검증 결과를 관리합니다. CORE 룰렛9개·투표12개, 추첨방14개, 후보 목록 흐름4개로 총39개 예제를 제공합니다.
-
-**PAGES / 추첨방**은 방장(최초 빈 후보 만들기/후보 편집/대기/접수/목록 확인/결과), 참가자(편집 대기/대기/접수/투표), 모바일 방장/투표, 투표 응답 지연, 방 생성 후 입장 준비의 14개 예제입니다. 룰렛·결과·투표·채팅·후보 목록은 실제 `LunchRoomPage`를 사용합니다. PC 상단 조작부에서 다른 참가자의 표를 추가하거나 초기화할 수 있습니다. 모바일에서는 이 조작부를 숨기고 위쪽 추첨·투표와 아래쪽 채팅을 함께 표시하며 각각 스크롤할 수 있습니다. 가로 화면에서는 두 영역을 좌우로 배치합니다. **방 생성 후 입장 준비**는 입력창 없이 표시되는 자동 입장 진행 화면을 고정해서 확인하는 예제입니다. 관련 수정은 [#41](https://github.com/acee90/random-number-generator/issues/41)에서 관리합니다.
-
-‘투표 응답 지연’은 확인 응답을 2초 늦춰, 선택·표 수·내 명단의 즉시 반영을 확인하는 예제입니다. PC에서는 버튼 위치를 유지하고 모바일에서는 투표 직후 버튼을 접고 선택한 팀에 체크·‘내 선택’을 표시합니다. 확정 전에는 반응 시간과 순위를 만들지 않고, 서버 기록으로 교체합니다. 실패·연결 끊김·회차 변경 시 임시 표시는 되돌리며 확정된 표는 유지합니다.
-
-페이지 예제의 방 연결 훅은 `.storybook/vite.config.ts`에서만 `room-page-fixture.tsx`로 바꿉니다. 방 동기화·추첨·다음 게임·투표·채팅·닉네임·후보 적용은 예제 메모리에서 동작하며 새로고침하면 초기화됩니다. 실제 방·난수 API·서버 저장소는 사용하지 않습니다. 후보 개인 저장·불러오기·삭제 다이얼로그는 서비스와 같은 컴포넌트로 현재 Storybook 주소의 브라우저 저장소를 사용합니다. 출처 이름은 서비스와 같은 순수 표시 함수(`src/lib/randomSource.ts`)를 재사용합니다.
-
-예제 데이터와 조작 코드는 `stories/core/`에 두고, 실제 `RoomGameStage`, `RoomDrawFeedback` 및 `useRoomTimeline`을 재사용합니다. Storybook용 Vite 설정은 `.storybook/vite.config.ts`이며 Worker/서버 플러그인을 불러오지 않습니다. 서비스의 메뉴·경로나 배포 번들에는 예제를 추가하지 않습니다.
-
-**FLOW / 후보 목록 / 전체 흐름**은 커스텀 목록의 UI 검토용입니다. 현재 목록에서 **목록 리셋 → 새로 만들기 / 템플릿에서 가져오기 / 엑셀에서 가져오기 → 공통 편집 → 저장하고 사용** 순서로 확인합니다. 직접 입력한 목록과 템플릿 사본을 편집하고, 포함 여부를 바꾸고, 이름을 붙여 저장하거나 다시 불러올 수 있습니다. 편집 중 **전체 비우기**를 누르면 확인 후 후보만 지우고 목록 이름은 유지합니다. **다시 만들기**는 변경 중인 내용을 확인한 뒤 새 목록·템플릿·엑셀 준비 화면으로 돌아갑니다. 취소하면 현재 목록과 저장 원본을 유지합니다. 모바일 전체 흐름과 저장 실패 시 초안 유지 예제도 제공합니다.
-
-이 흐름의 저장·새로고침 복원은 실제로 동작하며, 로그인 없이 **같은 브라우저·같은 주소의 localStorage**에 보관합니다. 예제 전용 키(`jeommechu:storybook:candidate-lists:v1`)를 사용하므로 서비스의 참가 정보·추첨 기록과 분리됩니다. 브라우저 데이터 삭제나 다른 기기·주소에서는 복원되지 않습니다. 다른 화면에서 저장 목록이 바뀌거나 저장에 실패하면 덮어쓰지 않고 현재 초안을 유지합니다.
-
-**엑셀은 예제 데이터로 가져오기·오류 교정 흐름만 확인합니다. 실제 파일 선택·해석은 아직 제공하지 않습니다.** 이 FLOW 예제의 `CandidateListEditor`·개인 저장·템플릿은 독립 검토용으로 유지합니다. 실제 방의 빈 시작·공통 편집·게임 필터와 개인 목록 저장/불러오기/삭제는 [#4](https://github.com/acee90/random-number-generator/issues/4)·[#46](https://github.com/acee90/random-number-generator/issues/46) 범위에서 별도로 연결했습니다. 서비스는 `jeommechu:candidate-lists:v1`을 사용해 Storybook 저장본과 분리하며 현재 방·초안과 개인 사본을 독립적으로 보존합니다. 홈/solo 전체 라이브러리 연결과 [엑셀 #9](https://github.com/acee90/random-number-generator/issues/9)의 실제 파일 처리는 후속 범위입니다. 관련 FLOW 예제와 예제용 저장 도구는 `stories/candidate-lists/`에서 관리합니다.
-
-**FLOW / 후보 목록 / 방 생성 후 후보 수정**은 개인 목록과 모의 방 적용을 검토하는 기존 독립 예제입니다. 실제 방의 최신 lifecycle과 구분합니다. 방장이 대기 중 **목록 편집** 또는 **목록 리셋**으로 같은 편집기를 열고 **방에 적용**합니다. 1초의 모의 승인 전에는 공유된 후보·버전을 유지하고, 실패·재연결 중에는 초안을 보존합니다. 상단 예제 조작에서 추첨 중·투표 중·재연결·참가자·적용 실패를 바꿀 수 있습니다. 투표 중에는 **투표 종료하고 다음 게임**으로 대기 상태로 돌아온 뒤 편집하며, 이전 결과·투표 기록은 고정합니다.
-
-이 예제에서 **방에 적용**과 **내 목록에 저장**은 별개입니다. 브라우저 저장 없이 방의 모의 적용이 가능하고, 저장을 선택하면 개인 목록 원본과 다른 사본을 만듭니다. 이 FLOW 예제는 실제 참가자 연결·서버 승인을 사용하지 않습니다. 실제 방은 전체 후보 버전·권한·ACK를 검사하고 편집·접수·접수 종료 단계에서만 후보를 편집합니다. 결과에서는 먼저 명시 대기 복귀한 뒤 편집에 진입합니다. 위 예제의 투표 중 편집 잠금 시나리오는 기존 검토용입니다. 실제 방의 게임 필터도 후보 준비 단계에서만 변경하며 대기의 후보·옵션 보기는 읽기 전용입니다. 개인 저장 목록의 실제 연결 범위와 후속 작업은 #4에서 관리합니다.
-
-```powershell
-npm run build-storybook
-```
-
-정적 결과는 Git에서 제외한 `storybook-static/`에 생성됩니다. 외부 호스팅·자동 게시나 유료 시각 검사 서비스는 연결하지 않습니다.
-
-개발 의존성 유지 시: Storybook 10.6의 하위 문서 추출 도구가 오래된 `glob`을 요구하므로 `@storybook/react-vite`에 한정해 수정된 `@joshwooding/vite-plugin-react-docgen-typescript@^0.9.1`을 사용합니다. 자동 문서 추출은 끈 상태이며, Storybook의 상위 의존성이 수정되면 이 한정 override도 함께 검토합니다. 공식 참고: [스토리 작성](https://storybook.js.org/docs/writing-stories), [Controls](https://storybook.js.org/docs/essentials/controls).
-
-## 검사와 빌드
-
-```powershell
+```bash
 npm test
 npx tsc --noEmit
 npm run build
 npm run serve
 ```
 
-`npm run serve`는 빌드한 결과를 미리 봅니다. `npm run preview`는 빌드와 미리보기를 이어서 실행합니다. 바인딩을 변경하면 `npm run cf-typegen`으로 타입을 다시 생성합니다.
+- `npm run storybook`을 실행하면 [localhost:6006](http://localhost:6006/)에서 룰렛·슬롯·투표와 후보 편집 흐름을 확인할 수 있습니다. `npm run build-storybook`은 정적 미리보기를 빌드합니다.
+- `npm run check:roulette`와 `npm run check:slot`은 실행 중인 앱을 Chrome으로 검사합니다. 주소를 지정하려면 `-- http://localhost:3000`을 붙입니다. Chrome 실행 경로는 `CHROME_PATH`로 지정할 수 있습니다.
+- `npm run capture:home`은 실행 중인 로컬 앱의 홈 예시 화면을 갱신합니다. UI 변경 시 [AGENTS.md](AGENTS.md)의 반응형·입력 상태 검증 기준을 따릅니다.
 
-테스트는 난수 범위·추첨 조건, 방 입장·권한·접속 상태, 다중 연결·투표 중복 방지·기록 불변성과 UI 동작을 검증합니다. 운영 확인 범위와 남은 확인 항목은 [출시 체크리스트 #8](https://github.com/acee90/random-number-generator/issues/8)에서 관리합니다.
+## 배포와 운영
 
-### 운영 검증 재현
+GitHub에 연결된 Cloudflare Workers Builds를 사용합니다. PR에서 브랜치 미리보기를 검증하고 `main`에 병합하면 운영 빌드와 배포가 실행됩니다. 직접 배포, 최초 Durable Object 마이그레이션, 활성 버전 확인은 [운영 런북](docs/release-runbook.md#배포와-최초-마이그레이션)을 참고하세요.
 
-```powershell
+```bash
 npm run check:release:web -- https://jeommechu.dev
 npm run check:release:room -- --origin https://jeommechu.dev
 ```
 
-웹 검사는 공개 경로의 검색·공유 메타데이터와 정적 파일을 확인합니다. 방 검사는 새 검증용 방을 만들어 최대 두 번 추첨하며, 권한·양방향 채팅·늦은 입장·재접속·투표·기록 보존을 확인한 뒤 연결을 모두 종료합니다. 키·인증 증명은 출력하지 않습니다. 생성한 방은 기존 24시간 정책에 따라 만료됩니다.
+웹 검사는 공개 경로의 메타데이터와 정적 자산을 확인합니다. 방 검사는 별도 시험 방에서 입장·채팅·공동 추첨·재접속·기록을 검증합니다.
 
-입장 시간을 구간별로 볼 때는 새 페이지를 `?debugRoom=1`로 열고 브라우저 콘솔의 `[room timing]`을 확인합니다. HTTP·응답 해석·화면 이동·닉네임 검사·소켓 연결·입장 승인·첫 화면 커밋 시간을 기록하며, 이름·주소·키는 기록하지 않습니다. 첫 화면 커밋은 React 갱신 완료 시점이며 실제 화면 표시나 일반적인 속도를 보장하는 수치가 아닙니다. 일반 페이지에서는 계측하지 않습니다.
+## 개발 계획
 
-버전·키 바인딩 확인과 복구 기준은 [운영 확인·복구 문서](docs/release-runbook.md)를 참고하세요.
-
-## 배포
-
-기존 GitHub 연결 Cloudflare Workers Builds를 사용합니다. 작업 브랜치의 미리보기 검사 후 `main`에 머지하면 운영 빌드·배포가 실행됩니다.
-
-직접 배포할 때는 Cloudflare 계정에 인증하고, `wrangler.jsonc`의 KV 네임스페이스와 `LunchRooms` Durable Object 바인딩을 해당 계정에 맞게 준비합니다. 운영 API 키는 로컬 파일과 별도로 Worker secrets에 설정합니다.
-
-```powershell
-npx wrangler login
-npx wrangler secret put ANU_API_KEY
-# Random.org 키도 사용할 경우
-npx wrangler secret put RANDOM_ORG_API_KEY
-npm run deploy
-```
-
-최초 Durable Object 생성이나 새 migration은 `wrangler deploy`로 적용해야 합니다. `wrangler versions upload`에서 미적용 migration 오류가 나면 먼저 정식 배포한 뒤 미리보기를 다시 실행합니다. 상세 구성과 배포 절차는 [추첨방 운영 문서](docs/lunch-rooms.md#cloudflare-구성)를 참고하세요.
-
-### 분석 태그
-
-공통 문서에 Google Tag Manager `GTM-PH7KTBC8`을 설치했습니다. 운영 빌드와 로컬 운영 미리보기에서 로드하며 개발 서버에서는 로드하지 않습니다. GA4 수집은 별도로 GTM 컨테이너에 Google 태그와 측정 ID를 설정·게시하고 확인해야 합니다.
-
-## 코드 구조
-
-| 위치 | 역할 |
-| --- | --- |
-| `src/routes/` | 메인·추첨방·단독 룰렛·번호 도구 경로와 메타데이터 |
-| `src/components/features/` | 룰렛·채팅·투표·기록 화면 |
-| `src/hooks/useLunchRoom.ts` | 방 연결·입장·재연결·클라이언트 요청 |
-| `src/rooms/LunchRoomServer.ts` | 방 상태·권한·추첨·투표·보관·만료 처리 |
-| `src/server/lunchRoomHttp.ts` | 방 생성·닉네임 확인·WebSocket 진입점 |
-| `src/services/` | 외부 난수 요청·범위 변환·출처 처리 |
-| `wrangler.jsonc` | Worker·KV·SQLite Durable Object 설정 |
-| `tests/` | Vitest 자동 검사 |
-
-## 개발 계획과 상세 문서
-
-개발 계획과 진행 상태의 기준은 **[GitHub 로드맵 #7](https://github.com/acee90/random-number-generator/issues/7)**과 연결된 이슈입니다. 공개/비공개방, 홈/solo 전체 개인 목록 연결·실제 엑셀 편집, 실제 음식점 검색, 투표 가중치와 추가 추첨 연출은 여기서 관리합니다. 방 준비 화면의 개인 목록 저장·불러오기·삭제는 위 로컬 구현 범위입니다. 현재 결과에 반응하는 up/down 투표와 다음 추첨 확률을 바꾸는 투표 가중치는 별도 기능입니다.
-
-- [추첨방 동작·보관·로컬 검증·배포](docs/lunch-rooms.md)
-- [점메추 정보 구조와 방 수명 설계](docs/jeommechu-ia-plan.md)
-- [프로토타입부터 완성품까지의 단계별 기록](docs/lunch-plan.md)
-- [게임 화면 lifecycle·후보 추천·중복 제외 #46](https://github.com/acee90/random-number-generator/issues/46)
-- [현재 결과 피드백 투표 #20](https://github.com/acee90/random-number-generator/issues/20)
-- [운영 출시 확인 #8](https://github.com/acee90/random-number-generator/issues/8)
+작업 범위와 진행 상태는 [GitHub 로드맵 #7](https://github.com/acee90/random-number-generator/issues/7)과 연결된 이슈에서 관리합니다. [화면 흐름](docs/features/game-screen-lifecycle.md)과 [룰렛·슬롯 동작](docs/features/draw-view-modes.md)은 상세 설계 자료입니다.
