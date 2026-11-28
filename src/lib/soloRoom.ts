@@ -13,10 +13,25 @@ export const soloHistoryKey = "randomlab:solo-draws:v1";
 // Keep a room usable for this page visit if the browser rejects storage writes.
 const unsaved = new Map<string, RoomSnapshot>();
 
+function removeFromStores(key: string) {
+	for (const store of [localStorage, sessionStorage]) {
+		try {
+			store.removeItem(key);
+		} catch {
+			// Expiration is also checked on every read.
+		}
+	}
+}
+
 export function saveSoloRoom(room: RoomSnapshot): boolean {
 	try {
-		sessionStorage.setItem(prefix + room.roomId, JSON.stringify(room));
+		localStorage.setItem(prefix + room.roomId, JSON.stringify(room));
 		unsaved.delete(room.roomId);
+		try {
+			sessionStorage.removeItem(prefix + room.roomId);
+		} catch {
+			// Legacy tab storage cleanup is best-effort.
+		}
 		return true;
 	} catch {
 		unsaved.set(room.roomId, room);
@@ -26,20 +41,21 @@ export function saveSoloRoom(room: RoomSnapshot): boolean {
 
 export function forgetSoloRoom(roomId: string) {
 	unsaved.delete(roomId);
-	try {
-		sessionStorage.removeItem(prefix + roomId);
-	} catch {
-		// Expiration is also checked on every read.
-	}
+	removeFromStores(prefix + roomId);
 }
 
 export function readSoloRoom(roomId: string) {
 	if (!isLunchRoomId(roomId)) return null;
 	let snapshot = unsaved.get(roomId);
 	const storageFailed = Boolean(snapshot);
+	let fromLegacySession = false;
 	if (!snapshot) {
 		try {
-			const raw = sessionStorage.getItem(prefix + roomId);
+			let raw = localStorage.getItem(prefix + roomId);
+			if (!raw) {
+				raw = sessionStorage.getItem(prefix + roomId);
+				fromLegacySession = Boolean(raw);
+			}
 			if (!raw) return null;
 			snapshot = parseRoomSnapshot(JSON.parse(raw)) ?? undefined;
 		} catch {
@@ -57,6 +73,7 @@ export function readSoloRoom(roomId: string) {
 		forgetSoloRoom(roomId);
 		return null;
 	}
+	if (fromLegacySession) saveSoloRoom(snapshot);
 	// A pending random request belongs to the previous page. A chosen draw,
 	// including its original reveal time, is safe to resume after a refresh.
 	if (snapshot.status === "fetching")
@@ -69,19 +86,21 @@ export function createSoloRoom(input: CreateRoomInput) {
 	for (const [id, room] of unsaved) {
 		if (room.expiresAt <= now) forgetSoloRoom(id);
 	}
-	try {
-		for (const key of Object.keys(sessionStorage)) {
-			if (!key.startsWith(prefix)) continue;
-			const raw = sessionStorage.getItem(key);
-			if (!raw) continue;
-			try {
-				if (JSON.parse(raw)?.expiresAt <= now) sessionStorage.removeItem(key);
-			} catch {
-				// One unreadable room must not prevent cleanup of other rooms.
+	for (const store of [localStorage, sessionStorage]) {
+		try {
+			for (const key of Object.keys(store)) {
+				if (!key.startsWith(prefix)) continue;
+				const raw = store.getItem(key);
+				if (!raw) continue;
+				try {
+					if (JSON.parse(raw)?.expiresAt <= now) store.removeItem(key);
+				} catch {
+					// One unreadable room must not prevent cleanup of other rooms.
+				}
 			}
+		} catch {
+			// Restricted storage still supports creating a room in memory.
 		}
-	} catch {
-		// Restricted storage still supports creating a room in memory.
 	}
 	const room = createRoomSnapshot(
 		crypto.randomUUID(),

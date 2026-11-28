@@ -132,6 +132,7 @@ export function RoomGameConfirmation({
 	candidates,
 	eligibleCount,
 	hasResult,
+	solo = false,
 	disabled,
 	pending,
 	onKeep,
@@ -143,6 +144,7 @@ export function RoomGameConfirmation({
 	candidates: RoomCandidate[];
 	eligibleCount: number;
 	hasResult: boolean;
+	solo?: boolean;
 	disabled: boolean;
 	pending: boolean;
 	onKeep: () => void;
@@ -197,7 +199,9 @@ export function RoomGameConfirmation({
 				</div>
 				{hasResult && (
 					<p className="room-game-result-notice">
-						게임을 바꾸면 이번 투표가 마감되고 결과는 지난 기록에 보관돼요.
+						{solo
+							? "게임을 바꾸면 이번 결과는 지난 기록에 보관돼요."
+							: "게임을 바꾸면 이번 투표가 마감되고 결과는 지난 기록에 보관돼요."}
 					</p>
 				)}
 				<div className="room-game-actions">

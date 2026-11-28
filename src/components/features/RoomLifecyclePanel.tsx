@@ -74,6 +74,7 @@ function filterSignature(filter: GameFilter) {
 
 export default function RoomLifecyclePanel({
 	room,
+	solo = false,
 	switchTarget,
 	onFinishSwitch,
 	busy,
@@ -83,6 +84,7 @@ export default function RoomLifecyclePanel({
 	children,
 }: {
 	room: Room;
+	solo?: boolean;
 	switchTarget: DrawView | null;
 	onFinishSwitch: (accepted: boolean) => void;
 	busy: boolean;
@@ -663,6 +665,7 @@ export default function RoomLifecyclePanel({
 				candidates={candidates}
 				eligibleCount={eligible.length}
 				hasResult={Boolean(snapshot?.draw)}
+				solo={solo}
 				disabled={locked || Boolean(room.votePendingDrawId)}
 				pending={switchPending}
 				onKeep={() => void confirmSwitch(false)}
@@ -702,7 +705,9 @@ export default function RoomLifecyclePanel({
 							variant="outline"
 							aria-describedby={`${id}-candidate-count`}
 							title={
-								isHost && onEditResult ? "투표를 마감하고 후보 편집" : undefined
+								isHost && onEditResult && !solo
+									? "투표를 마감하고 후보 편집"
+									: undefined
 							}
 							aria-expanded={isHost ? undefined : guestCandidatesOpen}
 							aria-controls={isHost ? undefined : `${id}-guest-candidates`}
@@ -961,22 +966,24 @@ export default function RoomLifecyclePanel({
 										>
 											점심 메뉴
 										</Button>
-										<Button
-											variant="outline"
-											size="touch"
-											disabled={!editable || !memberCandidates.length}
-											onClick={() =>
-												importList({
-													sourceId: "room-members",
-													name: "방 멤버",
-													candidates: memberCandidates,
-												})
-											}
-										>
-											방 멤버 {memberCandidates.length}명
-										</Button>
+										{!solo && (
+											<Button
+												variant="outline"
+												size="touch"
+												disabled={!editable || !memberCandidates.length}
+												onClick={() =>
+													importList({
+														sourceId: "room-members",
+														name: "방 멤버",
+														candidates: memberCandidates,
+													})
+												}
+											>
+												방 멤버 {memberCandidates.length}명
+											</Button>
+										)}
 									</>
-								) : (
+								) : !solo ? (
 									<label
 										className="room-intake-switch"
 										htmlFor={`${id}-intake-enabled`}
@@ -996,7 +1003,7 @@ export default function RoomLifecyclePanel({
 										/>
 										<span>후보 추천받기</span>
 									</label>
-								)}
+								) : null}
 							</div>
 						</RoomCandidateEditor>
 					) : (
@@ -1194,7 +1201,7 @@ export default function RoomLifecyclePanel({
 				</DialogContent>
 			</Dialog>
 			<CandidateListLoadDialog
-				roomMembers={memberCandidates}
+				roomMembers={solo ? undefined : memberCandidates}
 				open={loadOpen}
 				onOpenChange={setLoadOpen}
 				onSelect={selectList}

@@ -91,20 +91,24 @@ describe("shared solo game screen", () => {
 		vi.stubGlobal("fetch", fetch);
 		render(<SoloLunchRoomPage roomId={crypto.randomUUID()} />);
 		expect(
-			screen.getByRole("heading", { name: "이 탭에서 방을 찾을 수 없습니다" }),
+			screen.getByRole("heading", {
+				name: "이 브라우저에서 추첨을 찾을 수 없습니다",
+			}),
 		).toBeTruthy();
 		expect(fetch).not.toHaveBeenCalled();
 	});
-	it("shows the room lifecycle UI without collaboration controls", () => {
+	it("shows the room lifecycle UI without collaboration badges or controls", () => {
 		renderRoom();
 		expect(screen.getByRole("heading", { name: "내 점심방" })).toBeTruthy();
 		expect(screen.getByRole("button", { name: "후보" })).toBeTruthy();
+		expect(screen.queryByText(/참가 \d+명/)).toBeNull();
+		expect(screen.queryByText("방장")).toBeNull();
 		expect(screen.queryByRole("button", { name: "후보 보기" })).toBeNull();
 		expect(screen.queryByRole("button", { name: "초대 링크 복사" })).toBeNull();
 		expect(screen.queryByRole("textbox", { name: /메시지/ })).toBeNull();
 		expect(screen.queryByRole("button", { name: "룰렛·결과" })).toBeNull();
 	});
-	it("keeps one spin button in the cabinet above the votes", async () => {
+	it("keeps one spin button in the cabinet without multiplayer voting controls", async () => {
 		renderRoom();
 		const spin = screen.getByRole("button", { name: "슬롯 돌리기" });
 		const controls = spin.parentElement;
@@ -115,38 +119,33 @@ describe("shared solo game screen", () => {
 		).toBeNull();
 		await draw();
 		expect(screen.getByRole("heading", { name: "한식당" })).toBeTruthy();
-		const up = screen.getByRole("button", { name: /좋아요/ });
-		fireEvent.click(up);
-		expect(up.getAttribute("aria-pressed")).toBe("true");
+		expect(screen.queryByRole("button", { name: /좋아요/ })).toBeNull();
+		expect(screen.queryByRole("button", { name: /싫어요/ })).toBeNull();
+		expect(screen.queryByText(/명 참여/)).toBeNull();
 		expect(screen.getByRole("button", { name: "슬롯 돌리기" })).toBe(spin);
 		expect(controls?.querySelectorAll("button")).toHaveLength(1);
 		expect(controls?.closest(".slot-machine")?.querySelector("canvas")).toBe(
 			canvas,
 		);
-		expect(
-			spin.compareDocumentPosition(up) & Node.DOCUMENT_POSITION_FOLLOWING,
-		).toBeTruthy();
 		expect(drawFromSoloEntropy).toHaveBeenCalledTimes(1);
 	});
-	it("redraws directly from the result once and preserves the last ballot in history", async () => {
+	it("redraws directly from the result once and preserves the previous result in history", async () => {
 		const { roomId } = renderRoom();
 		await draw();
-		fireEvent.click(screen.getByRole("button", { name: "좋아요 투표" }));
-		const voted = readSoloRoom(roomId)?.snapshot.draw;
-		expect(voted?.votes).toMatchObject([{ vote: "up" }]);
+		const first = readSoloRoom(roomId)?.snapshot.draw;
 		const redraw = screen.getByRole("button", { name: "슬롯 돌리기" });
 		await act(async () => {
 			fireEvent.click(redraw);
 			fireEvent.click(redraw);
 		});
 		expect(drawFromSoloEntropy).toHaveBeenCalledTimes(2);
-		expect(readSoloRoom(roomId)?.snapshot.history).toEqual([voted]);
+		expect(readSoloRoom(roomId)?.snapshot.history).toEqual([first]);
 		expect(
 			screen.queryByRole("heading", { name: "다음 추첨 대기" }),
 		).toBeNull();
 		await act(async () => vi.advanceTimersByTime(15000));
 		expect(readSoloRoom(roomId)?.snapshot.draw?.roundNumber).toBe(2);
-		expect(screen.getByText("0명 참여")).toBeTruthy();
+		expect(screen.queryByText(/명 참여/)).toBeNull();
 	});
 
 	it("edits candidates straight from a completed game and keeps that game's record", async () => {
@@ -214,17 +213,42 @@ describe("shared solo game screen", () => {
 		await draw();
 		expect(screen.getByRole("heading", { name: "한식당" })).toBeTruthy();
 	});
-	it("edits and finalizes candidates with the shared editor and supports recommendation intake", async () => {
+	it("edits and finalizes candidates without recommendation intake or room member presets", async () => {
 		renderRoom();
 		await act(async () =>
 			fireEvent.click(screen.getByRole("button", { name: "후보" })),
 		);
-		expect(screen.getByRole("switch", { name: "후보 추천받기" })).toBeTruthy();
+		expect(screen.queryByRole("switch", { name: "후보 추천받기" })).toBeNull();
+		fireEvent.keyDown(screen.getByRole("button", { name: "목록 작업" }), {
+			key: "ArrowDown",
+		});
+		fireEvent.click(screen.getByRole("menuitem", { name: "목록 불러오기" }));
+		const loadDialog = screen.getByRole("dialog", { name: "목록 불러오기" });
+		expect(
+			within(loadDialog).queryByRole("button", { name: /방 멤버/ }),
+		).toBeNull();
+		fireEvent.click(within(loadDialog).getByRole("button", { name: "취소" }));
 		expect(screen.getByRole("button", { name: "마감" })).toBeTruthy();
 		await act(async () =>
 			fireEvent.click(screen.getByRole("button", { name: "마감" })),
 		);
 		expect(screen.getByRole("button", { name: "슬롯 돌리기" })).toBeTruthy();
+	});
+	it("closes the solo session with solo-specific wording and persists across tabs in localStorage", async () => {
+		const { roomId } = renderRoom();
+		sessionStorage.clear();
+		expect(readSoloRoom(roomId)?.snapshot.title).toBe("내 점심방");
+		fireEvent.click(screen.getByRole("button", { name: "방 설정" }));
+		fireEvent.click(screen.getByRole("button", { name: "추첨 종료" }));
+		await act(async () => {
+			fireEvent.click(
+				within(
+					screen.getByRole("alertdialog", { name: "혼자 추첨을 종료할까요?" }),
+				).getByRole("button", { name: "추첨 종료" }),
+			);
+		});
+		expect(screen.getByText("혼자 추첨을 종료했습니다.")).toBeTruthy();
+		expect(screen.queryByText(/방장/)).toBeNull();
 	});
 	it("persists full draw records and restores them after remounting", async () => {
 		const first = renderRoom();
@@ -260,9 +284,12 @@ describe("shared solo game screen", () => {
 		fireEvent.click(
 			screen.getByRole("button", { name: "한식당 상세 기록 열기" }),
 		);
+		const detail = screen.getByRole("dialog", { name: "한식당 상세 기록" });
 		expect(
-			screen.getByText("상세 기록을 열었을 때의 투표 현황입니다."),
-		).toBeTruthy();
+			within(detail).queryByText("상세 기록을 열었을 때의 투표 현황입니다."),
+		).toBeNull();
+		expect(within(detail).queryByText(/방장/)).toBeNull();
+		expect(within(detail).queryByText("추첨 요청 시 참가자")).toBeNull();
 		fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
 		await act(async () => vi.advanceTimersByTime(0));
 		close();

@@ -69,7 +69,7 @@ function RoomInfo({
 				</span>
 				<p>
 					{solo
-						? "혼자 만든 방과 기록은 이 탭에 보관하며, 탭을 닫으면 삭제됩니다."
+						? "혼자 만든 추첨과 기록은 이 브라우저에 최대 24시간 보관됩니다."
 						: "방장이 나가도 생성 후 24시간, 표시된 종료 시각까지 방이 유지됩니다."}
 				</p>
 			</div>
@@ -122,8 +122,8 @@ export default function RoomHeader({
 										? "연결 끊김 · 다시 연결 중"
 										: "연결 중"}
 						</span>
-						<span>참가 {snapshot?.participants.length ?? 0}명</span>
-						{room.self?.isHost && (
+						{!solo && <span>참가 {snapshot?.participants.length ?? 0}명</span>}
+						{!solo && room.self?.isHost && (
 							<span className="room-host-badge">
 								<Crown size={12} aria-hidden="true" />
 								방장
@@ -156,7 +156,7 @@ export default function RoomHeader({
 							<span>{inviteLabel}</span>
 						</Button>
 					)}
-					<RoomSettingsDialog room={room} busy={busy} />
+					<RoomSettingsDialog room={room} busy={busy} solo={solo} />
 				</div>
 			)}
 		</SiteHeader>

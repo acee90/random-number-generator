@@ -21,8 +21,10 @@ export default function SoloLunchRoomPage({ roomId }: { roomId: string }) {
 			<SiteHeader active="lunch" />
 			<main id="main-content" className="room-main">
 				<section className="room-terminal">
-					<h1>이 탭에서 방을 찾을 수 없습니다</h1>
-					<p>혼자 만든 방은 처음 만든 탭에서 24시간 동안 이용할 수 있어요.</p>
+					<h1>이 브라우저에서 추첨을 찾을 수 없습니다</h1>
+					<p>
+						혼자 만든 추첨은 만든 브라우저에서 24시간 동안 이용할 수 있어요.
+					</p>
 					<RoomTerminalActions />
 				</section>
 			</main>

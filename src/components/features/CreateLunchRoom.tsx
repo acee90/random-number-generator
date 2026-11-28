@@ -105,9 +105,11 @@ async function requestRoom(body: string, signal: AbortSignal) {
 export default function CreateLunchRoom({ solo = false }: { solo?: boolean }) {
 	const id = useId();
 	const router = useRouter({ warn: false });
-	const [step, setStep] = useState<1 | 2>(1);
-	const [title, setTitle] = useState("오늘 점심 추첨");
-	const [name, setName] = useState("방장");
+	const [step, setStep] = useState<1 | 2>(solo ? 2 : 1);
+	const [title, setTitle] = useState(
+		solo ? "혼자 점심 추첨" : "오늘 점심 추첨",
+	);
+	const [name, setName] = useState(solo ? "나" : "방장");
 	const [detailsChecked, setDetailsChecked] = useState(false);
 	const [candidates, setCandidates] = useState<RoomCandidate[]>([]);
 	const [gameFilter, setGameFilter] = useState(emptyFilter);
@@ -145,22 +147,30 @@ export default function CreateLunchRoom({ solo = false }: { solo?: boolean }) {
 		gameFilter,
 	}).length;
 	const locked = pending || Boolean(createdRoomId);
-	const pendingLabel = createdRoomId ? "방에 입장하는 중…" : "방 만드는 중…";
+	const pendingLabel = solo
+		? createdRoomId
+			? "추첨 화면으로 이동하는 중…"
+			: "추첨 준비 중…"
+		: createdRoomId
+			? "방에 입장하는 중…"
+			: "방 만드는 중…";
 
 	useEffect(() => {
-		// The server-rendered form can accept typing before React attaches its handlers.
-		if (titleRef.current) setTitle(titleRef.current.value);
-		const typedName = nameRef.current?.value;
-		setName(
-			typedName !== undefined && typedName !== "방장"
-				? typedName
-				: clampLunchRoomNickname(readLunchRoomName() ?? "") || "방장",
-		);
+		if (!solo) {
+			// The server-rendered form can accept typing before React attaches its handlers.
+			if (titleRef.current) setTitle(titleRef.current.value);
+			const typedName = nameRef.current?.value;
+			setName(
+				typedName !== undefined && typedName !== "방장"
+					? typedName
+					: clampLunchRoomNickname(readLunchRoomName() ?? "") || "방장",
+			);
+		}
 		return () => {
 			clearTimeout(requestTimeoutRef.current);
 			requestRef.current?.abort();
 		};
-	}, []);
+	}, [solo]);
 
 	useEffect(() => {
 		if (step === focusedStep.current) return;
@@ -262,7 +272,7 @@ export default function CreateLunchRoom({ solo = false }: { solo?: boolean }) {
 					roomId = created.roomId;
 					saveLunchRoomHost(roomId, created.hostToken);
 				}
-				saveLunchRoomName(hostName);
+				if (!solo) saveLunchRoomName(hostName);
 				setCreatedRoomId(roomId);
 			}
 			if (!roomId) return;
@@ -309,18 +319,20 @@ export default function CreateLunchRoom({ solo = false }: { solo?: boolean }) {
 							id={`${id}-heading`}
 							ref={headingRef}
 							tabIndex={-1}
-							aria-describedby={`${id}-step`}
+							aria-describedby={solo ? undefined : `${id}-step`}
 						>
-							{step === 1 ? "방 만들기" : "후보 준비"}
+							{solo ? "혼자 추첨 준비" : step === 1 ? "방 만들기" : "후보 준비"}
 						</h1>
 					</CardTitle>
-					<p
-						id={`${id}-step`}
-						className="text-sm text-muted-foreground tabular-nums"
-					>
-						<span aria-hidden="true">{step} / 2</span>
-						<span className="sr-only">전체 2단계 중 {step}단계</span>
-					</p>
+					{!solo && (
+						<p
+							id={`${id}-step`}
+							className="text-sm text-muted-foreground tabular-nums"
+						>
+							<span aria-hidden="true">{step} / 2</span>
+							<span className="sr-only">전체 2단계 중 {step}단계</span>
+						</p>
+					)}
 				</CardHeader>
 				{step === 1 ? (
 					<form
@@ -438,7 +450,7 @@ export default function CreateLunchRoom({ solo = false }: { solo?: boolean }) {
 				<CardFooter
 					key={step}
 					role="group"
-					aria-label="방 만들기 동작"
+					aria-label={solo ? "혼자 추첨 시작 동작" : "방 만들기 동작"}
 					className="create-room-actions shrink-0 flex-wrap justify-end gap-2"
 				>
 					{step === 1 ? (
@@ -447,17 +459,19 @@ export default function CreateLunchRoom({ solo = false }: { solo?: boolean }) {
 						</Button>
 					) : (
 						<>
-							<Button
-								className="me-auto"
-								variant="ghost"
-								disabled={locked}
-								onClick={() => {
-									setError("");
-									setStep(1);
-								}}
-							>
-								<ArrowLeft size={16} aria-hidden="true" /> 이전
-							</Button>
+							{!solo && (
+								<Button
+									className="me-auto"
+									variant="ghost"
+									disabled={locked}
+									onClick={() => {
+										setError("");
+										setStep(1);
+									}}
+								>
+									<ArrowLeft size={16} aria-hidden="true" /> 이전
+								</Button>
+							)}
 							<Button
 								disabled={pending || eligibleCount === 0}
 								onClick={() => void create()}
@@ -471,9 +485,13 @@ export default function CreateLunchRoom({ solo = false }: { solo?: boolean }) {
 								)}
 								{pending
 									? pendingLabel
-									: createdRoomId
-										? "방에 다시 입장"
-										: "방 만들기"}
+									: solo
+										? createdRoomId
+											? "추첨 화면으로 이동"
+											: "추첨 시작"
+										: createdRoomId
+											? "방에 다시 입장"
+											: "방 만들기"}
 							</Button>
 						</>
 					)}
