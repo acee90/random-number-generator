@@ -79,7 +79,7 @@ export function drawTicket(
 		.fill(fg);
 	lettering(
 		card,
-		"당첨 메뉴",
+		"당첨 결과",
 		cx,
 		t + h * 0.31,
 		Math.min(15, h * 0.112),

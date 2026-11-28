@@ -56,7 +56,7 @@ describe("completed room draw feedback", () => {
 	it("offers explicit one-time choices without inventing optimistic votes", () => {
 		const current = props();
 		render(<RoomDrawFeedback {...current} />);
-		expect(screen.getByRole("region", { name: "메뉴 투표" })).toBeTruthy();
+		expect(screen.getByRole("region", { name: "결과 투표" })).toBeTruthy();
 		expect(
 			screen.getByRole("group", { name: "이번 추첨 결과 투표" }),
 		).toBeTruthy();

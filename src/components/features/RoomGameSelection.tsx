@@ -45,33 +45,33 @@ export function RoomGameWorkspace({
 	const choosing = useRef(false);
 	return (
 		<div className="room-workspace">
-			<nav className="room-game-nav" aria-label="게임 목록">
-				<div className="room-game-rail">
-					<h2>게임 목록</h2>
-					{games.map(({ id, icon: Icon }) => (
-						<Button
-							key={id}
-							size="touch"
-							variant={id === active ? "secondary" : "ghost"}
-							aria-pressed={id === active}
-							disabled={!isHost || disabled}
-							onClick={(event) => {
-								if (id !== active) onSelect(id, event.currentTarget);
-							}}
-						>
-							<Icon aria-hidden="true" />
-							{drawViewLabels[id]}
-							{id === active ? (
-								<Check className="room-game-mark" aria-hidden="true" />
-							) : (
-								id === target && (
-									<ArrowRight className="room-game-mark" aria-hidden="true" />
-								)
-							)}
-						</Button>
-					))}
-				</div>
-				{isHost && (
+			{isHost && (
+				<nav className="room-game-nav" aria-label="게임 목록">
+					<div className="room-game-rail">
+						<h2>게임 목록</h2>
+						{games.map(({ id, icon: Icon }) => (
+							<Button
+								key={id}
+								size="touch"
+								variant={id === active ? "secondary" : "ghost"}
+								aria-pressed={id === active}
+								disabled={disabled}
+								onClick={(event) => {
+									if (id !== active) onSelect(id, event.currentTarget);
+								}}
+							>
+								<Icon aria-hidden="true" />
+								{drawViewLabels[id]}
+								{id === active ? (
+									<Check className="room-game-mark" aria-hidden="true" />
+								) : (
+									id === target && (
+										<ArrowRight className="room-game-mark" aria-hidden="true" />
+									)
+								)}
+							</Button>
+						))}
+					</div>
 					<div className="room-game-picker">
 						<DropdownMenu>
 							<DropdownMenuTrigger asChild>
@@ -117,8 +117,8 @@ export function RoomGameWorkspace({
 							</DropdownMenuContent>
 						</DropdownMenu>
 					</div>
-				)}
-			</nav>
+				</nav>
+			)}
 			<div className="room-layout" data-chat-collapsed={chatCollapsed}>
 				{children}
 			</div>

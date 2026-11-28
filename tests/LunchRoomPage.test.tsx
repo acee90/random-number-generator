@@ -3939,13 +3939,27 @@ describe("synchronized lunch room UI", () => {
 		expect(room.startDraw).toHaveBeenCalledOnce();
 	});
 
-	it("takes the host from the result to candidate editing and moves keyboard focus into the editor", () => {
+	it("confirms closing result voting before moving the host to candidate editing and focuses the editor", () => {
 		const current = draw(baseTime - 8000);
 		room.self = { id: "host-client", isHost: true };
 		room.snapshot = snapshot({ status: "result", draw: current });
 		const view = render(<LunchRoomPage roomId={roomId} />);
 		const edit = screen.getByRole("button", { name: "후보" });
 		fireEvent.click(edit);
+		expect(room.nextRound).not.toHaveBeenCalled();
+		const confirm = screen.getByRole("alertdialog", {
+			name: "투표를 마감하고 후보를 편집할까요?",
+		});
+		fireEvent.click(within(confirm).getByRole("button", { name: "돌아가기" }));
+		expect(room.nextRound).not.toHaveBeenCalled();
+		fireEvent.click(edit);
+		fireEvent.click(
+			within(
+				screen.getByRole("alertdialog", {
+					name: "투표를 마감하고 후보를 편집할까요?",
+				}),
+			).getByRole("button", { name: "투표 마감 후 편집" }),
+		);
 		expect(room.nextRound).toHaveBeenCalledExactlyOnceWith(current.id, true);
 		updateRoom(view, { nextPending: true });
 		expect(edit).toHaveProperty("disabled", true);
@@ -3963,6 +3977,50 @@ describe("synchronized lunch room UI", () => {
 		);
 		expect(room.enterEditing).not.toHaveBeenCalled();
 		expect(room.startDraw).not.toHaveBeenCalled();
+	});
+
+	it("shows a visible hold hint for the host, hides the game rail for guests, and uses neutral non-food copy", async () => {
+		room.self = { id: "host-client", isHost: true };
+		room.snapshot = snapshot({
+			viewMode: "slot-v1",
+			candidates: [
+				{ id: "act-1", name: "방탈출", category: "체험" },
+				{ id: "act-2", name: "볼링", category: "스포츠" },
+			],
+			history: [
+				{
+					...draw(baseTime - 8000),
+					candidates: [
+						{ id: "act-1", name: "방탈출", category: "체험" },
+						{ id: "act-2", name: "볼링", category: "스포츠" },
+					],
+					winnerIndex: 0,
+				},
+			],
+		});
+		const view = render(<LunchRoomPage roomId={roomId} />);
+		expect(
+			screen.getByText("길게 누르거나 다시 누르면 더 빨라져요"),
+		).toBeTruthy();
+		expect(
+			screen.getByText("후보나 추첨 결과에 대해 이야기해 보세요."),
+		).toBeTruthy();
+		expect(screen.getByRole("navigation", { name: "게임 목록" })).toBeTruthy();
+		fireEvent.click(screen.getByRole("button", { name: "당첨 내역 열기" }));
+		fireEvent.click(
+			screen.getByRole("button", { name: "방탈출 상세 기록 열기" }),
+		);
+		await act(async () =>
+			fireEvent.click(screen.getByRole("button", { name: "전체 기록 복사" })),
+		);
+		expect(writeText).toHaveBeenCalledWith(
+			expect.stringContaining("당첨: 방탈출"),
+		);
+		expect(writeText).not.toHaveBeenCalledWith(
+			expect.stringContaining("음식점:"),
+		);
+		updateRoom(view, { self: { id: "guest-client", isHost: false } });
+		expect(screen.queryByRole("navigation", { name: "게임 목록" })).toBeNull();
 	});
 
 	it.each([

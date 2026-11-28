@@ -153,7 +153,10 @@ export default function RoomHeader({
 							) : (
 								<Copy aria-hidden="true" />
 							)}
-							<span>{inviteLabel}</span>
+							<span className="room-invite-label-full">{inviteLabel}</span>
+							<span className="room-invite-label-short" aria-hidden="true">
+								{copied ? "복사됨" : "초대"}
+							</span>
 						</Button>
 					)}
 					<RoomSettingsDialog room={room} busy={busy} />

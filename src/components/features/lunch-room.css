@@ -48,6 +48,9 @@
 	min-inline-size: 44px;
 	min-block-size: 44px;
 }
+.room-invite-label-short {
+	display: none;
+}
 .room-eyebrow {
 	font-size: 13px;
 	line-height: 1.5;
@@ -168,6 +171,9 @@
 	grid-template-columns: clamp(124px, 13vw, 168px) minmax(0, 1fr);
 	gap: 16px;
 	min-inline-size: 0;
+}
+.room-workspace:not(:has(> .room-game-nav)) {
+	grid-template-columns: minmax(0, 1fr);
 }
 .room-game-rail {
 	display: grid;

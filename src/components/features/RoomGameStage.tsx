@@ -187,9 +187,10 @@ export default function RoomGameStage({
 			: { onClick: onRedraw }
 		: primaryButtonProps;
 	const holdHintId = `${id}-hold`;
-	const motionHint = (primarySpinInput || redrawSpinInput) && (
-		<p id={holdHintId} className="sr-only">
-			길게 누르거나 연달아 누르면 빨라집니다. 놓으면 천천히 멈춥니다.
+	const showHoldHint = primarySpinInput || redrawSpinInput;
+	const motionHint = showHoldHint && (
+		<p id={holdHintId} className={slot ? "slot-hold-hint" : "picnic-hold-hint"}>
+			길게 누르거나 다시 누르면 더 빨라져요
 		</p>
 	);
 	const deadline = activeDrive
@@ -297,6 +298,7 @@ export default function RoomGameStage({
 				fullSlotName
 			)}
 			{resultActions}
+			{!wheel && motionHint}
 		</div>
 	);
 	const options = exclusion && <RoomExclusionPanel {...exclusion} />;
@@ -309,7 +311,6 @@ export default function RoomGameStage({
 		return (
 			<div data-own-choice={feedback.ownChoice}>
 				<section aria-label="게임 보드" className="picnic-frame slot-stage">
-					{motionHint}
 					{options}
 					<div className="slot-stage-main">
 						{soundControl}
@@ -325,9 +326,8 @@ export default function RoomGameStage({
 							drive={activeDrive}
 							driveClockOffset={clockOffset}
 							driveAdjustment={driveAdjustment}
-							holdHintId={
-								primarySpinInput || redrawSpinInput ? holdHintId : undefined
-							}
+							holdHintId={showHoldHint ? holdHintId : undefined}
+							holdHint={motionHint}
 							drawButtonProps={spinButtonProps}
 							countdown={countdown}
 							canReplay={Boolean(result && showNext)}
@@ -431,7 +431,6 @@ export default function RoomGameStage({
 					driveClockOffset={clockOffset}
 					driveAdjustment={driveAdjustment}
 				/>
-				{motionHint}
 				{options}
 				<div
 					ref={main}
@@ -462,7 +461,7 @@ export default function RoomGameStage({
 					{result && (
 						<section className="picnic-ticket" aria-labelledby={headingId}>
 							<div className="room-result-summary">
-								<p>당첨 메뉴</p>
+								<p>당첨 결과</p>
 								<h3 id={headingId} ref={titleRef} tabIndex={-1}>
 									{result.name}
 								</h3>
@@ -483,10 +482,7 @@ export default function RoomGameStage({
 							className="touch-none select-none"
 							disabled={spinDisabled}
 							aria-describedby={
-								[
-									wheel.errorId,
-									(redrawSpinInput || primarySpinInput) && holdHintId,
-								]
+								[wheel.errorId, showHoldHint && holdHintId]
 									.filter(Boolean)
 									.join(" ") || undefined
 							}
@@ -503,6 +499,7 @@ export default function RoomGameStage({
 										? "마지막 후보 확정"
 										: "룰렛 돌리기"}
 						</Button>
+						{motionHint}
 					</div>
 				)}
 			</section>

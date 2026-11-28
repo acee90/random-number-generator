@@ -583,6 +583,7 @@ export default function LunchSessionPage({
 								)}
 								<RoomLifecyclePanel
 									room={room}
+									solo={solo}
 									key={roomId + viewMode}
 									switchTarget={switchTarget}
 									onFinishSwitch={finishGameChoice}

@@ -491,6 +491,23 @@ describe("Storybook room page with the local transport adapter", () => {
 			}),
 		).toBeTruthy();
 		fireEvent.click(screen.getByRole("button", { name: "후보" }));
+		const confirmClose = screen.getByRole("alertdialog", {
+			name: "투표를 마감하고 후보를 편집할까요?",
+		});
+		fireEvent.click(
+			within(confirmClose).getByRole("button", { name: "돌아가기" }),
+		);
+		expect(
+			screen.getByRole("region", { name: "실시간 투표 현황" }),
+		).toBeTruthy();
+		fireEvent.click(screen.getByRole("button", { name: "후보" }));
+		fireEvent.click(
+			within(
+				screen.getByRole("alertdialog", {
+					name: "투표를 마감하고 후보를 편집할까요?",
+				}),
+			).getByRole("button", { name: "투표 마감 후 편집" }),
+		);
 		expect(screen.getByRole("heading", { name: "후보 편집" })).toBeTruthy();
 		expect(
 			screen.queryByRole("region", { name: "실시간 투표 현황" }),
@@ -539,6 +556,15 @@ describe("Storybook room page with the local transport adapter", () => {
 		).toBe(true);
 		await act(async () =>
 			fireEvent.click(screen.getByRole("button", { name: "후보" })),
+		);
+		await act(async () =>
+			fireEvent.click(
+				within(
+					screen.getByRole("alertdialog", {
+						name: "투표를 마감하고 후보를 편집할까요?",
+					}),
+				).getByRole("button", { name: "투표 마감 후 편집" }),
+			),
 		);
 		expect(
 			screen.queryByRole("switch", { name: "중복 없이 추첨 · 뽑힌 후보 제외" }),

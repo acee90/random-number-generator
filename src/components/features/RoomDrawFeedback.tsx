@@ -179,7 +179,7 @@ export function RoomFeedbackDetails({
 			{!onBoard && (
 				<div className="room-feedback-heading">
 					<h4 id={`${id}-title`}>
-						{mode === "results" ? "실시간 투표 현황" : "메뉴 투표"}
+						{mode === "results" ? "실시간 투표 현황" : "결과 투표"}
 					</h4>
 					<span>{upVotes.length + downVotes.length}명 참여</span>
 				</div>

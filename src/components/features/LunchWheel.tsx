@@ -232,7 +232,7 @@ export function LunchWheel({
 						<Shuffle size={22} aria-hidden="true" />
 					)}
 					<span aria-hidden="true">{caption}</span>
-					<small aria-hidden="true">{size}곳</small>
+					<small aria-hidden="true">{size}개</small>
 				</Button>
 			)}
 		</div>

@@ -275,6 +275,18 @@
 	font-size: 0.875rem;
 	text-align: center;
 }
+.slot-hold-hint {
+	position: relative;
+	z-index: 1;
+	margin: 8px 0 0;
+	color: var(--muted);
+	font-size: 12px;
+	line-height: 1.4;
+	text-align: center;
+}
+.slot-hold-hint ~ .slot-reveal {
+	padding-block-start: 10px;
+}
 .slot-reveal {
 	position: relative;
 	padding-block-start: 18px;
