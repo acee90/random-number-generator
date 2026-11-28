@@ -25,6 +25,7 @@ import {
 	type RoomCandidate,
 	type RoomDrawStartOptions,
 	type RoomGameFilter,
+	type RoomGameListChanges,
 	type RoomSnapshot,
 } from "@/lib/lunchRoom";
 import {
@@ -66,6 +67,7 @@ export type RoomMutation =
 	| "edit"
 	| "options"
 	| "draw-view"
+	| "switch-game"
 	| "filter"
 	| "reset"
 	| "close";
@@ -86,6 +88,7 @@ type MutationMessage = Extract<
 			| "room-close"
 			| "options"
 			| "draw-view"
+			| "switch-game"
 			| "game-filter"
 			| "reset-exclusions";
 	}
@@ -1267,6 +1270,22 @@ export function useLunchRoom(
 				expectedRevision ?? current.revision ?? current.listVersion,
 		});
 	}
+	function switchGame(
+		viewMode: DrawView,
+		expectedRevision: number,
+		changes?: RoomGameListChanges,
+	) {
+		const current = snapshotRef.current;
+		if (!selfRef.current?.isHost || !current || !canChangeRoomDrawView(current))
+			return Promise.resolve(false);
+		return requestMutation("switch-game", {
+			type: "switch-game",
+			id: actionId(),
+			viewMode,
+			expectedRevision,
+			...changes,
+		});
+	}
 	function updateGameFilter(filter: RoomGameFilter, expectedRevision?: number) {
 		const current = snapshotRef.current;
 		if (!current || !canEditRoom()) return Promise.resolve(false);
@@ -1499,6 +1518,7 @@ export function useLunchRoom(
 		closeRoom,
 		updateRoomOptions,
 		updateDrawView,
+		switchGame,
 		updateGameFilter,
 		resetExclusions,
 		vote,

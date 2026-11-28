@@ -14,6 +14,7 @@ import {
 	normalizeLunchRoomNickname,
 	type RoomDraw,
 	type RoomDrawVote,
+	type RoomGameFilter,
 	type RoomParticipant,
 	type RoomSnapshot,
 } from "./lunchRoom";
@@ -73,6 +74,7 @@ export type LifecycleCommand = Extract<
 			| "room-edit"
 			| "options"
 			| "draw-view"
+			| "switch-game"
 			| "game-filter"
 			| "reset-exclusions";
 	}
@@ -131,11 +133,40 @@ export function validateRoomCommand(
 			message: "게임 조건이 바뀌었어요. 목록을 확인한 뒤 다시 진행해 주세요.",
 		};
 	}
-	if (message.type === "draw-view" && !canChangeRoomDrawView(snapshot)) {
+	if (
+		(message.type === "draw-view" || message.type === "switch-game") &&
+		!canChangeRoomDrawView(snapshot)
+	) {
 		return {
 			code: "PHASE_CONFLICT",
-			message: "추첨 보기는 대기 화면이나 결과 화면에서 변경할 수 있습니다.",
+			message: "게임은 대기 화면이나 결과 화면에서 변경할 수 있습니다.",
 		};
+	}
+	if (message.type === "switch-game") {
+		const candidates = message.candidates ?? snapshot.candidates;
+		if (message.filter) {
+			const ids = new Set(candidates.map((candidate) => candidate.id));
+			if (message.filter.excludedIds.some((id) => !ids.has(id)))
+				return {
+					code: "FILTER_CANDIDATES_CHANGED",
+					message: "후보가 바뀌었습니다. 목록을 다시 확인해 주세요.",
+				};
+		}
+		if (
+			!candidates.length ||
+			((message.filter || message.candidates) &&
+				!getEligibleRoomCandidates({
+					candidates: message.filter
+						? candidates.map((candidate) => ({ ...candidate, included: true }))
+						: candidates,
+					gameFilter: message.filter ?? snapshot.gameFilter,
+					excludeDrawn: false,
+				}).length)
+		)
+			return {
+				code: "NO_CANDIDATES",
+				message: "추첨에 포함할 후보가 한 개 이상 필요합니다.",
+			};
 	}
 	if (message.type === "intake") {
 		const allowed =
@@ -235,6 +266,13 @@ export function validateRoomCommand(
 	return null;
 }
 
+function setRoomGameFilter(snapshot: RoomSnapshot, filter: RoomGameFilter) {
+	snapshot.gameFilter = structuredClone(filter);
+	snapshot.candidates = snapshot.candidates.map((candidate) =>
+		candidate.included === false ? { ...candidate, included: true } : candidate,
+	);
+}
+
 /** Applies a validated command to a writable snapshot. */
 export function applyRoomCommand(
 	snapshot: RoomSnapshot,
@@ -246,6 +284,8 @@ export function applyRoomCommand(
 	const priorSetVersion = snapshot.candidateSetVersion ?? priorListVersion;
 	const priorSet =
 		(message.type === "room-edit" && message.candidates) ||
+		(message.type === "switch-game" &&
+			(message.candidates || message.filter)) ||
 		message.type === "game-filter" ||
 		message.type === "recommend" ||
 		message.type === "remove-candidate"
@@ -293,8 +333,13 @@ export function applyRoomCommand(
 					);
 			snapshot.listVersion++;
 			break;
+		case "switch-game":
 		case "room-edit":
-			if (message.title !== undefined) snapshot.title = message.title;
+			if (message.type === "switch-game") {
+				if (snapshot.draw) archiveCurrentDraw(snapshot);
+				snapshot.status = "waiting";
+				snapshot.viewMode = message.viewMode;
+			} else if (message.title !== undefined) snapshot.title = message.title;
 			if (message.candidates) {
 				const old = new Map(snapshot.candidates.map((item) => [item.id, item]));
 				snapshot.candidates = message.candidates.map((item) => {
@@ -318,6 +363,8 @@ export function applyRoomCommand(
 						snapshot.gameFilter.excludedIds.filter((id) => ids.has(id));
 				snapshot.listVersion++;
 			}
+			if (message.type === "switch-game" && message.filter)
+				setRoomGameFilter(snapshot, message.filter);
 			break;
 		case "options":
 			setRoomExcludeDrawn(snapshot, message.excludeDrawn);
@@ -326,12 +373,7 @@ export function applyRoomCommand(
 			snapshot.viewMode = message.viewMode;
 			break;
 		case "game-filter":
-			snapshot.gameFilter = structuredClone(message.filter);
-			snapshot.candidates = snapshot.candidates.map((candidate) =>
-				candidate.included === false
-					? { ...candidate, included: true }
-					: candidate,
-			);
+			setRoomGameFilter(snapshot, message.filter);
 			break;
 		case "reset-exclusions":
 			snapshot.excludedIds = [];

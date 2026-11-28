@@ -4,6 +4,7 @@ import { roomCandidateNumbers } from "@/components/features/RoomCandidateList";
 import RoomChatPanel from "@/components/features/RoomChatPanel";
 import RoomDrawDialog from "@/components/features/RoomDrawDialog";
 import RoomEntryGate from "@/components/features/RoomEntryGate";
+import { RoomGameWorkspace } from "@/components/features/RoomGameSelection";
 import RoomGameStage from "@/components/features/RoomGameStage";
 import RoomHeader from "@/components/features/RoomHeader";
 import RoomLifecyclePanel from "@/components/features/RoomLifecyclePanel";
@@ -15,6 +16,7 @@ import { useSpinAdjustment } from "@/hooks/useSpinAdjustment";
 import { type DrawView, drawViewLabels } from "@/lib/drawView";
 import type { LunchHistoryRecord } from "@/lib/lunchHistory";
 import {
+	canChangeRoomDrawView,
 	getEligibleRoomCandidates,
 	getRoomDrawView,
 	getRoomPhase,
@@ -62,6 +64,8 @@ export default function LunchSessionPage({
 }) {
 	const id = useId();
 	const [view, setView] = useState<RoomView>("wheel");
+	const [gameChoice, setGameChoice] = useState<DrawView | null>(null);
+	const gameTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const [chatCollapsed, setChatCollapsed] = useState(false);
 	const [reducedMotion, setReducedMotion] = useState(false);
 	const [localLaunch, setLocalLaunch] = useState(false);
@@ -162,6 +166,23 @@ export default function LunchSessionPage({
 	const busy = fetching || spinning || room.nextPending;
 	const connected = room.connection === "connected";
 	const isHost = connected && room.self?.isHost === true;
+	const gameChangeAvailable = Boolean(
+		snapshot && canChangeRoomDrawView(snapshot) && room.self?.isHost,
+	);
+	const switchTarget =
+		gameChangeAvailable && gameChoice !== viewMode ? gameChoice : null;
+	useEffect(() => {
+		if (!gameChangeAvailable || gameChoice === viewMode) setGameChoice(null);
+	}, [gameChangeAvailable, gameChoice, viewMode]);
+	function finishGameChoice(accepted: boolean) {
+		setGameChoice(null);
+		requestAnimationFrame(() => {
+			const element = accepted
+				? primaryColumnRef.current
+				: gameTriggerRef.current;
+			element?.focus({ preventScroll: true });
+		});
+	}
 	const winner =
 		displayedDraw && showResult
 			? displayedDraw.candidates[displayedDraw.winnerIndex]
@@ -514,9 +535,27 @@ export default function LunchSessionPage({
 						<output className={sound.error ? "room-error" : "sr-only"}>
 							{sound.error}
 						</output>
-						<div
-							className="room-layout"
-							data-chat-collapsed={solo ? undefined : chatCollapsed}
+						<RoomGameWorkspace
+							chatCollapsed={solo ? undefined : chatCollapsed}
+							active={viewMode}
+							target={switchTarget ?? undefined}
+							isHost={isHost}
+							disabled={
+								!gameChangeAvailable ||
+								busy ||
+								Boolean(
+									switchTarget ||
+										selectedDraw ||
+										room.mutationPending ||
+										room.candidatesPending ||
+										room.votePendingDrawId,
+								)
+							}
+							onSelect={(game, trigger) => {
+								gameTriggerRef.current = trigger;
+								changeView("wheel");
+								setGameChoice(game);
+							}}
 						>
 							{/* biome-ignore lint/a11y/useSemanticElements: This existing div ref is shared with the record dialog. */}
 							<div
@@ -544,7 +583,9 @@ export default function LunchSessionPage({
 								)}
 								<RoomLifecyclePanel
 									room={room}
-									key={roomId}
+									key={roomId + viewMode}
+									switchTarget={switchTarget}
+									onFinishSwitch={finishGameChoice}
 									busy={busy}
 									showResult={showResult}
 									onEditResult={
@@ -682,7 +723,7 @@ export default function LunchSessionPage({
 									onInteract={keepChatFocus}
 								/>
 							)}
-						</div>
+						</RoomGameWorkspace>
 					</>
 				)}
 			</main>

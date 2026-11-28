@@ -98,6 +98,11 @@ export interface RoomGameFilter {
 	excludedIds: string[];
 }
 
+export interface RoomGameListChanges {
+	candidates?: RoomCandidate[];
+	filter?: RoomGameFilter;
+}
+
 export interface RoomExclusionRecord {
 	candidateId: string;
 	drawId: string;
@@ -325,6 +330,12 @@ export type ClientMessage =
 			excludeDrawn: boolean;
 	  }
 	| { type: "reset-exclusions"; id: string; expectedRevision: number }
+	| ({
+			type: "switch-game";
+			id: string;
+			expectedRevision: number;
+			viewMode: DrawView;
+	  } & RoomGameListChanges)
 	| {
 			type: "draw-view";
 			id: string;
@@ -606,6 +617,7 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
 	if (!isRecord(value)) return null;
 	if (
 		value.type !== "room-edit" &&
+		value.type !== "switch-game" &&
 		value.type !== "game-filter" &&
 		typeof raw === "string" &&
 		new TextEncoder().encode(raw).byteLength > lunchRoomLimits.maxMessageBytes
@@ -824,6 +836,32 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
 						expectedRevision: value.expectedRevision as number,
 					}
 				: null;
+		case "switch-game": {
+			const candidates =
+				value.candidates === undefined
+					? undefined
+					: parsePlaces(value.candidates, 1);
+			const filter =
+				value.filter === undefined
+					? undefined
+					: parseRoomGameFilter(value.filter);
+			if (
+				!isId(value.id) ||
+				!isVersion(value.expectedRevision) ||
+				!isDrawView(value.viewMode) ||
+				candidates === null ||
+				filter === null
+			)
+				return null;
+			return {
+				type: "switch-game",
+				id: value.id,
+				expectedRevision: value.expectedRevision as number,
+				viewMode: value.viewMode,
+				...(candidates && { candidates }),
+				...(filter && { filter }),
+			};
+		}
 		case "draw-view":
 			return isId(value.id) &&
 				isVersion(value.expectedRevision) &&

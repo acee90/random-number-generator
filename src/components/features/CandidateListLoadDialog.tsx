@@ -1,4 +1,4 @@
-import { FolderOpen, List, Trash2 } from "lucide-react";
+import { FolderOpen, List, Trash2, Users } from "lucide-react";
 import {
 	type RefObject,
 	useCallback,
@@ -137,6 +137,7 @@ export default function CandidateListLoadDialog({
 	disabled = false,
 	preserveInclusion = false,
 	returnFocusRef,
+	roomMembers,
 }: {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
@@ -147,6 +148,7 @@ export default function CandidateListLoadDialog({
 	disabled?: boolean;
 	preserveInclusion?: boolean;
 	returnFocusRef?: RefObject<HTMLButtonElement | null>;
+	roomMembers?: RoomCandidate[];
 }) {
 	const [lists, setLists] = useState<VersionedCandidateList[]>([]);
 	const [usage, setUsage] = useState<CandidateListUsage>({
@@ -238,6 +240,37 @@ export default function CandidateListLoadDialog({
 								: "목록을 선택하면 사본을 가져와 편집할 수 있어요."}
 						</DialogDescription>
 					</DialogHeader>
+					{roomMembers && roomMembers.length > 0 && (
+						<section className="candidate-load-section" aria-label="이 방">
+							<h3>이 방</h3>
+							<Button
+								variant="outline"
+								className="candidate-load-choice"
+								disabled={disabled}
+								onClick={() => {
+									if (
+										onSelect({
+											sourceId: "room-members",
+											name: "방 멤버",
+											candidates: roomMembers,
+										}) !== false
+									)
+										onOpenChange(false);
+								}}
+							>
+								<Users aria-hidden="true" />
+								<span>
+									<strong>방 멤버 {roomMembers.length}명</strong>
+									<small className="candidate-load-preview">
+										{roomMembers
+											.slice(0, 3)
+											.map(({ name }) => name)
+											.join(" · ")}
+									</small>
+								</span>
+							</Button>
+						</section>
+					)}
 					<section className="candidate-load-section" aria-label="기본 목록">
 						<h3>기본 목록</h3>
 						<Button

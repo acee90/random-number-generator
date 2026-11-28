@@ -419,10 +419,7 @@ describe("current result feedback and frozen history", () => {
 	it.each([
 		{ mode: "wheel" as const, buttonName: "룰렛 돌리기" },
 		{ mode: "slot-v1" as const, buttonName: "슬롯 돌리기" },
-	])("keeps regripping enabled until $mode stops", ({
-		mode,
-		buttonName,
-	}) => {
+	])("keeps regripping enabled until $mode stops", ({ mode, buttonName }) => {
 		room.self = { id: "host-client", isHost: true };
 		const active = {
 			...draw(Date.now()),
@@ -462,6 +459,87 @@ describe("current result feedback and frozen history", () => {
 		);
 	});
 
+	it("confirms a game in the board and keeps the list without sending edits", async () => {
+		room.self = { id: "host-client", isHost: true };
+		room.snapshot = snapshot({ viewMode: "slot-v1", revision: 5 });
+		render(<LunchRoomPage roomId={roomId} />);
+		fireEvent.click(screen.getByRole("button", { name: "룰렛" }));
+		const confirm = screen.getByRole("region", {
+			name: "룰렛에서도 이 목록을 쓸까요?",
+		});
+		expect(room.switchGame).not.toHaveBeenCalled();
+		expect(
+			within(confirm).getByRole("button", { name: "이 목록으로 계속" }),
+		).toBe(document.activeElement);
+		await act(async () =>
+			fireEvent.click(
+				within(confirm).getByRole("button", { name: "이 목록으로 계속" }),
+			),
+		);
+		expect(room.switchGame).toHaveBeenCalledExactlyOnceWith(
+			"wheel",
+			5,
+			undefined,
+		);
+		expect(room.editRoom).not.toHaveBeenCalled();
+		expect(room.startDraw).not.toHaveBeenCalled();
+	});
+
+	it("lets the host try a member list and cancel before publishing any change", () => {
+		room.self = { id: "host-client", isHost: true };
+		room.snapshot = snapshot({ viewMode: "slot-v1", revision: 5 });
+		render(<LunchRoomPage roomId={roomId} />);
+		fireEvent.click(screen.getByRole("button", { name: "룰렛" }));
+		fireEvent.click(screen.getByRole("button", { name: "목록 바꾸기" }));
+		fireEvent.click(screen.getByRole("button", { name: /방 멤버 \d+명/ }));
+		const editor = screen.getByRole("region", { name: "후보 편집" });
+		fireEvent.click(within(editor).getByRole("button", { name: "취소" }));
+		expect(
+			screen.getByRole("heading", { name: "룰렛에서도 이 목록을 쓸까요?" }),
+		).toBeTruthy();
+		expect(room.switchGame).not.toHaveBeenCalled();
+		expect(room.editRoom).not.toHaveBeenCalled();
+	});
+
+	it("opens setup for an empty pool and includes only online members by default", async () => {
+		const members = snapshot().participants.map((member) => ({
+			...member,
+			status: member.isHost ? ("online" as const) : ("offline" as const),
+			lastActiveAt: baseTime,
+			lastSeenAt: baseTime,
+		}));
+		room.self = { id: "host-client", isHost: true };
+		room.snapshot = snapshot({
+			viewMode: "slot-v1",
+			candidates: [],
+			members,
+			revision: 4,
+		});
+		render(<LunchRoomPage roomId={roomId} />);
+		fireEvent.click(screen.getByRole("button", { name: "룰렛" }));
+		expect(
+			screen.queryByRole("button", { name: "이 목록으로 계속" }),
+		).toBeNull();
+		const apply = screen.getByRole("button", { name: "적용하고 계속" });
+		expect(apply.matches(":disabled")).toBe(true);
+		fireEvent.click(screen.getByRole("button", { name: "방 멤버 2명" }));
+		await act(async () => fireEvent.click(apply));
+		expect(room.switchGame).toHaveBeenCalledExactlyOnceWith("wheel", 4, {
+			candidates: members.map(({ id, name }) => ({
+				id,
+				name,
+				category: "방 멤버",
+				included: true,
+			})),
+			filter: {
+				categories: null,
+				excludedIds: members
+					.filter((member) => !member.isHost)
+					.map(({ id }) => id),
+			},
+		});
+	});
+
 	it("switches the finished board without replacing the round and starts a redraw from that result", () => {
 		room.self = { id: "host-client", isHost: true };
 		const current: RoomDraw = { ...draw(baseTime - 8000), viewMode: "slot-v1" };
@@ -474,7 +552,7 @@ describe("current result feedback and frozen history", () => {
 		const view = render(<LunchRoomPage roomId={roomId} />);
 		expect(
 			screen
-				.getByRole("combobox", { name: "추첨 보기 · 슬롯머신" })
+				.getByRole("button", { name: "슬롯머신", pressed: true })
 				.matches(":disabled"),
 		).toBe(false);
 		expect(view.container.querySelector(".slot-machine")).toBeTruthy();
@@ -489,7 +567,7 @@ describe("current result feedback and frozen history", () => {
 		});
 		expect(
 			screen
-				.getByRole("combobox", { name: "추첨 보기 · 룰렛" })
+				.getByRole("button", { name: "룰렛", pressed: true })
 				.matches(":disabled"),
 		).toBe(false);
 		expect(view.container.querySelector(".slot-machine")).toBeNull();
@@ -833,6 +911,7 @@ beforeEach(() => {
 		closeRoom: vi.fn(async () => true),
 		updateRoomOptions: vi.fn(async () => true),
 		updateDrawView: vi.fn(async () => true),
+		switchGame: vi.fn(async () => true),
 		updateGameFilter: vi.fn(async () => true),
 		resetExclusions: vi.fn(async () => true),
 		vote: vi.fn(() => true),
