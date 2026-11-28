@@ -74,6 +74,7 @@ function filterSignature(filter: GameFilter) {
 
 export default function RoomLifecyclePanel({
 	room,
+	solo = false,
 	switchTarget,
 	onFinishSwitch,
 	busy,
@@ -83,6 +84,7 @@ export default function RoomLifecyclePanel({
 	children,
 }: {
 	room: Room;
+	solo?: boolean;
 	switchTarget: DrawView | null;
 	onFinishSwitch: (accepted: boolean) => void;
 	busy: boolean;
@@ -166,6 +168,8 @@ export default function RoomLifecyclePanel({
 	}, [listScreen, candidates.length]);
 	const [discardOpen, setDiscardOpen] = useState(false);
 	const discardButtonRef = useRef<HTMLButtonElement | null>(null);
+	const [confirmCloseVoteOpen, setConfirmCloseVoteOpen] = useState(false);
+	const candidatesButtonRef = useRef<HTMLButtonElement | null>(null);
 	const [draftCandidates, setDraftCandidates] = useState<RoomCandidate[]>(() =>
 		candidates.map((entry) => ({ ...entry })),
 	);
@@ -495,8 +499,21 @@ export default function RoomLifecyclePanel({
 			setStagePending(null);
 		}
 	}
+	useEffect(() => {
+		if (!showResult || !onEditResult || listScreen)
+			setConfirmCloseVoteOpen(false);
+	}, [showResult, onEditResult, listScreen]);
+	function confirmEditAfterResult() {
+		if (!onEditResult) return;
+		setConfirmCloseVoteOpen(false);
+		focusEditorRef.current = onEditResult();
+	}
 	function openEditor() {
 		if (onEditResult) {
+			if (!solo) {
+				setConfirmCloseVoteOpen(true);
+				return;
+			}
 			focusEditorRef.current = onEditResult();
 			return;
 		}
@@ -699,10 +716,13 @@ export default function RoomLifecyclePanel({
 				<div className="room-lifecycle-tools">
 					{!listScreen && snapshot && (isHost || candidates.length > 0) && (
 						<Button
+							ref={candidatesButtonRef}
 							variant="outline"
 							aria-describedby={`${id}-candidate-count`}
 							title={
-								isHost && onEditResult ? "투표를 마감하고 후보 편집" : undefined
+								isHost && onEditResult && !solo
+									? "투표를 마감하고 후보 편집"
+									: undefined
 							}
 							aria-expanded={isHost ? undefined : guestCandidatesOpen}
 							aria-controls={isHost ? undefined : `${id}-guest-candidates`}
@@ -731,6 +751,9 @@ export default function RoomLifecyclePanel({
 								<List aria-hidden="true" />
 							)}
 							후보
+							<span className="room-candidate-count" aria-hidden="true">
+								{eligible.length}
+							</span>
 						</Button>
 					)}
 					<span className="sr-only" id={`${id}-candidate-count`}>
@@ -1299,6 +1322,44 @@ export default function RoomLifecyclePanel({
 							}}
 						>
 							변경 버리기
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+			<AlertDialog
+				open={confirmCloseVoteOpen}
+				onOpenChange={setConfirmCloseVoteOpen}
+			>
+				<AlertDialogContent
+					onCloseAutoFocus={(event) => {
+						if (focusEditorRef.current) return;
+						event.preventDefault();
+						candidatesButtonRef.current?.focus();
+					}}
+				>
+					<AlertDialogHeader>
+						<AlertDialogTitle>
+							투표를 마감하고 후보를 편집할까요?
+						</AlertDialogTitle>
+						<AlertDialogDescription>
+							{snapshot?.draw?.votes?.length
+								? `현재 ${snapshot.draw.votes.length}명이 참여한 결과 투표가 마감되고, 이번 결과는 지난 기록에 보관됩니다.`
+								: "진행 중인 결과 투표가 마감되고, 이번 결과는 지난 기록에 보관됩니다."}
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>돌아가기</AlertDialogCancel>
+						<AlertDialogAction
+							disabled={
+								locked ||
+								!onEditResult ||
+								Boolean(
+									snapshot?.draw && room.votePendingDrawId === snapshot.draw.id,
+								)
+							}
+							onClick={confirmEditAfterResult}
+						>
+							투표 마감 후 편집
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>

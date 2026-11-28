@@ -25,7 +25,7 @@ export function roomDrawCopyText(draw: RoomDraw, votingWasOpen = false) {
 	const winner = draw.candidates[draw.winnerIndex];
 	const revealAt = getSpinDeadline(draw);
 	return [
-		`음식점: ${winner.name}`,
+		`당첨: ${winner.name}`,
 		`분류: ${winner.category}`,
 		`추첨 ID: ${draw.id}`,
 		`후보 목록 버전: ${draw.listVersion}`,

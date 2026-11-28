@@ -112,7 +112,7 @@ describe("optimistic room result voting", () => {
 		).toBeTruthy();
 		expect(
 			container.querySelector(".room-result-summary")?.textContent,
-		).toContain("당첨 메뉴");
+		).toContain("당첨 결과");
 		fireEvent.click(screen.getByRole("button", { name: "좋아요 투표" }));
 		expect(send).toHaveBeenCalledExactlyOnceWith("optimistic-round", "up");
 		expect(next.disabled).toBe(true);

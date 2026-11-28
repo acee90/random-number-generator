@@ -256,8 +256,13 @@
 		justify-content: center;
 	}
 	.room-header .site-header-wordmark,
-	.room-invite-button > span {
+	.room-invite-label-full {
 		display: none;
+	}
+	.room-invite-label-short {
+		display: inline;
+		font-size: 12px;
+		font-weight: 600;
 	}
 	.room-header .room-title-block {
 		padding-inline-start: 0;
@@ -270,6 +275,8 @@
 		gap: 4px;
 	}
 	.room-invite-button {
-		inline-size: 44px;
+		inline-size: auto;
+		min-inline-size: 44px;
+		padding-inline: 10px;
 	}
 }

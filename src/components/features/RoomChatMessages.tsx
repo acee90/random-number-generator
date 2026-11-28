@@ -66,7 +66,7 @@ export default function RoomChatMessages({
 	if (!messages.length) {
 		return (
 			<MessageScrollerItem className="room-chat-empty" role="listitem">
-				함께 먹고 싶은 메뉴를 이야기해 보세요.
+				후보나 추첨 결과에 대해 이야기해 보세요.
 			</MessageScrollerItem>
 		);
 	}

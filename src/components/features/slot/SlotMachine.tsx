@@ -2,6 +2,7 @@ import { Check, Shuffle, Zap } from "lucide-react";
 import {
 	type ComponentPropsWithoutRef,
 	type ReactElement,
+	type ReactNode,
 	type RefObject,
 	useMemo,
 } from "react";
@@ -35,6 +36,7 @@ type Props = {
 	driveAdjustment?: SpinAdjustment;
 	motionOptions?: SlotMotionOptions;
 	holdHintId?: string;
+	holdHint?: ReactNode;
 	drawButtonProps?: ComponentPropsWithoutRef<"button">;
 	canReplay?: boolean;
 	countdown?: ReactElement;
@@ -62,6 +64,7 @@ export default function SlotMachine({
 	driveAdjustment,
 	motionOptions,
 	holdHintId,
+	holdHint,
 	drawButtonProps,
 	canReplay = false,
 	countdown,
@@ -225,6 +228,7 @@ export default function SlotMachine({
 					)}
 				</div>
 			</div>
+			{holdHint}
 			{countdown && <div className="slot-countdown">{countdown}</div>}
 			<div className="slot-reveal">{children}</div>
 		</div>
