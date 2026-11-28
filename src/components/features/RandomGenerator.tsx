@@ -3,6 +3,7 @@ import {
 	ArrowRight,
 	ArrowUpRight,
 	Atom,
+	Award,
 	Check,
 	ChevronDown,
 	Copy,
@@ -14,6 +15,7 @@ import {
 	RotateCcw,
 	ShieldCheck,
 	Shuffle,
+	Ticket,
 	Trash2,
 	Wind,
 } from "lucide-react";
@@ -69,18 +71,21 @@ const modes = [
 	{
 		id: "number" as const,
 		label: "랜덤 숫자",
+		Icon: Dices,
 		description: "최소값과 최대값, 뽑을 개수를 설정하세요.",
 		title: "범위와 개수 설정",
 	},
 	{
 		id: "lotto" as const,
 		label: "로또 6/45",
+		Icon: Ticket,
 		description: "1~45에서 중복 없는 숫자 6개를 뽑습니다.",
 		title: "로또 번호 추첨",
 	},
 	{
 		id: "pension" as const,
 		label: "연금복권 720+",
+		Icon: Award,
 		description: "조와 여섯 자리 번호를 무작위로 뽑습니다.",
 		title: "연금복권 번호 추첨",
 	},
@@ -701,12 +706,29 @@ export default function RandomGenerator({
 	}
 	return (
 		<div className="random-lab">
-			<SiteHeader
-				active={mode}
-				onToolChange={changeMode}
-				toolsDisabled={busy}
-			/>
+			<SiteHeader active={mode} />
 			<main id="main-content">
+				<nav className="tool-nav" aria-label="생성 도구">
+					{modes.map((item) => {
+						const active = mode === item.id;
+						const Icon = active ? Check : item.Icon;
+						return (
+							<Button
+								key={item.id}
+								variant="plain"
+								size="auto"
+								type="button"
+								className={`tool-tab${active ? " is-active" : ""}`}
+								aria-pressed={active}
+								disabled={busy}
+								onClick={() => changeMode(item.id)}
+							>
+								<Icon size={18} aria-hidden="true" />
+								<span>{item.label}</span>
+							</Button>
+						);
+					})}
+				</nav>
 				<section className="page-heading" aria-labelledby={`${id}-title`}>
 					<h1 id={`${id}-title`}>
 						{current.label} {mode === "number" ? "생성기" : "번호 생성기"}

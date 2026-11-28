@@ -19,33 +19,13 @@ import {
 	getSourceDisplayName,
 } from "../src/services/randomService";
 
-// Keep mode-switch behavior covered independently of the lunch-only site menu.
 vi.mock("../src/components/layout/SiteHeader", () => ({
-	default: ({
-		onToolChange,
-		toolsDisabled,
-	}: {
-		onToolChange: (mode: "number" | "lotto" | "pension") => void;
-		toolsDisabled?: boolean;
-	}) => (
-		<nav aria-label="생성 도구">
-			{(
-				[
-					["number", "랜덤 숫자"],
-					["lotto", "로또 6/45"],
-					["pension", "연금복권 720+"],
-				] as const
-			).map(([mode, label]) => (
-				<button
-					type="button"
-					key={mode}
-					disabled={toolsDisabled}
-					onClick={() => onToolChange(mode)}
-				>
-					{label}
-				</button>
-			))}
-		</nav>
+	default: () => (
+		<header>
+			<a href="/" aria-label="점메추 홈">
+				점메추
+			</a>
+		</header>
 	),
 }));
 

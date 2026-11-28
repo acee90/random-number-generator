@@ -9,9 +9,13 @@ import { createServer } from "vite";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const output = path.join(root, "src/assets/home-preview");
 const scenes = [
-	["host", ".lunch-wheel-center[data-draw-permission=host]"],
-	["guest", ".room-recommend-form input"],
-	["result", ".room-result-summary h3"],
+	["host", ".slot-action", "canvas.slot-art[data-painted]"],
+	["guest", ".room-recommend-form input", null],
+	[
+		"result",
+		".room-result-summary h3",
+		'canvas.picnic-art[data-scene="result"][data-painted]',
+	],
 ];
 const formats = [
 	{ name: "wide", width: 1080, height: 640 },
@@ -44,7 +48,7 @@ try {
 			deviceScaleFactor: 1.5,
 		});
 		await page.clock.setFixedTime(new Date("2026-11-20T03:12:00Z"));
-		for (const [view, ready] of scenes) {
+		for (const [view, ready, canvas] of scenes) {
 			await page.goto(
 				new URL(`scripts/home-preview/fixture.html?view=${view}`, origin).href,
 			);
@@ -58,9 +62,8 @@ try {
 				await page.locator(ready).fill(suggestion);
 				await page.locator(ready).blur();
 			}
-			if (view !== "guest") {
-				const phase = view === "host" ? "idle" : "result";
-				await page.locator(`canvas[data-scene="${phase}"][data-painted]`).waitFor();
+			if (canvas) {
+				await page.locator(canvas).waitFor();
 			}
 			await page.evaluate(() => document.fonts.ready);
 			const frame = await page.screenshot({ animations: "disabled" });

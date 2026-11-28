@@ -86,7 +86,7 @@ describe("Jeommechu lunch home", () => {
 		).toEqual([
 			"첫 추첨 후보를 준비해요",
 			"링크로 친구를 초대해요",
-			"룰렛으로 하나 뽑아요",
+			"슬롯·룰렛으로 하나 뽑아요",
 			"결과에 반응을 남겨요",
 		]);
 		expect(fetchMock).not.toHaveBeenCalled();

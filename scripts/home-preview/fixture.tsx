@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import LunchSessionPage from "@/components/features/LunchSessionPage";
 import { homeRoomExample as example } from "@/data/homeRoomExample";
+import type { DrawView } from "@/lib/drawView";
 import { getWheelRotation } from "@/lib/lunch";
 import type { RoomCandidate, RoomSnapshot } from "@/lib/lunchRoom";
 import {
@@ -33,8 +34,10 @@ const candidates: RoomCandidate[] = [
 }));
 const winnerIndex = candidates.length - 1;
 const startedAt = Date.now() - 12000;
+const viewMode: DrawView = scene === "result" ? "wheel" : "slot-v1";
 const draw = {
 	...createPreviewDraw({ count: candidates.length }),
+	viewMode,
 	candidates,
 	winnerIndex,
 	startedAt,
@@ -44,6 +47,7 @@ const draw = {
 };
 const snapshot: RoomSnapshot = {
 	roomId: previewRoomId,
+	viewMode,
 	title: example.title,
 	listVersion: 1,
 	createdAt: startedAt - 60000,
