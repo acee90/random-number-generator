@@ -19,10 +19,16 @@ import {
 } from "../src/lib/candidateLibrary";
 import {
 	defaultCandidateListSourceId,
+	gatheringActivityPresetSourceId,
+	lunchMenuPresetSourceId,
 	recordCandidateListUse,
 	savedCandidateListSourceId,
 } from "../src/lib/candidateListUsage";
-import { sampleLunchPlaces } from "../src/lib/lunch";
+import {
+	defaultActivityCandidates,
+	defaultLunchMenuCandidates,
+	sampleLunchPlaces,
+} from "../src/lib/lunch";
 
 beforeEach(() => localStorage.clear());
 afterEach(() => {
@@ -302,6 +308,33 @@ describe("candidate list load dialog", () => {
 		);
 		expect(readCandidateLibrary().lists).toEqual([]);
 		expect(screen.queryByRole("alertdialog")).toBeNull();
+	});
+
+	it("offers universal lunch menu and gathering activity presets without local shop names", () => {
+		const { select } = harness();
+		open();
+		const lunchPreset = screen.getByRole("button", {
+			name: /^점심 메뉴 추천/,
+		});
+		const activityPreset = screen.getByRole("button", {
+			name: /^모임 활동/,
+		});
+		expect(lunchPreset).toBeTruthy();
+		expect(activityPreset).toBeTruthy();
+		fireEvent.click(lunchPreset);
+		expect(select).toHaveBeenCalledOnce();
+		const imported = select.mock.calls[0][0];
+		expect(imported.sourceId).toBe(lunchMenuPresetSourceId);
+		expect(imported.candidates).toHaveLength(defaultLunchMenuCandidates.length);
+		expect(
+			imported.candidates.some(
+				(item) =>
+					item.category === "확인 불가" ||
+					/선정릉|선릉|역삼|강남/.test(item.name),
+			),
+		).toBe(false);
+		expect(defaultActivityCandidates.length).toBeGreaterThanOrEqual(8);
+		expect(gatheringActivityPresetSourceId).toBe("preset:gathering-activity");
 	});
 
 	it("blocks selecting when locked but lets the user close the dialog", () => {

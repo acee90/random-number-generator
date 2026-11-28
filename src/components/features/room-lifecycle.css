@@ -362,13 +362,6 @@
 	grid-template-columns: minmax(0, 1fr) minmax(100px, 0.65fr) auto;
 	align-items: end;
 }
-.room-save-list-dialog {
-	max-inline-size: 480px;
-}
-.room-save-list-dialog form {
-	display: grid;
-	gap: 10px;
-}
 @container (max-width: 560px) {
 	.room-candidate-add {
 		grid-template-columns: minmax(0, 1fr);

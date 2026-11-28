@@ -16,6 +16,19 @@ export const lunchCategories = [
 
 export type LunchCategory = (typeof lunchCategories)[number];
 
+/** General-purpose category suggestions without workbook anomalies. */
+export const defaultCategorySuggestions = [
+	"한식",
+	"일식",
+	"중식",
+	"양식",
+	"분식",
+	"아시안",
+	"샐러드",
+	"카페/베이커리",
+	"편의점",
+] as const;
+
 export interface LunchPlace {
 	id: string;
 	name: string;
@@ -23,6 +36,40 @@ export interface LunchPlace {
 	category: string;
 	distanceMeters?: number;
 }
+
+/** Universal lunch menu preset usable anywhere without local shop names. */
+export const defaultLunchMenuCandidates: readonly LunchPlace[] = [
+	{ id: "lunch-menu-01", name: "김치찌개", category: "한식" },
+	{ id: "lunch-menu-02", name: "제육볶음", category: "한식" },
+	{ id: "lunch-menu-03", name: "된장찌개", category: "한식" },
+	{ id: "lunch-menu-04", name: "국밥", category: "한식" },
+	{ id: "lunch-menu-05", name: "비빔밥", category: "한식" },
+	{ id: "lunch-menu-06", name: "칼국수", category: "한식" },
+	{ id: "lunch-menu-07", name: "돈까스", category: "일식" },
+	{ id: "lunch-menu-08", name: "라멘", category: "일식" },
+	{ id: "lunch-menu-09", name: "초밥", category: "일식" },
+	{ id: "lunch-menu-10", name: "짜장면", category: "중식" },
+	{ id: "lunch-menu-11", name: "짬뽕", category: "중식" },
+	{ id: "lunch-menu-12", name: "마라탕", category: "중식" },
+	{ id: "lunch-menu-13", name: "파스타", category: "양식" },
+	{ id: "lunch-menu-14", name: "햄버거", category: "양식" },
+	{ id: "lunch-menu-15", name: "떡볶이", category: "분식" },
+	{ id: "lunch-menu-16", name: "쌀국수", category: "아시안" },
+];
+
+/** Universal gathering activity preset for non-food draws. */
+export const defaultActivityCandidates: readonly LunchPlace[] = [
+	{ id: "activity-01", name: "방탈출", category: "체험" },
+	{ id: "activity-02", name: "보드게임 카페", category: "실내" },
+	{ id: "activity-03", name: "볼링", category: "스포츠" },
+	{ id: "activity-04", name: "스크린골프", category: "스포츠" },
+	{ id: "activity-05", name: "노래방", category: "실내" },
+	{ id: "activity-06", name: "영화 관람", category: "문화" },
+	{ id: "activity-07", name: "전시회", category: "문화" },
+	{ id: "activity-08", name: "카페 투어", category: "휴식" },
+	{ id: "activity-09", name: "피크닉", category: "야외" },
+	{ id: "activity-10", name: "맛집 투어", category: "식사" },
+];
 
 export const lunchSource = {
 	label: "회사 주변 음식점 목록",

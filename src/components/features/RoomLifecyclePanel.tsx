@@ -24,11 +24,15 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import type { useLunchRoom } from "@/hooks/useLunchRoom";
 import {
-	defaultCandidateListSourceId,
+	lunchMenuPresetSourceId,
 	recordCandidateListUse,
+	savedCandidateListSourceId,
 } from "@/lib/candidateListUsage";
 import { type DrawView, drawViewLabels } from "@/lib/drawView";
-import { lunchCategories, sampleLunchPlaces } from "@/lib/lunch";
+import {
+	defaultCategorySuggestions,
+	defaultLunchMenuCandidates,
+} from "@/lib/lunch";
 import {
 	type RoomGameFilter as GameFilter,
 	getEligibleRoomCandidates,
@@ -183,10 +187,13 @@ export default function RoomLifecyclePanel({
 	const [editorGeneration, setEditorGeneration] = useState(0);
 	const [loadOpen, setLoadOpen] = useState(false);
 	const loadButtonRef = useRef<HTMLButtonElement | null>(null);
+	const loadFallbackRef = useRef<HTMLButtonElement | null>(null);
 	const [pendingLoad, setPendingLoad] = useState<CandidateListSelection | null>(
 		null,
 	);
+	const [sourceId, setSourceId] = useState<string>();
 	const [sourceName, setSourceName] = useState("후보 목록");
+	const previousSourceId = useRef(sourceId);
 	const previousSourceName = useRef(sourceName);
 	const [saveOpen, setSaveOpen] = useState(false);
 	const saveButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -222,7 +229,7 @@ export default function RoomLifecyclePanel({
 	const categorySuggestions = [
 		...new Set(
 			[
-				...lunchCategories,
+				...defaultCategorySuggestions,
 				...candidates.map((entry) => entry.category),
 				...draftCandidates.map((entry) => entry.category),
 			].filter(Boolean),
@@ -577,6 +584,7 @@ export default function RoomLifecyclePanel({
 				.filter((candidate) => candidate.included === false)
 				.map(({ id }) => id),
 		});
+		setSourceId(selection.sourceId);
 		setSourceName(selection.name);
 		setEditError("");
 		setLoadOpen(false);
@@ -592,8 +600,12 @@ export default function RoomLifecyclePanel({
 		}
 		return importList(selection);
 	}
-	function openLoader(trigger: HTMLButtonElement | null) {
+	function openLoader(
+		trigger: HTMLButtonElement | null,
+		fallback?: HTMLButtonElement | null,
+	) {
 		loadButtonRef.current = trigger;
+		loadFallbackRef.current = fallback ?? null;
 		setLoadOpen(true);
 	}
 	function openSave(trigger: HTMLButtonElement | null) {
@@ -667,6 +679,7 @@ export default function RoomLifecyclePanel({
 				pending={switchPending}
 				onKeep={() => void confirmSwitch(false)}
 				onEdit={() => {
+					previousSourceId.current = sourceId;
 					previousSourceName.current = sourceName;
 					resetDraft();
 					focusEditorRef.current = true;
@@ -792,6 +805,7 @@ export default function RoomLifecyclePanel({
 											disabled={switchPending}
 											onClick={() => {
 												resetDraft();
+												setSourceId(previousSourceId.current);
 												setSourceName(previousSourceName.current);
 												setSwitchEditRevision(null);
 												if (!candidates.length) onFinishSwitch(false);
@@ -950,12 +964,14 @@ export default function RoomLifecyclePanel({
 											disabled={!editable}
 											onClick={() =>
 												importList({
-													sourceId: defaultCandidateListSourceId,
-													name: "점심 메뉴",
-													candidates: sampleLunchPlaces.map((candidate) => ({
-														...candidate,
-														id: crypto.randomUUID(),
-													})),
+													sourceId: lunchMenuPresetSourceId,
+													name: "점심 메뉴 추천",
+													candidates: defaultLunchMenuCandidates.map(
+														(candidate) => ({
+															...candidate,
+															id: crypto.randomUUID(),
+														}),
+													),
 												})
 											}
 										>
@@ -1200,14 +1216,20 @@ export default function RoomLifecyclePanel({
 				onSelect={selectList}
 				disabled={!editable}
 				returnFocusRef={loadButtonRef}
+				fallbackFocusRef={loadFallbackRef}
 			/>
 			<CandidateListSaveDialog
 				open={saveOpen}
 				onOpenChange={setSaveOpen}
 				name={sourceName}
+				sourceId={sourceId}
 				candidates={saveCandidates}
 				disabled={!editable}
 				returnFocusRef={saveButtonRef}
+				onSaved={(saved) => {
+					setSourceId(savedCandidateListSourceId(saved.id));
+					setSourceName(saved.name);
+				}}
 			/>
 			<AlertDialog
 				open={Boolean(pendingLoad)}

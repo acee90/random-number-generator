@@ -23,6 +23,7 @@ import {
 	type RoomDraw,
 	type RoomDrawStartOptions,
 } from "@/lib/lunchRoom";
+import { removeRecentLunchRoom, saveRecentLunchRoom } from "@/lib/recentRooms";
 import { getRoomArchiveDraws } from "@/lib/roomGame";
 import {
 	changeSpinDrive,
@@ -301,6 +302,33 @@ export default function LunchSessionPage({
 			copyReturnRef.current?.focus();
 		}
 	}, [copyHelp]);
+	const recentTitle = snapshot?.title;
+	const recentStatus = snapshot?.status;
+	const recentExpiresAt = snapshot?.expiresAt;
+	useEffect(() => {
+		if (solo) return;
+		if (closed || recentStatus === "closed") {
+			removeRecentLunchRoom(roomId);
+			return;
+		}
+		if (connected && recentTitle && recentExpiresAt !== undefined) {
+			saveRecentLunchRoom({
+				roomId,
+				title: recentTitle,
+				role: room.self?.isHost ? "host" : "guest",
+				expiresAt: recentExpiresAt,
+			});
+		}
+	}, [
+		solo,
+		closed,
+		connected,
+		roomId,
+		recentTitle,
+		recentStatus,
+		recentExpiresAt,
+		room.self?.isHost,
+	]);
 	useEffect(() => {
 		if (closed) {
 			setSelectedDraw(null);

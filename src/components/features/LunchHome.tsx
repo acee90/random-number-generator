@@ -1,18 +1,36 @@
 import {
 	ArrowRight,
 	Dices,
+	History,
 	Link2,
 	ListPlus,
 	ThumbsUp,
 	Users,
+	X,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import SiteHeader from "@/components/layout/SiteHeader";
 import { Button } from "@/components/ui/button";
+import {
+	type RecentLunchRoom,
+	readRecentLunchRooms,
+	removeRecentLunchRoom,
+} from "@/lib/recentRooms";
 import HomeHowItWorks from "./home-showcase/HomeHowItWorks";
 import HomeRoomShowcase from "./home-showcase/HomeRoomShowcase";
 import "./lunch-home.css";
 
 export default function LunchHome() {
+	const [recentRooms, setRecentRooms] = useState<RecentLunchRoom[]>([]);
+	useEffect(() => {
+		setRecentRooms(readRecentLunchRooms());
+	}, []);
+	function dismissRoom(roomId: string) {
+		removeRecentLunchRoom(roomId);
+		setRecentRooms((current) =>
+			current.filter((entry) => entry.roomId !== roomId),
+		);
+	}
 	return (
 		<div className="random-lab jeommechu-home">
 			<SiteHeader active="lunch" homeCurrent />
@@ -65,6 +83,47 @@ export default function LunchHome() {
 						</ol>
 					</div>
 				</section>
+				{recentRooms.length > 0 && (
+					<section className="lunch-home-recent" aria-label="최근 추첨방">
+						<div className="lunch-home-recent-head">
+							<h2>
+								<History size={16} aria-hidden="true" /> 최근 추첨방
+							</h2>
+						</div>
+						<ul className="lunch-home-recent-list">
+							{recentRooms.map((room) => (
+								<li key={room.roomId}>
+									<Button
+										asChild
+										variant="outline"
+										size="default"
+										className="lunch-home-recent-link"
+									>
+										<a href={`/lunch-room/${room.roomId}`}>
+											<span className="lunch-home-recent-meta">
+												<strong>{room.title}</strong>
+												<small>
+													{room.role === "host" ? "방장" : "참여자"}
+												</small>
+											</span>
+											<ArrowRight size={16} aria-hidden="true" />
+										</a>
+									</Button>
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon"
+										className="lunch-home-recent-dismiss"
+										aria-label={`${room.title} 최근 목록에서 숨기기`}
+										onClick={() => dismissRoom(room.roomId)}
+									>
+										<X size={16} aria-hidden="true" />
+									</Button>
+								</li>
+							))}
+						</ul>
+					</section>
+				)}
 				<HomeRoomShowcase />
 				<HomeHowItWorks />
 			</main>

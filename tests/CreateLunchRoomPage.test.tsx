@@ -11,7 +11,10 @@ import {
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import CreateLunchRoomPage from "../src/components/features/CreateLunchRoomPage";
-import { saveCandidateList } from "../src/lib/candidateLibrary";
+import {
+	readCandidateLibrary,
+	saveCandidateList,
+} from "../src/lib/candidateLibrary";
 import { sampleLunchPlaces } from "../src/lib/lunch";
 import { readSoloRoom } from "../src/lib/soloRoom";
 
@@ -102,6 +105,79 @@ describe("room creation steps", () => {
 		expect(input("방 이름").value).toBe("먼저 입력한 이름");
 		expect(input("닉네임").value).toBe("준희");
 	});
+	it("exposes starter actions on an empty candidate list and allows overwriting a loaded saved list", async () => {
+		const existing = saveCandidateList({
+			id: "saved-team",
+			name: "팀 점심 목록",
+			items: [
+				{ id: "a", name: "김치찌개", category: "한식", included: true },
+				{ id: "b", name: "초밥", category: "일식", included: true },
+			],
+		});
+		render(<CreateLunchRoomPage />);
+		next();
+		const starter = screen.getByRole("group", {
+			name: "후보 빠르게 시작하기",
+		});
+		expect(
+			within(starter).getByRole("button", { name: "주변 음식점 가져오기" }),
+		).toBeTruthy();
+		expect(
+			within(starter).getByRole("button", { name: "여러 개 추가" }),
+		).toBeTruthy();
+		fireEvent.click(
+			within(starter).getByRole("button", { name: "목록 불러오기" }),
+		);
+		fireEvent.click(
+			within(screen.getByRole("dialog", { name: "목록 불러오기" })).getByRole(
+				"button",
+				{ name: /^팀 점심 목록\s*후보/ },
+			),
+		);
+		expect(
+			screen.queryByRole("group", { name: "후보 빠르게 시작하기" }),
+		).toBeNull();
+		await setCandidates("칼국수");
+		listAction("내 목록에 저장");
+		const dialog = screen.getByRole("dialog", { name: "내 목록에 저장" });
+		const modeGroup = within(dialog).getByRole("group", { name: "저장 방식" });
+		expect(
+			within(modeGroup)
+				.getByRole("button", { name: "기존 목록 덮어쓰기" })
+				.getAttribute("aria-pressed"),
+		).toBe("true");
+		await act(async () => {
+			fireEvent.click(
+				within(dialog).getByRole("button", { name: "덮어쓰기 저장" }),
+			);
+		});
+		const afterOverwrite = readCandidateLibrary().lists;
+		expect(afterOverwrite).toHaveLength(1);
+		expect(afterOverwrite[0].id).toBe(existing.id);
+		expect(afterOverwrite[0].revision).toBe(existing.revision + 1);
+		expect(afterOverwrite[0].items.map((item) => item.name)).toEqual([
+			"김치찌개",
+			"초밥",
+			"칼국수",
+		]);
+		fireEvent.click(within(dialog).getAllByRole("button", { name: "닫기" })[0]);
+		listAction("내 목록에 저장");
+		const copyDialog = screen.getByRole("dialog", { name: "내 목록에 저장" });
+		fireEvent.click(
+			within(copyDialog).getByRole("button", { name: "새 사본으로 저장" }),
+		);
+		fireEvent.change(
+			within(copyDialog).getByRole("textbox", { name: "목록 이름" }),
+			{ target: { value: "팀 점심 사본" } },
+		);
+		await act(async () => {
+			fireEvent.click(
+				within(copyDialog).getByRole("button", { name: "사본 저장" }),
+			);
+		});
+		expect(readCandidateLibrary().lists).toHaveLength(2);
+	});
+
 	it("groups required fields together and retains both steps' input after going back", async () => {
 		mocks.readName.mockReturnValue(`${"가".repeat(11)}😀옛이름`);
 		render(<CreateLunchRoomPage />);
