@@ -17,7 +17,7 @@ export default function CreateLunchRoomPage({
 				<CreateLunchRoom solo={solo} />
 				<p className="shrink-0 text-sm text-muted-foreground">
 					{solo
-						? "이 탭에 최대 24시간 보관 · 탭을 닫으면 삭제"
+						? "이 브라우저에 최대 24시간 보관 · 닫았다가 열어도 이어서 이용"
 						: `최대 ${lunchRoomLimits.maxParticipants}명 · 방과 기록은 24시간 뒤 삭제`}
 				</p>
 			</main>

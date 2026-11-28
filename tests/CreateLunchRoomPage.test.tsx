@@ -86,13 +86,10 @@ afterEach(() => {
 });
 
 describe("room creation steps", () => {
-	it.each([
-		false,
-		true,
-	])("preserves early input when the setup page hydrates (solo=%s)", (solo) => {
+	it("preserves early input when the setup page hydrates", () => {
 		mocks.readName.mockReturnValue("지난 닉네임");
 		const container = document.body.appendChild(document.createElement("div"));
-		const page = <CreateLunchRoomPage solo={solo} />;
+		const page = <CreateLunchRoomPage />;
 		container.innerHTML = renderToString(page);
 		input("방 이름").value = "먼저 입력한 이름";
 		input("닉네임").value = "준희";
@@ -295,31 +292,36 @@ describe("room creation steps", () => {
 		});
 	});
 
-	it("uses the same two steps to open a private room with the selected host, candidates and filter", async () => {
+	it("skips room name and nickname setup in solo mode and starts directly on candidates", async () => {
 		render(<CreateLunchRoomPage solo />);
-		fireEvent.change(input("방 이름"), { target: { value: "혼자 먹는 점심" } });
-		fireEvent.change(input("닉네임"), { target: { value: "준희" } });
-		next();
-		expect(button("방 만들기").disabled).toBe(true);
+		expect(
+			screen.getByRole("heading", { level: 1, name: "혼자 추첨 준비" }),
+		).toBeTruthy();
+		expect(screen.queryByLabelText("방 이름")).toBeNull();
+		expect(screen.queryByLabelText("닉네임")).toBeNull();
+		expect(screen.queryByRole("button", { name: "이전" })).toBeNull();
+		expect(screen.queryByText(/\/ 2/)).toBeNull();
+		expect(button("추첨 시작").disabled).toBe(true);
 		await setCandidates("국밥", "우동");
 		fireEvent.click(screen.getByRole("checkbox", { name: "우동 추첨 포함" }));
-		await create();
+		await create("추첨 시작");
 		expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith({
 			to: "/solo/$roomId",
 			params: { roomId: expect.any(String) },
 		});
-		const saved = readSoloRoom(
-			mocks.navigate.mock.calls[0][0].params.roomId,
-		)?.snapshot;
+		const createdId = mocks.navigate.mock.calls[0][0].params.roomId;
+		sessionStorage.clear();
+		const saved = readSoloRoom(createdId)?.snapshot;
 		expect(saved).toMatchObject({
-			title: "혼자 먹는 점심",
-			participants: [{ name: "준희", isHost: true }],
+			title: "혼자 점심 추첨",
+			participants: [{ name: "나", isHost: true }],
 			status: "waiting",
 			candidates: [{ name: "국밥" }, { name: "우동" }],
 			gameFilter: { excludedIds: [saved?.candidates[1].id] },
 		});
 		expect(fetchMock).not.toHaveBeenCalled();
 		expect(mocks.saveHost).not.toHaveBeenCalled();
+		expect(mocks.saveName).not.toHaveBeenCalled();
 		expect(mocks.prepareEntry).not.toHaveBeenCalled();
 	});
 	it("locks the candidate step while submitting once, then keeps the draft available after a server error", async () => {

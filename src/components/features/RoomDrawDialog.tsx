@@ -21,7 +21,11 @@ function probabilityLabel(draw: RoomDraw, index: number) {
 	return `1/${draw.candidates.length} · 약 ${new Intl.NumberFormat("ko-KR", { style: "percent", maximumFractionDigits: 2 }).format(probability)}`;
 }
 
-export function roomDrawCopyText(draw: RoomDraw, votingWasOpen = false) {
+export function roomDrawCopyText(
+	draw: RoomDraw,
+	votingWasOpen = false,
+	solo = false,
+) {
 	const winner = draw.candidates[draw.winnerIndex];
 	const revealAt = getSpinDeadline(draw);
 	return [
@@ -34,7 +38,7 @@ export function roomDrawCopyText(draw: RoomDraw, votingWasOpen = false) {
 		`${drawViewLabels[readDrawView(draw.viewMode)]} 시작: ${new Date(draw.startedAt).toISOString()}`,
 		`공개 예정 시각: ${Number.isFinite(revealAt) ? new Date(revealAt).toISOString() : "회전 중"}`,
 		`난수 출처: ${getSourceDisplayName(draw.source)}`,
-		...(draw.votes === undefined
+		...(solo || draw.votes === undefined
 			? []
 			: [
 					"",
@@ -45,16 +49,20 @@ export function roomDrawCopyText(draw: RoomDraw, votingWasOpen = false) {
 					),
 				]),
 
-		"",
-		"추첨 요청 시 참가자:",
-		...(draw.participants === undefined
-			? ["이전 기록에는 참가자 정보가 없습니다"]
-			: draw.participants.length === 0
-				? ["참가자 0명"]
-				: draw.participants.map(
-						(participant) =>
-							`- ${participant.name}${participant.isHost ? " (방장)" : ""}`,
-					)),
+		...(solo
+			? []
+			: [
+					"",
+					"추첨 요청 시 참가자:",
+					...(draw.participants === undefined
+						? ["이전 기록에는 참가자 정보가 없습니다"]
+						: draw.participants.length === 0
+							? ["참가자 0명"]
+							: draw.participants.map(
+									(participant) =>
+										`- ${participant.name}${participant.isHost ? " (방장)" : ""}`,
+								)),
+				]),
 		"",
 		`후보와 확률 (${draw.probabilities ? "당시 기록된 확률" : "후보 수에 따른 균등 추첨 기준으로 계산"}):`,
 		...draw.candidates.map(
@@ -64,7 +72,13 @@ export function roomDrawCopyText(draw: RoomDraw, votingWasOpen = false) {
 	].join("\n");
 }
 
-export function RoomDrawRecordBody({ draw }: { draw: RoomDraw }) {
+export function RoomDrawRecordBody({
+	draw,
+	solo = false,
+}: {
+	draw: RoomDraw;
+	solo?: boolean;
+}) {
 	const times = [
 		{ label: "추첨 요청", value: draw.requestedAt },
 		{ label: "난수 결과 생성", value: draw.timestamp },
@@ -114,22 +128,26 @@ export function RoomDrawRecordBody({ draw }: { draw: RoomDraw }) {
 				))}
 			</dl>
 
-			<h4>추첨 요청 시 참가자</h4>
-			{draw.participants === undefined ? (
-				<p>이전 기록에는 참가자 정보가 없습니다.</p>
-			) : draw.participants.length === 0 ? (
-				<p>참가자 0명</p>
-			) : (
-				<ul className="room-draw-participants">
-					{draw.participants.map((participant) => (
-						<li key={participant.id}>
-							{participant.name}
-							{participant.isHost && (
-								<span className="room-host-badge">방장</span>
-							)}
-						</li>
-					))}
-				</ul>
+			{!solo && (
+				<>
+					<h4>추첨 요청 시 참가자</h4>
+					{draw.participants === undefined ? (
+						<p>이전 기록에는 참가자 정보가 없습니다.</p>
+					) : draw.participants.length === 0 ? (
+						<p>참가자 0명</p>
+					) : (
+						<ul className="room-draw-participants">
+							{draw.participants.map((participant) => (
+								<li key={participant.id}>
+									{participant.name}
+									{participant.isHost && (
+										<span className="room-host-badge">방장</span>
+									)}
+								</li>
+							))}
+						</ul>
+					)}
+				</>
 			)}
 			<h4>후보와 확률</h4>
 			<p className="room-probability-note">
@@ -151,6 +169,7 @@ export function RoomDrawRecordBody({ draw }: { draw: RoomDraw }) {
 
 export default function RoomDrawDialog({
 	draw,
+	solo = false,
 	votingWasOpen = false,
 	columnRef,
 	returnFocusRef,
@@ -160,6 +179,7 @@ export default function RoomDrawDialog({
 	onClose,
 }: {
 	draw: RoomDraw;
+	solo?: boolean;
 	votingWasOpen?: boolean;
 	columnRef: RefObject<HTMLDivElement | null>;
 	returnFocusRef: RefObject<HTMLButtonElement | null>;
@@ -220,7 +240,7 @@ export default function RoomDrawDialog({
 		setCopyFailure(false);
 		try {
 			await navigator.clipboard.writeText(
-				roomDrawCopyText(draw, votingWasOpen),
+				roomDrawCopyText(draw, votingWasOpen, solo),
 			);
 			if (attempt !== copyAttemptRef.current) return;
 			setCopied(true);
@@ -290,7 +310,9 @@ export default function RoomDrawDialog({
 									{winner.name} 상세 기록
 								</Dialog.Title>
 								<Dialog.Description className="room-record-description">
-									이 회차에 저장된 후보와 참가자 정보를 표시합니다.
+									{solo
+										? "이 회차에 저장된 후보와 추첨 정보를 표시합니다."
+										: "이 회차에 저장된 후보와 참가자 정보를 표시합니다."}
 								</Dialog.Description>
 							</div>
 							<Dialog.Close asChild>
@@ -305,8 +327,8 @@ export default function RoomDrawDialog({
 							</Dialog.Close>
 						</div>
 						<div className="room-record-body">
-							<RoomDrawRecordBody draw={draw} />
-							{draw.votes && (
+							<RoomDrawRecordBody draw={draw} solo={solo} />
+							{!solo && draw.votes && (
 								<RoomDrawFeedback
 									draw={draw}
 									isHost={false}
@@ -323,7 +345,7 @@ export default function RoomDrawDialog({
 							)}
 							{copyFailure && (
 								<CopyFallback
-									text={roomDrawCopyText(draw, votingWasOpen)}
+									text={roomDrawCopyText(draw, votingWasOpen, solo)}
 									onRetry={() => void copyRecord()}
 									onClose={() => {
 										copyAttemptRef.current++;

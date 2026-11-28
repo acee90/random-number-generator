@@ -583,6 +583,7 @@ export default function LunchSessionPage({
 								)}
 								<RoomLifecyclePanel
 									room={room}
+									solo={solo}
 									key={roomId + viewMode}
 									switchTarget={switchTarget}
 									onFinishSwitch={finishGameChoice}
@@ -625,6 +626,7 @@ export default function LunchSessionPage({
 													changeDrive(false);
 												}}
 												clockOffset={room.clockOffset}
+												showVoting={!solo}
 												draw={showResult ? displayedDraw : null}
 												wheel={{
 													candidates: places,
@@ -730,6 +732,7 @@ export default function LunchSessionPage({
 			{selectedDraw && !closed && (
 				<RoomDrawDialog
 					draw={selectedDraw.draw}
+					solo={solo}
 					votingWasOpen={selectedDraw.votingWasOpen}
 					columnRef={primaryColumnRef}
 					returnFocusRef={selectedDrawTriggerRef}

@@ -31,9 +31,11 @@ type Room = ReturnType<typeof useLunchRoom>;
 export default function RoomSettingsDialog({
 	room,
 	busy,
+	solo = false,
 }: {
 	room: Room;
 	busy: boolean;
+	solo?: boolean;
 }) {
 	const id = useId();
 	const snapshot = room.snapshot;
@@ -264,17 +266,20 @@ export default function RoomSettingsDialog({
 										className="sm:me-auto"
 										disabled={!editable}
 									>
-										<LogOut aria-hidden="true" />방 종료
+										<LogOut aria-hidden="true" />
+										{solo ? "추첨 종료" : "방 종료"}
 									</Button>
 								</AlertDialogTrigger>
 							)}
 							<AlertDialogContent>
 								<AlertDialogHeader>
-									<AlertDialogTitle>방을 종료할까요?</AlertDialogTitle>
+									<AlertDialogTitle>
+										{solo ? "혼자 추첨을 종료할까요?" : "방을 종료할까요?"}
+									</AlertDialogTitle>
 									<AlertDialogDescription>
-										모든 참가자의 이용이 종료되며 이 링크로 다시 입장할 수
-										없습니다. 저장하지 않은 변경은 사라집니다. 추첨 기록은 원래
-										만료 시각까지 확인하고 저장할 수 있어요.
+										{solo
+											? "현재 혼자 추첨을 종료합니다. 저장하지 않은 변경은 사라집니다. 추첨 기록은 원래 만료 시각까지 확인하고 저장할 수 있어요."
+											: "모든 참가자의 이용이 종료되며 이 링크로 다시 입장할 수 없습니다. 저장하지 않은 변경은 사라집니다. 추첨 기록은 원래 만료 시각까지 확인하고 저장할 수 있어요."}
 									</AlertDialogDescription>
 								</AlertDialogHeader>
 								{error && (
@@ -293,7 +298,7 @@ export default function RoomSettingsDialog({
 											void closeRoom();
 										}}
 									>
-										{closing ? "종료 중…" : "방 종료"}
+										{closing ? "종료 중…" : solo ? "추첨 종료" : "방 종료"}
 									</AlertDialogAction>
 								</AlertDialogFooter>
 							</AlertDialogContent>

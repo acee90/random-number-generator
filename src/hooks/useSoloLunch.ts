@@ -48,7 +48,7 @@ export function useSoloLunch(
 	const [snapshot, setSnapshot] = useState(initial);
 	const current = useRef(initial);
 	const [error, setError] = useState(
-		initial.status === "closed" ? "방장이 방을 종료했습니다." : "",
+		initial.status === "closed" ? "혼자 추첨을 종료했습니다." : "",
 	);
 	const [storageFailed, setStorageFailed] = useState(initialStorageFailed);
 	const attempt = useRef(0);
@@ -419,7 +419,7 @@ export function useSoloLunch(
 			)
 				return false;
 			commit({ ...state, status: "closed", revision: revision() + 1 });
-			setError("방장이 방을 종료했습니다.");
+			setError("혼자 추첨을 종료했습니다.");
 			return true;
 		},
 		entryLoading: false,
