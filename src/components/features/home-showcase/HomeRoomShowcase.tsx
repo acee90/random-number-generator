@@ -17,7 +17,7 @@ const views = [
 		Icon: Crown,
 		wide: hostWide,
 		compact: hostCompact,
-		alt: `${[...example.activities, example.recommendation].join("·")} 룰렛과 방장용 돌리기 버튼`,
+		alt: `${[...example.activities, example.recommendation].join("·")} 슬롯머신과 게임 목록·방장용 돌리기 버튼`,
 	},
 	{
 		key: "guest",

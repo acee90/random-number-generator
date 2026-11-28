@@ -26,9 +26,9 @@ export default function LunchHome() {
 						<h1 id="lunch-home-title">
 							오늘 점심,
 							<br />
-							룰렛으로 정해요.
+							슬롯·룰렛으로 정해요.
 						</h1>
-						<p>원하는 후보를 모아 룰렛으로 하나 뽑아요.</p>
+						<p>원하는 후보를 모아 슬롯머신이나 룰렛으로 하나 뽑아요.</p>
 					</div>
 					<div className="lunch-home-actions">
 						<Button asChild size="default">
@@ -70,7 +70,7 @@ export default function LunchHome() {
 			</main>
 			<footer className="lunch-home-footer">
 				<span>jeommechu.dev</span>
-				<span>점심 메뉴 룰렛 · 실시간 채팅</span>
+				<span>점심 메뉴 슬롯·룰렛 · 실시간 채팅</span>
 			</footer>
 		</div>
 	);

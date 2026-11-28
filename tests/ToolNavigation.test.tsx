@@ -131,4 +131,37 @@ describe("shared site and tool navigation", () => {
 		expect(generateLotteryNumbers).not.toHaveBeenCalled();
 		expect(generateRandomNumbers).not.toHaveBeenCalled();
 	});
+
+	it("lets direct /tools visitors switch between number, lotto, and pension tools in-page while keeping the site header lunch-only", () => {
+		const changed = vi.fn();
+		render(<RandomGenerator initialMode="number" onModeChange={changed} />);
+		const header = within(screen.getByRole("banner"));
+		expect(header.queryByRole("button")).toBeNull();
+		const nav = within(screen.getByRole("navigation", { name: "생성 도구" }));
+		expect(
+			nav
+				.getByRole("button", { name: "랜덤 숫자" })
+				.getAttribute("aria-pressed"),
+		).toBe("true");
+		fireEvent.click(nav.getByRole("button", { name: "로또 6/45" }));
+		expect(changed).toHaveBeenLastCalledWith("lotto");
+		expect(
+			nav
+				.getByRole("button", { name: "로또 6/45" })
+				.getAttribute("aria-pressed"),
+		).toBe("true");
+		expect(
+			screen.getByRole("heading", { name: "로또 번호 추첨" }),
+		).toBeTruthy();
+		fireEvent.click(nav.getByRole("button", { name: "연금복권 720+" }));
+		expect(changed).toHaveBeenLastCalledWith("pension");
+		expect(
+			nav
+				.getByRole("button", { name: "연금복권 720+" })
+				.getAttribute("aria-pressed"),
+		).toBe("true");
+		expect(
+			screen.getByRole("heading", { name: "연금복권 번호 추첨" }),
+		).toBeTruthy();
+	});
 });

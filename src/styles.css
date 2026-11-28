@@ -174,13 +174,14 @@ a {
 	border: 1px solid var(--section-line);
 	background: var(--surface);
 	border-radius: var(--panel-radius);
-	margin-bottom: 22px;
+	margin: 16px 0 0;
 }
 .tool-tab {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	gap: 12px;
+	gap: 8px;
+	min-inline-size: 0;
 	min-height: 44px;
 	border: 0;
 	background: transparent;
@@ -189,24 +190,29 @@ a {
 	border-radius: 0;
 	font-size: 14px;
 	font-weight: 600;
+	word-break: keep-all;
 	transition:
 		background-color 120ms,
 		color 120ms;
+}
+.tool-tab:focus-visible {
+	outline-offset: -3px;
 }
 .tool-tab + .tool-tab {
 	border-inline-start: 1px solid var(--line);
 }
 .tool-tab:first-child {
-	border-start-start-radius: 1px;
-	border-end-start-radius: 1px;
+	border-start-start-radius: calc(var(--panel-radius) - 1px);
+	border-end-start-radius: calc(var(--panel-radius) - 1px);
 }
 .tool-tab:last-child {
-	border-start-end-radius: 1px;
-	border-end-end-radius: 1px;
+	border-start-end-radius: calc(var(--panel-radius) - 1px);
+	border-end-end-radius: calc(var(--panel-radius) - 1px);
 }
 .tool-tab svg {
-	width: 21px;
-	height: 21px;
+	flex-shrink: 0;
+	width: 18px;
+	height: 18px;
 }
 .tool-tab.is-active {
 	background: var(--lime);
@@ -1184,17 +1190,17 @@ a {
 	.tool-nav {
 		gap: 0;
 		padding: 0;
-		margin-bottom: 18px;
+		margin: 12px 0 0;
 	}
 	.tool-tab {
-		font-size: 14px;
-		gap: 7px;
-		min-height: 54px;
-		padding: 10px 5px;
+		font-size: 13px;
+		gap: 6px;
+		min-height: 44px;
+		padding: 8px 6px;
 	}
 	.tool-tab svg {
-		width: 18px;
-		height: 18px;
+		width: 16px;
+		height: 16px;
 	}
 	.tab-number,
 	.active-dot {
@@ -1344,9 +1350,11 @@ a {
 	.tool-tab {
 		font-size: 12px;
 		gap: 4px;
+		padding: 8px 4px;
 	}
 	.tool-tab svg {
-		width: 15px;
+		width: 14px;
+		height: 14px;
 	}
 	.controls {
 		padding: 23px 18px;

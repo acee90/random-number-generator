@@ -29,8 +29,9 @@ const steps = [
 	},
 	{
 		scene: "draw",
-		title: "룰렛으로 하나 뽑아요",
-		description: "확정한 후보를 룰렛으로 뽑고, 모두 같은 결과를 확인해요.",
+		title: "슬롯·룰렛으로 하나 뽑아요",
+		description:
+			"확정한 후보를 슬롯머신이나 룰렛으로 뽑고, 모두 같은 결과를 확인해요.",
 	},
 	{
 		scene: "react",
