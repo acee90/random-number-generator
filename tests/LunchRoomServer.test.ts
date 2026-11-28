@@ -3946,6 +3946,66 @@ describe("LunchRoomServer game lifecycle", () => {
 		return structuredClone(draw);
 	}
 
+	it("commits a game switch once, preserving its pool and archiving the finished game before a list replacement", async () => {
+		const { server, context } = await room();
+		const host = await connect(server, context, "방장", hostToken);
+		const guest = await connect(server, context, "참가자");
+		const draw = await drawResult(server, context, host, "slot-before-switch");
+		const before = structuredClone(storedSnapshot(context));
+		const keep = {
+			type: "switch-game",
+			id: "switch-keep",
+			viewMode: "wheel",
+			expectedRevision: revision(host),
+		};
+		await send(server, guest, keep);
+		expect(requestErrors(guest, keep.id)).toMatchObject([
+			{ code: "HOST_REQUIRED" },
+		]);
+		await send(server, host, keep);
+		await send(server, host, keep);
+		const after = latestSnapshot(guest).snapshot;
+		expect(after).toMatchObject({
+			status: "waiting",
+			viewMode: "wheel",
+			candidates: before.candidates,
+			listVersion: before.listVersion,
+			gameFilter: before.gameFilter,
+			excludedIds: before.excludedIds,
+			draw: null,
+			history: [draw],
+			revision: keep.expectedRevision + 1,
+		});
+		const members = after.participants.map(({ id, name }) => ({
+			id,
+			name,
+			category: "방 멤버",
+		}));
+		const replace = {
+			...keep,
+			id: "switch-replace",
+			viewMode: "slot-v1",
+			candidates: members,
+			filter: { categories: null, excludedIds: [] },
+		};
+		await send(server, host, replace);
+		expect(requestErrors(host, replace.id)).toMatchObject([
+			{ code: "REVISION_CONFLICT" },
+		]);
+		expect(storedSnapshot(context).candidates).toEqual(before.candidates);
+		await send(server, host, {
+			...replace,
+			id: "switch-retry",
+			expectedRevision: revision(host),
+		});
+		expect(latestSnapshot(guest).snapshot).toMatchObject({
+			viewMode: "slot-v1",
+			history: [draw],
+			candidates: members,
+			listVersion: before.listVersion + 1,
+		});
+	});
+
 	it("switches the live result on both clients and redraws once with the original round and votes archived", async () => {
 		const { server, context } = await room();
 		const host = await connect(server, context, "방장", hostToken);

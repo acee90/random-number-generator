@@ -397,6 +397,14 @@ export function useSoloLunch(
 				viewMode,
 				expectedRevision: revision(expected),
 			}),
+		switchGame: (viewMode, expectedRevision, changes) =>
+			change({
+				type: "switch-game",
+				id: crypto.randomUUID(),
+				viewMode,
+				expectedRevision,
+				...changes,
+			}),
 		resetExclusions: (expected?: number) =>
 			change({
 				type: "reset-exclusions",

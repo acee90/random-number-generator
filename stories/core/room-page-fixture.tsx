@@ -30,12 +30,14 @@ import {
 } from "@/lib/roomDrawMetadata";
 import {
 	advanceRoomRound,
+	applyRoomCommand,
 	beginRoomDraw,
 	finishRoomDraw,
 	prepareRoomDraw,
 	type RoomDriveIntent,
 	startRoomSpin,
 	updateRoomDrive,
+	validateRoomCommand,
 } from "@/lib/roomGame";
 import { getSpinDeadline } from "@/lib/spinDrive";
 import type { useLunchRoom as useServiceLunchRoom } from "../../src/hooks/useLunchRoom";
@@ -591,6 +593,26 @@ export function RoomPageFixtureProvider({
 			)
 				return false;
 			applySnapshot((value) => ({ ...value, viewMode }));
+			return true;
+		},
+		async switchGame(viewMode, expectedRevision, changes) {
+			const command = {
+				type: "switch-game" as const,
+				id: crypto.randomUUID(),
+				viewMode,
+				expectedRevision,
+				...changes,
+			};
+			if (
+				!mutable() ||
+				validateRoomCommand(current.current.snapshot, command, host, true)
+			)
+				return false;
+			applySnapshot((value) => {
+				const next = structuredClone(value);
+				applyRoomCommand(next, command, host, host.id);
+				return next;
+			});
 			return true;
 		},
 		async updateGameFilter(filter, expectedRevision) {

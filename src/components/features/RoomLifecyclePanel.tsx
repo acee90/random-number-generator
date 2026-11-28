@@ -11,7 +11,6 @@ import {
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Combobox } from "@/components/ui/combobox";
 import {
 	Dialog,
 	DialogContent,
@@ -24,11 +23,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import type { useLunchRoom } from "@/hooks/useLunchRoom";
-import { recordCandidateListUse } from "@/lib/candidateListUsage";
-import { drawViewLabels } from "@/lib/drawView";
-import { lunchCategories } from "@/lib/lunch";
 import {
-	canChangeRoomDrawView,
+	defaultCandidateListSourceId,
+	recordCandidateListUse,
+} from "@/lib/candidateListUsage";
+import { type DrawView, drawViewLabels } from "@/lib/drawView";
+import { lunchCategories, sampleLunchPlaces } from "@/lib/lunch";
+import {
 	type RoomGameFilter as GameFilter,
 	getEligibleRoomCandidates,
 	getRoomDrawView,
@@ -44,6 +45,7 @@ import CandidateListSaveDialog from "./CandidateListSaveDialog";
 import RoomCandidateAuthor from "./RoomCandidateAuthor";
 import RoomCandidateEditor from "./RoomCandidateEditor";
 import type { ExclusionOptions } from "./RoomExclusionPanel";
+import { RoomGameConfirmation } from "./RoomGameSelection";
 import "./room-lifecycle.css";
 
 type Room = ReturnType<typeof useLunchRoom>;
@@ -72,6 +74,8 @@ function filterSignature(filter: GameFilter) {
 
 export default function RoomLifecyclePanel({
 	room,
+	switchTarget,
+	onFinishSwitch,
 	busy,
 	showResult,
 	onEditResult,
@@ -79,6 +83,8 @@ export default function RoomLifecyclePanel({
 	children,
 }: {
 	room: Room;
+	switchTarget: DrawView | null;
+	onFinishSwitch: (accepted: boolean) => void;
 	busy: boolean;
 	showResult: boolean;
 	onEditResult?: () => boolean;
@@ -97,13 +103,22 @@ export default function RoomLifecyclePanel({
 	const phase = snapshot ? getRoomPhase(snapshot) : "waiting";
 	const editPhase = ["editing", "collecting", "reviewing"].includes(phase);
 	const sharedAdd = phase === "collecting";
-	const listScreen = editPhase;
+	const [switchEditRevision, setSwitchEditRevision] = useState<number | null>(
+		null,
+	);
+	const [switchPending, setSwitchPending] = useState(false);
+	const switchRequest = useRef(false);
+	const editingSwitch =
+		switchTarget !== null &&
+		(switchEditRevision !== null || !snapshot?.candidates.length);
+	const listScreen = editPhase || editingSwitch;
 	const connected = room.connection === "connected";
 	const isHost = room.self?.isHost === true;
 	const [stagePending, setStagePending] = useState<StageAction | null>(null);
 	const stageRequest = useRef(false);
 	const pending = Boolean(room.mutationPending) || room.candidatesPending;
-	const locked = busy || pending || !connected || stagePending !== null;
+	const locked =
+		busy || pending || !connected || stagePending !== null || switchPending;
 	const candidates = snapshot?.candidates ?? [];
 	const viewMode = getRoomDrawView(snapshot);
 	const eligible = snapshot ? getEligibleRoomCandidates(snapshot) : [];
@@ -112,6 +127,10 @@ export default function RoomLifecyclePanel({
 		: 0;
 	const excludedIds = snapshot?.excludedIds ?? [];
 	const revision = snapshot?.revision ?? snapshot?.listVersion ?? 1;
+	const switchConflict =
+		editingSwitch &&
+		switchEditRevision !== null &&
+		revision !== switchEditRevision;
 	const excludeDrawn = snapshot?.excludeDrawn ?? false;
 	const [recommendation, setRecommendation] = useState("");
 	const [recommendationCategory, setRecommendationCategory] = useState("");
@@ -132,9 +151,16 @@ export default function RoomLifecyclePanel({
 	useEffect(() => {
 		if (!focusEditorRef.current || locked) return;
 		focusEditorRef.current = false;
-		if (phase === "editing")
+		if (phase === "editing" || editingSwitch)
 			(editorTitleRef.current ?? phaseTitleRef.current)?.focus();
-	}, [locked, phase]);
+	}, [locked, phase, editingSwitch]);
+	useEffect(() => {
+		if (!switchTarget) setSwitchEditRevision(null);
+		else if (!candidates.length && switchEditRevision === null) {
+			setSwitchEditRevision(revision);
+			editorTitleRef.current?.focus();
+		}
+	}, [switchTarget, candidates.length, switchEditRevision, revision]);
 	useEffect(() => {
 		if (listScreen || !candidates.length) setGuestCandidatesOpen(false);
 	}, [listScreen, candidates.length]);
@@ -161,6 +187,7 @@ export default function RoomLifecyclePanel({
 		null,
 	);
 	const [sourceName, setSourceName] = useState("후보 목록");
+	const previousSourceName = useRef(sourceName);
 	const [saveOpen, setSaveOpen] = useState(false);
 	const saveButtonRef = useRef<HTMLButtonElement | null>(null);
 	const [saveCandidates, setSaveCandidates] = useState<RoomCandidate[]>([]);
@@ -191,7 +218,7 @@ export default function RoomLifecyclePanel({
 		phase === draftPhase &&
 		(snapshot?.intakeId ?? null) === draftIntakeId &&
 		!draftStageInvalid;
-	const editable = isHost && editPhase && sameDraftStage && !locked;
+	const editable = isHost && listScreen && sameDraftStage && !locked;
 	const categorySuggestions = [
 		...new Set(
 			[
@@ -490,6 +517,46 @@ export default function RoomLifecyclePanel({
 		setDraftCandidates((entries) => [...entries, candidate]);
 		return true;
 	}
+	async function confirmSwitch(useDraft: boolean) {
+		if (
+			!switchTarget ||
+			!isHost ||
+			locked ||
+			switchRequest.current ||
+			(useDraft && switchConflict)
+		)
+			return;
+		switchRequest.current = true;
+		setSwitchPending(true);
+		try {
+			const changes =
+				useDraft && unsaved
+					? {
+							...(candidatesDirty && { candidates: liveDraftCandidates }),
+							...(filterDirty && {
+								filter: {
+									...draftFilter,
+									excludedIds: draftFilter.excludedIds.filter((id) =>
+										draftIds.has(id),
+									),
+								},
+							}),
+						}
+					: undefined;
+			if (
+				await room.switchGame(
+					switchTarget,
+					useDraft ? (switchEditRevision ?? revision) : revision,
+					changes,
+				)
+			) {
+				onFinishSwitch(true);
+			}
+		} finally {
+			switchRequest.current = false;
+			setSwitchPending(false);
+		}
+	}
 	function appendNearby(items: RoomCandidate[]) {
 		if (!editable || sharedAdd) return false;
 		setDraftCandidates((entries) => [...entries, ...items]);
@@ -504,7 +571,12 @@ export default function RoomLifecyclePanel({
 				included: true,
 			})),
 		);
-		setDraftFilter({ categories: null, excludedIds: [] });
+		setDraftFilter({
+			categories: null,
+			excludedIds: selection.candidates
+				.filter((candidate) => candidate.included === false)
+				.map(({ id }) => id),
+		});
 		setSourceName(selection.name);
 		setEditError("");
 		setLoadOpen(false);
@@ -574,6 +646,36 @@ export default function RoomLifecyclePanel({
 		);
 	}
 
+	const roster = snapshot?.members?.length
+		? snapshot.members
+		: (snapshot?.participants ?? []);
+	const memberCandidates: RoomCandidate[] = roster.map((member) => ({
+		id: member.id,
+		name: member.name,
+		category: "방 멤버",
+		included: !("status" in member) || member.status === "online",
+	}));
+	if (switchTarget && !editingSwitch)
+		return (
+			<RoomGameConfirmation
+				active={viewMode}
+				target={switchTarget}
+				candidates={candidates}
+				eligibleCount={eligible.length}
+				hasResult={Boolean(snapshot?.draw)}
+				disabled={locked || Boolean(room.votePendingDrawId)}
+				pending={switchPending}
+				onKeep={() => void confirmSwitch(false)}
+				onEdit={() => {
+					previousSourceName.current = sourceName;
+					resetDraft();
+					focusEditorRef.current = true;
+					setSwitchEditRevision(revision);
+				}}
+				onCancel={() => onFinishSwitch(false)}
+			/>
+		);
+
 	return (
 		<section
 			className="room-lifecycle-panel"
@@ -587,28 +689,12 @@ export default function RoomLifecyclePanel({
 							{phaseLabel}
 						</h2>
 					)}
-					{!listScreen &&
-						snapshot &&
-						(isHost ? (
-							<Combobox
-								label="추첨 보기"
-								options={drawViewLabels}
-								value={viewMode}
-								onValueChange={(mode) => {
-									void room.updateDrawView(mode, revision);
-								}}
-								pending={room.mutationPending === "draw-view"}
-								disabled={
-									(locked && room.mutationPending !== "draw-view") ||
-									!canChangeRoomDrawView(snapshot)
-								}
-							/>
-						) : (
-							<span className="room-view-label">
-								<span className="sr-only">추첨 보기 · </span>
-								{drawViewLabels[viewMode]}
-							</span>
-						))}
+					{!listScreen && snapshot && (
+						<span className="room-view-label">
+							<span className="sr-only">현재 게임 · </span>
+							{drawViewLabels[viewMode]}
+						</span>
+					)}
 				</div>
 				<div className="room-lifecycle-tools">
 					{!listScreen && snapshot && (isHost || candidates.length > 0) && (
@@ -689,23 +775,53 @@ export default function RoomLifecyclePanel({
 						<RoomCandidateEditor
 							titleRef={editorTitleRef}
 							title={
-								phase === "collecting"
-									? "후보 추천 접수 중"
-									: phase === "reviewing"
-										? "접수 종료 · 목록 확인"
-										: "후보 편집"
+								editingSwitch && switchTarget
+									? `${drawViewLabels[switchTarget]} 후보 목록 바꾸기`
+									: phase === "collecting"
+										? "후보 추천 접수 중"
+										: phase === "reviewing"
+											? "접수 종료 · 목록 확인"
+											: "후보 편집"
 							}
 							headerActions={
-								<Button
-									disabled={
-										locked ||
-										!sameDraftStage ||
-										(unsaved ? previewPreparedCount : preparedCount) === 0
-									}
-									onClick={() => void changeStage("finalize")}
-								>
-									{stagePending === "finalize" ? "마감 중…" : "마감"}
-								</Button>
+								editingSwitch ? (
+									<>
+										<Button
+											variant="outline"
+											size="touch"
+											disabled={switchPending}
+											onClick={() => {
+												resetDraft();
+												setSourceName(previousSourceName.current);
+												setSwitchEditRevision(null);
+												if (!candidates.length) onFinishSwitch(false);
+											}}
+										>
+											취소
+										</Button>
+										<Button
+											size="touch"
+											disabled={
+												locked || switchConflict || previewPreparedCount === 0
+											}
+											aria-busy={switchPending || undefined}
+											onClick={() => void confirmSwitch(true)}
+										>
+											{switchPending ? "전환 중…" : "적용하고 계속"}
+										</Button>
+									</>
+								) : (
+									<Button
+										disabled={
+											locked ||
+											!sameDraftStage ||
+											(unsaved ? previewPreparedCount : preparedCount) === 0
+										}
+										onClick={() => void changeStage("finalize")}
+									>
+										{stagePending === "finalize" ? "마감 중…" : "마감"}
+									</Button>
+								)
 							}
 							sourceName={sourceName}
 							candidates={draftCandidates}
@@ -720,6 +836,7 @@ export default function RoomLifecyclePanel({
 							onDiscard={requestReset}
 							disabled={!editable}
 							unsaved={unsaved}
+							showSaveStatus={!editingSwitch}
 							categorySuggestions={categorySuggestions}
 							preparedCount={previewPreparedCount}
 							eligibleCount={previewEligible.length}
@@ -735,6 +852,21 @@ export default function RoomLifecyclePanel({
 							].join(":")}
 							notices={
 								<>
+									{switchConflict && (
+										<div className="room-edit-conflict">
+											<p>편집하는 동안 방의 조건이 바뀌었어요.</p>
+											<Button
+												variant="outline"
+												disabled={locked}
+												onClick={() => {
+													resetDraft();
+													setSwitchEditRevision(revision);
+												}}
+											>
+												최신 후보로 다시 편집
+											</Button>
+										</div>
+									)}
 									{candidatesDirty &&
 										snapshot?.listVersion !== draftBaseVersion && (
 											<div className="room-edit-conflict">
@@ -803,26 +935,68 @@ export default function RoomLifecyclePanel({
 								</>
 							}
 						>
-							<div className="room-editor-stage-actions">
-								<label
-									className="room-intake-switch"
-									htmlFor={`${id}-intake-enabled`}
-								>
-									<Switch
-										id={`${id}-intake-enabled`}
-										aria-label="후보 추천받기"
-										checked={phase === "collecting"}
-										disabled={locked || !sameDraftStage}
-										aria-busy={
-											stagePending === "open" || stagePending === "close"
-										}
-										onCheckedChange={(checked) => {
-											if (checked === (phase === "collecting")) return;
-											void changeStage(checked ? "open" : "close");
-										}}
-									/>
-									<span>후보 추천받기</span>
-								</label>
+							<div
+								className={
+									editingSwitch
+										? "room-editor-stage-actions room-game-presets"
+										: "room-editor-stage-actions"
+								}
+							>
+								{editingSwitch ? (
+									<>
+										<Button
+											variant="outline"
+											size="touch"
+											disabled={!editable}
+											onClick={() =>
+												importList({
+													sourceId: defaultCandidateListSourceId,
+													name: "점심 메뉴",
+													candidates: sampleLunchPlaces.map((candidate) => ({
+														...candidate,
+														id: crypto.randomUUID(),
+													})),
+												})
+											}
+										>
+											점심 메뉴
+										</Button>
+										<Button
+											variant="outline"
+											size="touch"
+											disabled={!editable || !memberCandidates.length}
+											onClick={() =>
+												importList({
+													sourceId: "room-members",
+													name: "방 멤버",
+													candidates: memberCandidates,
+												})
+											}
+										>
+											방 멤버 {memberCandidates.length}명
+										</Button>
+									</>
+								) : (
+									<label
+										className="room-intake-switch"
+										htmlFor={`${id}-intake-enabled`}
+									>
+										<Switch
+											id={`${id}-intake-enabled`}
+											aria-label="후보 추천받기"
+											checked={phase === "collecting"}
+											disabled={locked || !sameDraftStage}
+											aria-busy={
+												stagePending === "open" || stagePending === "close"
+											}
+											onCheckedChange={(checked) => {
+												if (checked === (phase === "collecting")) return;
+												void changeStage(checked ? "open" : "close");
+											}}
+										/>
+										<span>후보 추천받기</span>
+									</label>
+								)}
 							</div>
 						</RoomCandidateEditor>
 					) : (
@@ -1020,6 +1194,7 @@ export default function RoomLifecyclePanel({
 				</DialogContent>
 			</Dialog>
 			<CandidateListLoadDialog
+				roomMembers={memberCandidates}
 				open={loadOpen}
 				onOpenChange={setLoadOpen}
 				onSelect={selectList}

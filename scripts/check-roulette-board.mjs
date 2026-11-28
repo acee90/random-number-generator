@@ -54,8 +54,12 @@ try {
 	await page.getByRole("textbox", { name: "닉네임" }).fill("방장");
 	await page.getByRole("button", { name: "입장하기" }).click();
 	await page.getByRole("button", { name: "마감", exact: true }).click();
-	await page.getByRole("combobox", { name: /추첨 보기/ }).click();
-	await page.getByRole("option", { name: "룰렛", exact: true }).click();
+	const gamePicker = page.getByRole("button", { name: "게임 변경" });
+	if (await gamePicker.isVisible()) {
+		await gamePicker.click();
+		await page.getByRole("menuitem", { name: "룰렛", exact: true }).click();
+	} else await page.getByRole("button", { name: "룰렛", exact: true }).click();
+	await page.getByRole("button", { name: "이 목록으로 계속" }).click();
 	const board = page.getByRole("region", { name: "게임 보드" });
 	const panel = page.getByRole("region", { name: "룰렛", exact: true });
 	const fallbackDraw = board.getByRole("button", { name: "룰렛 돌리기" });
@@ -175,34 +179,34 @@ try {
 			);
 		}
 		if (!reduce) {
-			const ticketPixels = () =>
-				result.evaluate((canvas) => {
-					const ticket = canvas.parentElement.querySelector(".picnic-ticket");
-					const bounds = canvas.getBoundingClientRect();
-					const rect = ticket.getBoundingClientRect();
-					const scale = canvas.width / bounds.width;
-					return [
-						...canvas
-							.getContext("2d")
-							.getImageData(
-								Math.floor(
-									(rect.left - bounds.left + rect.width / 2 - 10) * scale,
-								),
-								Math.floor(
-									(rect.top - bounds.top + rect.height / 2 - 10) * scale,
-								),
-								Math.round(20 * scale),
-								Math.round(20 * scale),
-							).data,
-					];
-				});
 			await page.waitForTimeout(320);
-			const duringPause = await ticketPixels();
-			await page.waitForTimeout(190);
-			assert.notDeepEqual(
-				await ticketPixels(),
-				duringPause,
-				`${width}px: the ticket should start assembling after the 300ms pause`,
+			const ticketAppeared = await result.evaluate(async (canvas) => {
+				const ticket = canvas.parentElement.querySelector(".picnic-ticket");
+				const bounds = canvas.getBoundingClientRect();
+				const rect = ticket.getBoundingClientRect();
+				const scale = canvas.width / bounds.width;
+				const ctx = canvas.getContext("2d");
+				const x = Math.floor(
+					(rect.left - bounds.left + rect.width / 2 - 10) * scale,
+				);
+				const y = Math.floor(
+					(rect.top - bounds.top + rect.height / 2 - 10) * scale,
+				);
+				const size = Math.round(20 * scale);
+				const sample = () => ctx.getImageData(x, y, size, size).data;
+				const before = sample();
+				// The winning slice is emphasized for 300ms and held for another 300ms.
+				const deadline = performance.now() + 1500;
+				while (performance.now() < deadline) {
+					await new Promise(requestAnimationFrame);
+					if (sample().some((value, index) => value !== before[index]))
+						return true;
+				}
+				return false;
+			});
+			assert.ok(
+				ticketAppeared,
+				`${width}px: the result ticket should appear after the winner emphasis and pause`,
 			);
 		}
 		assert.equal(
