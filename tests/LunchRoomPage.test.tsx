@@ -3055,7 +3055,7 @@ describe("synchronized lunch room UI", () => {
 		const picker = screen.getByRole("dialog", { name: "목록 불러오기" });
 		expect(
 			within(picker).getByText(
-				`회사 주변 음식점 · 후보 ${sampleLunchPlaces.length}개`,
+				`선정릉·선릉역 주변 음식점 · 후보 ${sampleLunchPlaces.length}개`,
 				{ exact: false },
 			),
 		).toBeTruthy();

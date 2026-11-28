@@ -1,9 +1,9 @@
 import {
 	Check,
+	Ellipsis,
 	FolderOpen,
 	ListPlus,
 	MapPin,
-	Plus,
 	RotateCcw,
 	Save,
 	Search,
@@ -74,7 +74,10 @@ export type RoomCandidateEditorProps = {
 	onAdd: (name: string) => boolean | Promise<boolean>;
 	onAddNearby?: (items: RoomCandidate[]) => boolean;
 	addOwnerId?: string;
-	onLoad: (trigger: HTMLButtonElement | null) => void;
+	onLoad: (
+		trigger: HTMLButtonElement | null,
+		fallback?: HTMLButtonElement | null,
+	) => void;
 	onSave: (trigger: HTMLButtonElement | null) => void;
 	onDiscard?: (trigger: HTMLButtonElement | null) => void;
 	disabled: boolean;
@@ -177,6 +180,7 @@ export default function RoomCandidateEditor({
 	const nameTriggers = useRef(new Map<string, HTMLButtonElement>());
 	const restoreNameFocus = useRef<string | null>(null);
 	const skipNameBlur = useRef(false);
+	const overlayTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const overlayFromMenu = useRef(false);
 	const observedContext = useRef(contextKey);
 	const isEmpty = candidates.length === 0;
@@ -404,13 +408,24 @@ export default function RoomCandidateEditor({
 
 	function restoreMenuFocus(event: Event) {
 		event.preventDefault();
-		if (!menuRef.current?.disabled) menuRef.current?.focus();
+		const trigger = overlayTriggerRef.current;
+		overlayTriggerRef.current = null;
+		if (trigger?.isConnected && !trigger.disabled) trigger.focus();
+		else if (menuRef.current?.isConnected && !menuRef.current.disabled)
+			menuRef.current.focus();
 		else searchRef.current?.focus();
 	}
 
 	function openFromMenu(open: () => void) {
 		if (disabled || !finishName()) return;
+		overlayTriggerRef.current = menuRef.current;
 		overlayFromMenu.current = true;
+		open();
+	}
+
+	function openFromStarter(trigger: HTMLButtonElement, open: () => void) {
+		if (disabled || !finishName()) return;
+		overlayTriggerRef.current = trigger;
 		open();
 	}
 
@@ -511,7 +526,7 @@ export default function RoomCandidateEditor({
 							aria-label="목록 작업"
 							disabled={disabled}
 						>
-							<Plus size={16} aria-hidden="true" />
+							<Ellipsis size={16} aria-hidden="true" />
 						</Button>
 					</DropdownMenuTrigger>
 					<DropdownMenuContent
@@ -534,7 +549,9 @@ export default function RoomCandidateEditor({
 							<ListPlus size={16} aria-hidden="true" /> 여러 개 추가
 						</DropdownMenuItem>
 						<DropdownMenuItem
-							onSelect={() => openFromMenu(() => onLoad(menuRef.current))}
+							onSelect={() =>
+								openFromMenu(() => onLoad(menuRef.current, menuRef.current))
+							}
 						>
 							<FolderOpen size={16} aria-hidden="true" /> 목록 불러오기
 						</DropdownMenuItem>
@@ -816,7 +833,49 @@ export default function RoomCandidateEditor({
 				disabled={disabled}
 				onAdd={requestAdd}
 			/>
-			{isEmpty && <div className="room-simple-blank-row" aria-hidden="true" />}
+			{isEmpty && (
+				<fieldset
+					className="room-simple-starter"
+					aria-label="후보 빠르게 시작하기"
+				>
+					<Button
+						type="button"
+						variant="outline"
+						disabled={disabled}
+						onClick={(event) => {
+							if (disabled || !finishName()) return;
+							onLoad(event.currentTarget, menuRef.current);
+						}}
+					>
+						<FolderOpen size={16} aria-hidden="true" /> 목록 불러오기
+					</Button>
+					{onAddNearby && (
+						<Button
+							type="button"
+							variant="outline"
+							disabled={disabled}
+							onClick={(event) =>
+								openFromStarter(event.currentTarget, () => setNearbyOpen(true))
+							}
+						>
+							<MapPin size={16} aria-hidden="true" /> 주변 음식점 가져오기
+						</Button>
+					)}
+					<Button
+						type="button"
+						variant="outline"
+						disabled={disabled}
+						onClick={(event) =>
+							openFromStarter(event.currentTarget, () => {
+								setBulkError("");
+								setBulkOpen(true);
+							})
+						}
+					>
+						<ListPlus size={16} aria-hidden="true" /> 여러 개 추가
+					</Button>
+				</fieldset>
+			)}
 			{showSaveStatus && (
 				<p className="room-simple-note room-simple-save-status">
 					{unsaved

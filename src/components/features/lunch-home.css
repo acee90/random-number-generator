@@ -79,6 +79,64 @@
 .lunch-home-steps svg {
 	flex-shrink: 0;
 }
+.lunch-home-recent {
+	display: grid;
+	gap: 12px;
+	padding: 20px 24px;
+	border: 1px solid var(--line);
+	border-radius: var(--panel-radius);
+	background: var(--card);
+}
+.lunch-home-recent-head h2 {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	font-size: 14px;
+	font-weight: 700;
+	line-height: 1.4;
+}
+.lunch-home-recent-list {
+	display: grid;
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.lunch-home-recent-list > li {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 8px;
+}
+.lunch-home-recent-link.ui-button {
+	inline-size: 100%;
+	min-inline-size: 0;
+	min-block-size: 44px;
+	block-size: auto;
+	justify-content: space-between;
+	padding-block: 10px;
+	text-align: start;
+	white-space: normal;
+}
+.lunch-home-recent-meta {
+	display: inline-flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: 4px 8px;
+	min-inline-size: 0;
+	overflow-wrap: anywhere;
+}
+.lunch-home-recent-meta small {
+	color: var(--muted);
+	font-size: 12px;
+	font-weight: 500;
+}
+.lunch-home-recent-dismiss.ui-button {
+	min-inline-size: 44px;
+	min-block-size: 44px;
+	color: var(--muted);
+}
 .lunch-home-footer {
 	display: flex;
 	justify-content: space-between;

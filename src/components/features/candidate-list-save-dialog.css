@@ -1,0 +1,38 @@
+.room-save-list-dialog {
+	max-inline-size: 480px;
+}
+.room-save-list-dialog form {
+	display: grid;
+	gap: 10px;
+}
+.room-save-list-dialog .room-panel-note {
+	margin: 0;
+	font-size: 13px;
+	line-height: 1.5;
+	color: var(--muted);
+}
+.room-save-mode {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+.room-save-mode > .ui-button {
+	inline-size: 100%;
+	block-size: auto;
+	min-block-size: 44px;
+	white-space: normal;
+}
+.room-save-mode > .ui-button[aria-pressed="true"] {
+	border-color: var(--ink);
+	background: var(--lime);
+	color: var(--ink);
+	font-weight: 700;
+}
+@media (max-width: 380px) {
+	.room-save-mode {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}

@@ -21,8 +21,11 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { recordCandidateListUse } from "@/lib/candidateListUsage";
-import { lunchCategories } from "@/lib/lunch";
+import {
+	recordCandidateListUse,
+	savedCandidateListSourceId,
+} from "@/lib/candidateListUsage";
+import { defaultCategorySuggestions } from "@/lib/lunch";
 import {
 	type CreateRoomInput,
 	clampLunchRoomNickname,
@@ -40,6 +43,7 @@ import {
 	saveLunchRoomHost,
 	saveLunchRoomName,
 } from "@/lib/lunchRoomClient";
+import { saveRecentLunchRoom } from "@/lib/recentRooms";
 import { beginRoomTiming } from "@/lib/roomTimings";
 import { createSoloRoom } from "@/lib/soloRoom";
 import { cn } from "@/lib/utils";
@@ -112,6 +116,7 @@ export default function CreateLunchRoom({ solo = false }: { solo?: boolean }) {
 	const [candidates, setCandidates] = useState<RoomCandidate[]>([]);
 	const [gameFilter, setGameFilter] = useState(emptyFilter);
 	const quickAddDraft = useState("");
+	const [sourceId, setSourceId] = useState<string>();
 	const [sourceName, setSourceName] = useState<string>();
 	const [editorGeneration, setEditorGeneration] = useState(0);
 	const [loadOpen, setLoadOpen] = useState(false);
@@ -129,6 +134,7 @@ export default function CreateLunchRoom({ solo = false }: { solo?: boolean }) {
 	const titleRef = useRef<HTMLInputElement>(null);
 	const nameRef = useRef<HTMLInputElement>(null);
 	const loadButtonRef = useRef<HTMLButtonElement | null>(null);
+	const loadFallbackRef = useRef<HTMLButtonElement | null>(null);
 	const saveButtonRef = useRef<HTMLButtonElement | null>(null);
 	const requestRef = useRef<AbortController | null>(null);
 	const requestTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(
@@ -186,14 +192,19 @@ export default function CreateLunchRoom({ solo = false }: { solo?: boolean }) {
 		return true;
 	}
 
-	function openList(trigger: HTMLButtonElement | null) {
+	function openList(
+		trigger: HTMLButtonElement | null,
+		fallback?: HTMLButtonElement | null,
+	) {
 		loadButtonRef.current = trigger;
+		loadFallbackRef.current = fallback ?? null;
 		setLoadOpen(true);
 	}
 
 	function importList(selection: CandidateListSelection) {
 		setCandidates(selection.candidates);
 		setGameFilter(emptyFilter);
+		setSourceId(selection.sourceId);
 		setSourceName(selection.name);
 		setEditorGeneration((generation) => generation + 1);
 		setError("");
@@ -261,6 +272,11 @@ export default function CreateLunchRoom({ solo = false }: { solo?: boolean }) {
 					clearTimeout(requestTimeoutRef.current);
 					roomId = created.roomId;
 					saveLunchRoomHost(roomId, created.hostToken);
+					saveRecentLunchRoom({
+						roomId,
+						title: input.title,
+						role: "host",
+					});
 				}
 				saveLunchRoomName(hostName);
 				setCreatedRoomId(roomId);
@@ -417,7 +433,7 @@ export default function CreateLunchRoom({ solo = false }: { solo?: boolean }) {
 							rowLayout="setup"
 							scrollableList
 							showSaveStatus={false}
-							categorySuggestions={lunchCategories}
+							categorySuggestions={defaultCategorySuggestions}
 							preparedCount={eligibleCount}
 							eligibleCount={eligibleCount}
 							excludedIds={[]}
@@ -486,6 +502,7 @@ export default function CreateLunchRoom({ solo = false }: { solo?: boolean }) {
 						open={loadOpen}
 						onOpenChange={setLoadOpen}
 						returnFocusRef={loadButtonRef}
+						fallbackFocusRef={loadFallbackRef}
 						onSelect={(selection) => {
 							if (candidates.length > 0) {
 								setPendingLoad(selection);
@@ -501,9 +518,14 @@ export default function CreateLunchRoom({ solo = false }: { solo?: boolean }) {
 							if (!open) setSaveCandidates(null);
 						}}
 						name={sourceName ?? "내 후보 목록"}
+						sourceId={sourceId}
 						candidates={saveCandidates ?? []}
 						disabled={locked}
 						returnFocusRef={saveButtonRef}
+						onSaved={(saved) => {
+							setSourceId(savedCandidateListSourceId(saved.id));
+							setSourceName(saved.name);
+						}}
 					/>
 					<AlertDialog
 						open={pendingLoad !== null}

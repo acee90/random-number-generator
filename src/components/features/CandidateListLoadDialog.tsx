@@ -1,4 +1,11 @@
-import { FolderOpen, List, Trash2, Users } from "lucide-react";
+import {
+	FolderOpen,
+	List,
+	Sparkles,
+	Trash2,
+	Users,
+	Utensils,
+} from "lucide-react";
 import {
 	type RefObject,
 	useCallback,
@@ -38,10 +45,16 @@ import {
 	type CandidateListUsage,
 	candidateListUsageKey,
 	defaultCandidateListSourceId,
+	gatheringActivityPresetSourceId,
+	lunchMenuPresetSourceId,
 	readCandidateListUsage,
 	savedCandidateListSourceId,
 } from "@/lib/candidateListUsage";
-import { sampleLunchPlaces } from "@/lib/lunch";
+import {
+	defaultActivityCandidates,
+	defaultLunchMenuCandidates,
+	sampleLunchPlaces,
+} from "@/lib/lunch";
 import type { RoomCandidate } from "@/lib/lunchRoom";
 import "./candidate-list-load-dialog.css";
 
@@ -137,6 +150,7 @@ export default function CandidateListLoadDialog({
 	disabled = false,
 	preserveInclusion = false,
 	returnFocusRef,
+	fallbackFocusRef,
 	roomMembers,
 }: {
 	open: boolean;
@@ -148,6 +162,7 @@ export default function CandidateListLoadDialog({
 	disabled?: boolean;
 	preserveInclusion?: boolean;
 	returnFocusRef?: RefObject<HTMLButtonElement | null>;
+	fallbackFocusRef?: RefObject<HTMLButtonElement | null>;
 	roomMembers?: RoomCandidate[];
 }) {
 	const [lists, setLists] = useState<VersionedCandidateList[]>([]);
@@ -227,6 +242,9 @@ export default function CandidateListLoadDialog({
 						if (returnFocusRef?.current?.isConnected) {
 							event.preventDefault();
 							returnFocusRef.current.focus();
+						} else if (fallbackFocusRef?.current?.isConnected) {
+							event.preventDefault();
+							fallbackFocusRef.current.focus();
 						}
 					}}
 				>
@@ -280,6 +298,56 @@ export default function CandidateListLoadDialog({
 							disabled={disabled}
 							onClick={() =>
 								select(
+									lunchMenuPresetSourceId,
+									"점심 메뉴 추천",
+									defaultLunchMenuCandidates,
+								)
+							}
+						>
+							<Utensils size={20} aria-hidden="true" />
+							<ListDetails
+								name="점심 메뉴 추천"
+								description={
+									onEdit
+										? "기본 점심 메뉴로 새 목록 만들기"
+										: "어디서나 바로 뽑는 대표 점심 메뉴"
+								}
+								items={defaultLunchMenuCandidates}
+								sourceId={lunchMenuPresetSourceId}
+								usage={usage}
+							/>
+						</Button>
+						<Button
+							variant="outline"
+							className="candidate-load-choice"
+							disabled={disabled}
+							onClick={() =>
+								select(
+									gatheringActivityPresetSourceId,
+									"모임 활동",
+									defaultActivityCandidates,
+								)
+							}
+						>
+							<Sparkles size={20} aria-hidden="true" />
+							<ListDetails
+								name="모임 활동"
+								description={
+									onEdit
+										? "모임 활동으로 새 목록 만들기"
+										: "회식·친구 모임 놀거리"
+								}
+								items={defaultActivityCandidates}
+								sourceId={gatheringActivityPresetSourceId}
+								usage={usage}
+							/>
+						</Button>
+						<Button
+							variant="outline"
+							className="candidate-load-choice"
+							disabled={disabled}
+							onClick={() =>
+								select(
 									defaultCandidateListSourceId,
 									"기본 음식점 목록",
 									sampleLunchPlaces,
@@ -290,7 +358,9 @@ export default function CandidateListLoadDialog({
 							<ListDetails
 								name="기본 음식점 목록"
 								description={
-									onEdit ? "기본 목록으로 새 목록 만들기" : "회사 주변 음식점"
+									onEdit
+										? "선정릉 주변 목록으로 새 목록 만들기"
+										: "선정릉·선릉역 주변 음식점"
 								}
 								items={sampleLunchPlaces}
 								sourceId={defaultCandidateListSourceId}

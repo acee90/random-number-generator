@@ -9,6 +9,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LunchHome from "../src/components/features/LunchHome";
+import { saveRecentLunchRoom } from "../src/lib/recentRooms";
 
 const mocks = vi.hoisted(() => ({ readName: vi.fn() }));
 vi.mock("../src/lib/lunchRoomClient", () => ({
@@ -24,6 +25,7 @@ vi.mock("../src/components/layout/SiteHeader", () => ({
 const fetchMock = vi.fn<typeof fetch>();
 
 beforeEach(() => {
+	localStorage.clear();
 	mocks.readName.mockReset();
 	fetchMock.mockReset();
 	vi.stubGlobal("fetch", fetchMock);
@@ -90,6 +92,29 @@ describe("Jeommechu lunch home", () => {
 			"결과에 반응을 남겨요",
 		]);
 		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it("shows unexpired recent rooms when present and allows hiding them", () => {
+		const roomId = "387c8be4-49a2-4d09-83cb-8b3011be1da1";
+		saveRecentLunchRoom({
+			roomId,
+			title: "개발팀 점심방",
+			role: "host",
+			expiresAt: Date.now() + 60_000,
+		});
+		render(<LunchHome />);
+		const section = screen.getByRole("region", { name: "최근 추첨방" });
+		expect(
+			within(section)
+				.getByRole("link", { name: /개발팀 점심방/ })
+				.getAttribute("href"),
+		).toBe(`/lunch-room/${roomId}`);
+		fireEvent.click(
+			within(section).getByRole("button", {
+				name: "개발팀 점심방 최근 목록에서 숨기기",
+			}),
+		);
+		expect(screen.queryByRole("region", { name: "최근 추첨방" })).toBeNull();
 	});
 
 	it("does not expose unsupported configuration or create a room just by opening the homepage", () => {

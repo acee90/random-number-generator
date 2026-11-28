@@ -1,6 +1,8 @@
 /** Browser-local import history, separate from saved lists and room state. */
 export const candidateListUsageKey = "jeommechu:candidate-list-usage:v1";
 export const defaultCandidateListSourceId = "default-lunch";
+export const lunchMenuPresetSourceId = "preset:lunch-menu";
+export const gatheringActivityPresetSourceId = "preset:gathering-activity";
 export const savedCandidateListSourceId = (id: string) => `saved:${id}`;
 
 export type CandidateListUsage = {
@@ -10,7 +12,8 @@ export type CandidateListUsage = {
 
 type UsageStorage = Pick<Storage, "getItem" | "setItem">;
 const maximumEntries = 100;
-const sourceIdPattern = /^(?:default-lunch|saved:[A-Za-z0-9_-]{1,80})$/;
+const sourceIdPattern =
+	/^(?:default-lunch|preset:[a-z0-9-]{1,40}|saved:[A-Za-z0-9_-]{1,80})$/;
 const emptyUsage = (): CandidateListUsage => ({ recentId: null, loadedAt: {} });
 
 function readUsage(
